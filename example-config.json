@@ -1,0 +1,9 @@
+{
+    "mcpServers": {
+        "graylog-mcp": {
+            "command": "node",
+            "args": ["src/index.js"],
+            "cwd": "/home/your-user/repositorios/mcp_servers/graylog-mcp"
+        }
+    }
+}
