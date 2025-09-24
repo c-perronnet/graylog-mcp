@@ -14,7 +14,7 @@ A minimal MCP (Model Context Protocol) server in JavaScript that integrates with
 ## Installation
 
 ```bash
-git clone <repository-url>
+git clone git@github.com:lcaliani/graylog-mcp.git
 cd graylog-mcp
 npm install
 ```
