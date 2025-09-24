@@ -7,9 +7,10 @@ import {
     CallToolRequestSchema,
     ListToolsRequestSchema
 } from "@modelcontextprotocol/sdk/types.js";
+import axios from "axios";
 
 const server = new Server({
-    name: "simple-graylog-mcp-server",
+    name: "simple-graylog-mcp",
     version: "1.0.0",
 }, {
     capabilities: {
@@ -20,19 +21,6 @@ const server = new Server({
 server.setRequestHandler(ListToolsRequestSchema, async () => {
     return {
         tools: [
-            {
-                name: "calculate_sum",
-                // The description attribute is the text shown in the tool description in Claude or Cursor
-                description: "Add two numbers together",
-                inputSchema: {
-                    type: "object",
-                    properties: {
-                        a: { type: "number" },
-                        b: { type: "number" },
-                    },
-                    required: ["a", "b"],
-                },
-            },
             {
                 name: "fetch_graylog_messages",
                 description: "Fetch messages from Graylog",
@@ -51,6 +39,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
                             type: "number",
                             description: "The number of messages to fetch",
                         },
+                        fields: {
+                            type: "string",
+                            description: "The fields to fetch",
+                        },
                     },
                 },
             }
@@ -59,34 +51,69 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 });
 
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
-    if (request.params.name === "calculate_sum") {
-
-        // The arguments are properties specified in the inputSchema
-        const { a, b } = request.params.arguments;
-
-        return {
-            result: a + b,
-            content: [{
-                type: "text",
-                text: `The sum of ${a} and ${b} is ${a + b}`,
-            }],
-        };
-    }
-    
     if (request.params.name === "fetch_graylog_messages") {
-        const data = 'sample data';
-        return {
-            result: data,
-            content: [{
-                type: "text",
-                text: `the graylog mock data is ${data}`,
-            }],
-        };
+        return fetchGraylogMessages(request);
     }
     
     throw new Error(`Tool not found: ${request.params.name}`);
 });
 
+async function fetchGraylogMessages(request) {
+
+    const originalRequest = request;
+
+    const baseUrl = process.env.BASE_URL;
+    const apiToken = process.env.API_TOKEN;
+
+    const query = originalRequest.params.arguments?.query;
+
+    // Default to 15 minutes
+    const searchTimeRangeInSeconds = originalRequest.params.arguments?.searchTimeRangeInSeconds ?? 900;
+    // Default to 50
+    const searchCountLimit = originalRequest.params.arguments?.searchCountLimit ?? 50;
+    // Default to '*'
+    const fields = originalRequest.params.arguments?.fields ?? '*';
+
+    try {
+        const response = await axios.get(`${baseUrl}/api/search/universal/relative`, {
+            params: {
+                query: query,
+                range: searchTimeRangeInSeconds,
+                limit: searchCountLimit,
+                fields: fields
+            },
+            headers: {
+                'Accept': 'application/json',
+            },
+            auth: {
+                username: apiToken,
+                password: 'token'
+            }
+        });
+        
+        if (process.env.DEBUG === "true") {
+            console.log(response.data);
+            return;
+        }
+
+        return {
+            result: response.data,
+            content: [{
+                type: "text",
+                text: JSON.stringify(response.data.messages),
+            }],
+        };
+    } catch (error) {
+        console.error('Error fetching messages:', error);
+        return {
+            result: [],
+            content: [{
+                type: "text",
+                text: `Error fetching messages: ${error.message}`,
+            }],
+        };
+    }
+}
+
 const transport = new StdioServerTransport();
 await server.connect(transport);
-console.error("Simple Graylog MCP Server started successfully!");

@@ -1,234 +1,123 @@
 # Graylog MCP Server
 
-Um servidor MCP (Model Context Protocol) básico em JavaScript para integração com Graylog, incluindo funcionalidades de saudação personalizada.
+A minimal MCP (Model Context Protocol) server in JavaScript that integrates with Graylog.
 
-## Características
+## Features
 
-- Servidor MCP básico implementado em JavaScript
-- Ferramenta de saudação que responde com mensagem personalizada
-- Ambiente de desenvolvimento com Docker
-- Uso da versão estável mais recente do Node.js (v20 LTS)
-- Container com bash disponível para debug e desenvolvimento
+- JavaScript MCP server
+- Tools: `fetch_graylog_messages` (query Graylog and return messages)
 
-## Pré-requisitos
+## Requirements
 
-- Docker
-- Docker Compose
+- Node.js 18+
 
-## Instalação e Execução
+## Installation
 
-### Usando Docker (Recomendado)
-
-1. Clone o repositório:
 ```bash
-git clone <url-do-repositorio>
+git clone <repository-url>
 cd graylog-mcp
-```
-
-2. Execute com Docker Compose:
-```bash
-docker-compose up --build
-```
-
-Isso irá:
-- Construir a imagem Docker com Node.js 20 Alpine
-- Instalar as dependências
-- Iniciar o servidor em modo de desenvolvimento com hot-reload
-
-### Execução Local (prioritariamente dentro do container)
-
-1. Instale as dependências:
-```bash
 npm install
 ```
 
-2. Execute o servidor:
-```bash
-npm start
-```
+## Configuration
 
-Ou para desenvolvimento com hot-reload:
-```bash
-npm run dev
-```
+Set the following environment variables so the server can connect to Graylog:
 
-## Ferramentas Disponíveis
+- `BASE_URL`: Graylog base URL, e.g. `https://graylog.example.com`
+- `API_TOKEN`: Graylog API token (used as the username, with password `token`)
 
-### `greeting`
+> :exclamation: Suggestion: add these variables to your respective MCP client configuration file or app. Example in **Cursor** more below.
 
-Responde com uma saudação personalizada.
 
-**Parâmetros:**
-- `username` (string, opcional): Nome do usuário para personalizar a saudação. Se não fornecido, usa "friend" como padrão.
+## Use with an MCP client (Cursor/Claude Desktop)
 
-**Exemplo de resposta:**
-```
-Hello, João! How're doing?
-```
+1. Add this server to your MCP client configuration, poiting to the mcp entrypoint file (`src/index.js`). Common locations:
 
-## Estrutura do Projeto
+- Cursor: `~/.cursor/mcp.json`
+- Claude Desktop (macOS): `~/Library/Application Support/Claude/claude_desktop_config.json`
+- Claude Desktop (Linux): `~/.config/claude-desktop/claude_desktop_config.json`
 
-```
-graylog-mcp/
-├── src/
-│   └── index.js          # Servidor MCP principal
-├── docker-compose.yml    # Configuração Docker Compose
-├── Dockerfile            # Configuração da imagem Docker
-├── package.json          # Dependências e scripts
-└── README.md            # Este arquivo
-```
-
-## Desenvolvimento
-
-O projeto está configurado para desenvolvimento com Docker, incluindo:
-
-- Volume mounting para hot-reload
-- Node.js 20 LTS Alpine
-- Porta 3000 exposta
-- Ambiente de desenvolvimento configurado
-
-### Scripts Disponíveis
-
-- `npm start`: Inicia o servidor em modo produção
-- `npm run dev`: Inicia o servidor em modo desenvolvimento com hot-reload
-- `npm test`: Executa script de teste automatizado do servidor MCP
-
-## Como Testar o Projeto
-
-### 1. Teste Automatizado (Recomendado)
-
-Execute o script de teste automatizado que valida todas as funcionalidades:
-
-```bash
-# Teste local
-npm test
-
-# Ou dentro do container Docker
-docker run -it --rm -v $(pwd):/app graylog-mcp-server npm test
-```
-
-Este script testa automaticamente:
-- Listagem de ferramentas disponíveis
-- Ferramenta de saudação sem parâmetros
-- Ferramenta de saudação com nome específico
-
-### 2. Teste Direto do Servidor (Desenvolvimento)
-
-Para testar o servidor MCP diretamente:
-
-```bash
-# Usando Docker (Recomendado)
-docker-compose up --build
-
-# Ou executar em modo interativo para debug
-docker run -it --rm -v $(pwd):/app graylog-mcp-server bash
-# Dentro do container:
-npm start
-```
-
-### 3. Configuração no Cliente MCP (Cursor/Claude Desktop)
-
-Para integrar com seu cliente MCP, adicione ao arquivo de configuração:
-
-**Localizações comuns:**
-- **Cursor**: `~/.cursor/mcp.json`
-- **Claude Desktop (macOS)**: `~/Library/Application Support/Claude/claude_desktop_config.json`
-- **Claude Desktop (Linux)**: `~/.config/claude-desktop/claude_desktop_config.json`
+Example config in **Cursor**:
 
 ```json
 {
   "mcpServers": {
-    "graylog-mcp": {
+    "simple-graylog-mcp": {
       "command": "node",
-      "args": ["src/index.js"],
-      "cwd": "/home/leo-ruellas/repositorios/mcp_servers/graylog-mcp"
+      "args": [
+        "/path/to/graylog-mcp/src/index.js"
+      ],
+      "env": {
+        "BASE_URL": "http://your.graylog.server.net.br:9000",
+        "API_TOKEN": "your_graylog_api_token"
+      }
     }
   }
 }
 ```
 
-### 4. Testando a Ferramenta de Saudação
+2. After that, your client is already able to use the `fetch_graylog_messages` tool. Example prompt:
 
-Depois de configurado, você pode testar a ferramenta `greeting`:
-
-1. **Reinicie o cliente MCP** (Cursor/Claude Desktop)
-2. **Digite uma saudação** como:
-   - "Hello!"
-   - "Hi there!"
-   - "Greetings!"
-3. **Com nome específico**: "Hello, João!"
-4. **Esperado**: A ferramenta deve responder "Hello, {username}! How're doing?"
-
-### 5. Debug e Troubleshooting
-
-#### Verificar se o servidor está funcionando:
-
-```bash
-# Teste local direto
-cd /home/leo-ruellas/repositorios/mcp_servers/graylog-mcp
-npm install
-node src/index.js
+```
+Search for the latest 20 error logs of the example application, given that they occurred in the last 15 minutes.
 ```
 
-#### Logs e debug:
+This should be enough for the tool to be used, but if wanted, you can also explicitly "force" the use of the tool. Example prompt:
 
-```bash
-# Ver logs do container
-docker-compose logs -f
+```
+Search for the latest 20 error logs of the example application, given that they occurred in the last 15 minutes.
 
-# Executar com debug
-docker run -it --rm -v $(pwd):/app graylog-mcp-server bash -c "node --inspect src/index.js"
+use simple-graylog-mcp
 ```
 
-#### Verificar dependências:
 
-```bash
-# Dentro do container ou localmente
-npm list @modelcontextprotocol/sdk
+## Available tools
+
+### fetch_graylog_messages
+
+Fetch messages from Graylog.
+
+Parameters:
+
+- `query` (string): Search query. Example: `level:ERROR AND service:api`.
+- `searchTimeRangeInSeconds` (number, optional): Relative time range in seconds. Default: `900` (15 minutes).
+- `searchCountLimit` (number, optional): Max number of messages. Default: `50`.
+- `fields` (string, optional): Comma-separated fields to include. Default: `*`.
+
+### List tools over stdio
+
+```sh
+node src/index.js <<< '{"jsonrpc":"2.0","id":"1","method":"tools/list","params":{}}'
 ```
 
-### 6. Teste Manual da API MCP
+Expected output (example):
 
-Para teste manual avançado, você pode usar ferramentas como `stdio` para comunicar diretamente:
-
-```bash
-# Exemplo de teste stdio (avançado)
-echo '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' | node src/index.js
+```json
+{"result":{"tools":[{"name":"fetch_graylog_messages","description":"Fetch messages from Graylog","inputSchema":{"type":"object","properties":{"query":{"type":"string","description":"The query to search for, with the respective fields and values"},"searchTimeRangeInSeconds":{"type":"number","description":"The time range to search for, in seconds"},"searchCountLimit":{"type":"number","description":"The number of messages to fetch"},"fields":{"type":"string","description":"The fields to fetch"}}}}]},"jsonrpc":"2.0","id":"1"}
 ```
 
-### 7. Verificação da Configuração
+### Call the tool 
 
-Se houver problemas, verifique:
+Example payload for `fetch_graylog_messages`:
 
-1. **Caminho correto** no arquivo de configuração MCP
-2. **Dependências instaladas** (`npm install`)
-3. **Permissões de arquivo** (Node.js executável)
-4. **Logs de erro** do cliente MCP
+```json
+{
+    "name": "fetch_graylog_messages",
+    "arguments": {
+        "query": "ctxt_store_id:311840",
+        "searchTimeRangeInSeconds": 86400,
+        "searchCountLimit": 3
+    }
+}
 
-## Arquitetura
+```
 
-O servidor implementa o padrão MCP (Model Context Protocol) usando o SDK oficial:
+## Troubleshooting
 
-- **Server**: Instância principal do servidor MCP
-- **Transport**: Comunicação via stdio
-- **Tools**: Ferramentas disponíveis (atualmente apenas `greeting`)
-- **Error Handling**: Tratamento de erros e sinais do sistema
+- Ensure `BASE_URL` and `API_TOKEN` are set.
+- Verify Node.js version is 18+.
+- Run `npm install` if dependencies are missing.
 
-## Próximos Passos
-
-Este é um boilerplate básico. Funcionalidades futuras podem incluir:
-
-- Integração real com Graylog APIs
-- Ferramentas de busca e análise de logs
-- Autenticação e configuração
-- Mais ferramentas de utilidade
-
-## Roadmap
-
-- [ ] Tool for fetching messages
-- [ ] Tool for counting messages
-- [ ] Tool for identifying relevante indexes based on context
-
-## Licença
+## License
 
 MIT
