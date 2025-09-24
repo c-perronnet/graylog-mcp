@@ -1,0 +1,34 @@
+{
+    "name": "graylog-mcp-server",
+    "version": "1.0.0",
+    "description": "MCP server for fetching data from Graylog",
+    "main": "src/index.js",
+    "type": "module",
+    "scripts": {
+        "start": "node src/index.js",
+        "dev": "node --watch src/index.js",
+        "test": "node test-server.js",
+        "test:manual": "echo \"Error: no test specified\" && exit 1"
+    },
+    "keywords": [
+        "mcp",
+        "graylog",
+        "logging",
+        "model-context-protocol"
+    ],
+    "author": "Leo Ruellas",
+    "license": "MIT",
+    "dependencies": {
+        "@modelcontextprotocol/sdk": "^1.18.0",
+        "axios": "^1.12.2",
+        "npm": "^11.6.0",
+        "zod": "^3.25.76"
+    },
+    "devDependencies": {
+        "@types/node": "^20.19.15",
+        "typescript": "^5.9.2"
+    },
+    "engines": {
+        "node": ">=18.0.0"
+    }
+}
