@@ -84,34 +84,6 @@ Parameters:
 - `searchCountLimit` (number, optional): Max number of messages. Default: `50`.
 - `fields` (string, optional): Comma-separated fields to include. Default: `*`.
 
-### List tools over stdio
-
-```sh
-node src/index.js <<< '{"jsonrpc":"2.0","id":"1","method":"tools/list","params":{}}'
-```
-
-Expected output (example):
-
-```json
-{"result":{"tools":[{"name":"fetch_graylog_messages","description":"Fetch messages from Graylog","inputSchema":{"type":"object","properties":{"query":{"type":"string","description":"The query to search for, with the respective fields and values"},"searchTimeRangeInSeconds":{"type":"number","description":"The time range to search for, in seconds"},"searchCountLimit":{"type":"number","description":"The number of messages to fetch"},"fields":{"type":"string","description":"The fields to fetch"}}}}]},"jsonrpc":"2.0","id":"1"}
-```
-
-### Call the tool 
-
-Example payload for `fetch_graylog_messages`:
-
-```json
-{
-    "name": "fetch_graylog_messages",
-    "arguments": {
-        "query": "ctxt_store_id:311840",
-        "searchTimeRangeInSeconds": 86400,
-        "searchCountLimit": 3
-    }
-}
-
-```
-
 ## Troubleshooting
 
 - Ensure `BASE_URL` and `API_TOKEN` are set.
