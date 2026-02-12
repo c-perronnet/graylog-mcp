@@ -1,7 +1,7 @@
 {
     "name": "graylog-mcp-server",
-    "version": "1.0.0",
-    "description": "MCP server for fetching data from Graylog",
+    "version": "2.0.0",
+    "description": "MCP server for Graylog — search logs, filter by fields, view surrounding messages, list streams, and discover field values",
     "main": "src/index.js",
     "type": "module",
     "scripts": {
@@ -14,10 +14,20 @@
         "mcp",
         "graylog",
         "logging",
-        "model-context-protocol"
+        "model-context-protocol",
+        "log-search",
+        "observability"
     ],
-    "author": "Leo Ruellas",
+    "author": "Jagadeesh Pulamarasetti",
     "license": "MIT",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/jagadeesh52423/graylog-mcp.git"
+    },
+    "bugs": {
+        "url": "https://github.com/jagadeesh52423/graylog-mcp/issues"
+    },
+    "homepage": "https://github.com/jagadeesh52423/graylog-mcp#readme",
     "dependencies": {
         "@modelcontextprotocol/sdk": "^1.18.0",
         "axios": "^1.12.2",
