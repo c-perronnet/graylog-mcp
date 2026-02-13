@@ -55,7 +55,20 @@ Add this server to your MCP client configuration. Common locations:
 - **Cursor**: `~/.cursor/mcp.json`
 - **Claude Desktop (macOS)**: `~/Library/Application Support/Claude/claude_desktop_config.json`
 
-Example config:
+Example config using npx (recommended):
+
+```json
+{
+  "mcpServers": {
+    "graylog": {
+      "command": "npx",
+      "args": ["graylog-mcp-server"]
+    }
+  }
+}
+```
+
+Or with a local clone:
 
 ```json
 {
