@@ -8,7 +8,7 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import {
     getConfigPath, getConnections, getActiveConnection,
-    setActiveConnection, getActiveConnectionConfig, DEFAULT_FIELDS
+    setActiveConnection, getActiveConnectionConfig, getDefaultFields
 } from "./config.js";
 import { buildQueryString, resolveFields, extractMessages, fetchMessageById, fetchStreams, searchGraylog } from "./query.js";
 import { toolDefinitions } from "./tools.js";
@@ -124,7 +124,7 @@ async function fetchGraylogMessages(request) {
 
     const args = request.params.arguments || {};
     const queryString = buildQueryString(args.query, args.filters, args.exactMatch ?? true);
-    const fieldList = resolveFields(args.fields, DEFAULT_FIELDS);
+    const fieldList = resolveFields(args.fields, getDefaultFields());
     const pageSize = args.pageSize ?? 50;
     const page = args.page ?? 1;
     const offset = (page - 1) * pageSize;
@@ -204,7 +204,7 @@ async function getSurroundingMessages(request) {
     const from = new Date(targetTime.getTime() - surroundingSeconds * 1000).toISOString();
     const to = new Date(targetTime.getTime() + surroundingSeconds * 1000).toISOString();
     const queryString = buildQueryString(args.query, args.filters, args.exactMatch ?? true);
-    const fieldList = resolveFields(args.fields, DEFAULT_FIELDS);
+    const fieldList = resolveFields(args.fields, getDefaultFields());
 
     const payload = {
         queries: [{

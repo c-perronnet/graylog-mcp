@@ -25,6 +25,7 @@ export function buildQueryString(query, filters, exactMatch = true) {
 export function resolveFields(fieldsParam, defaultFields) {
     if (fieldsParam === "*") return null; // null = return all fields
     if (fieldsParam) return fieldsParam.split(",").map(s => s.trim());
+    if (defaultFields === "*") return null; // config set to all fields
     return defaultFields;
 }
 

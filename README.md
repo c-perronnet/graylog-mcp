@@ -35,17 +35,30 @@ Create a config file at `~/.graylog-mcp/config.json`:
   "connections": {
     "nonprod": {
       "baseUrl": "http://your-graylog-server:9000",
-      "apiToken": "your_graylog_api_token"
+      "apiToken": "your_graylog_api_token",
+      "defaultFields": ["timestamp", "gl2_message_id", "source", "env", "level", "message", "logger_name"]
     },
     "prod": {
       "baseUrl": "http://prod-graylog:9000",
       "apiToken": "your_prod_api_token"
     }
-  }
+  },
+  "defaultFields": ["timestamp", "message", "level", "source", "PODNAME"]
 }
 ```
 
-You can add multiple named connections and switch between them at runtime.
+**Configuration options:**
+
+| Option | Level | Description |
+|--------|-------|-------------|
+| `connections` | Root | Named Graylog instances with `baseUrl` and `apiToken` |
+| `defaultFields` | Root | Global default fields for all connections (optional) |
+| `defaultFields` | Connection | Override default fields for a specific connection (optional) |
+
+**Field resolution priority:**
+1. Connection-specific `defaultFields` (highest)
+2. Global `defaultFields`
+3. All fields (`*`) if neither is set
 
 ## Use with an MCP Client
 

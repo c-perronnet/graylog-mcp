@@ -3,27 +3,33 @@ import { join } from "path";
 import { homedir } from "os";
 
 let connections = {};
+let globalDefaultFields = null;
 const configPath = join(homedir(), ".graylog-mcp", "config.json");
 try {
     const config = JSON.parse(readFileSync(configPath, "utf-8"));
     connections = config.connections || {};
+    if (Array.isArray(config.defaultFields) && config.defaultFields.length > 0) {
+        globalDefaultFields = config.defaultFields;
+    }
 } catch {
     // No config file found
 }
 
 let activeConnection = null;
 
-export const DEFAULT_FIELDS = [
-    "timestamp",
-    "gl2_message_id",
-    "source",
-    "env",
-    "level",
-    "message",
-    "logger_name",
-    "thread_name",
-    "PODNAME",
-];
+export function getDefaultFields() {
+    // Priority 1: Connection-specific defaultFields
+    const connConfig = getActiveConnectionConfig();
+    if (connConfig && Array.isArray(connConfig.defaultFields) && connConfig.defaultFields.length > 0) {
+        return connConfig.defaultFields;
+    }
+    // Priority 2: Global defaultFields from config
+    if (globalDefaultFields) {
+        return globalDefaultFields;
+    }
+    // Priority 3: Return all fields
+    return "*";
+}
 
 export function getConfigPath() {
     return configPath;
