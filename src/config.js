@@ -4,7 +4,9 @@ import { homedir } from "os";
 
 let connections = {};
 let globalDefaultFields = null;
-const configPath = join(homedir(), ".graylog-mcp", "config.json");
+const defaultConfigPath = join(homedir(), ".graylog-mcp", "config.json");
+const configPath = process.env.GRAYLOG_CONFIG_PATH || defaultConfigPath;
+
 try {
     const config = JSON.parse(readFileSync(configPath, "utf-8"));
     connections = config.connections || {};

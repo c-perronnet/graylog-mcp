@@ -75,11 +75,16 @@ Example config using npx (recommended):
   "mcpServers": {
     "graylog": {
       "command": "npx",
-      "args": ["graylog-mcp-server"]
+      "args": ["graylog-mcp-server"],
+      "env": {
+        "GRAYLOG_CONFIG_PATH": "/path/to/your/config.json"
+      }
     }
   }
 }
 ```
+
+The `GRAYLOG_CONFIG_PATH` environment variable is optional. If not set, it defaults to `~/.graylog-mcp/config.json`.
 
 Or with a local clone:
 
