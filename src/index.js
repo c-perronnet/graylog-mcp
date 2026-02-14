@@ -14,6 +14,8 @@ import { buildQueryString, resolveFields, extractMessages, fetchMessageById, fet
 import { buildTimeRange, normalizeTimeRangeArgs } from "./timerange.js";
 import { buildTimeHistogram, buildFieldAggregation, buildFieldTimeAggregation, executeAggregation, buildTimeHistogramChart, buildSimpleTimeHistogram, buildSimpleFieldTimeAggregation, buildWorkingHistogram } from "./aggregations.js";
 import { toolDefinitions } from "./tools.js";
+import { saveSearch, getSavedSearch, listSavedSearches, deleteSavedSearch } from "./saved-searches.js";
+import { searchEvents, fetchEventDefinitions, fetchEventNotifications } from "./events.js";
 
 const server = new Server({
     name: "graylog-mcp-server",
@@ -60,6 +62,27 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
     if (name === "debug_histogram_query") {
         return debugHistogramQuery(request);
+    }
+    if (name === "save_search") {
+        return handleSaveSearch(request);
+    }
+    if (name === "list_saved_searches") {
+        return handleListSavedSearches();
+    }
+    if (name === "get_saved_search") {
+        return handleGetSavedSearch(request);
+    }
+    if (name === "delete_saved_search") {
+        return handleDeleteSavedSearch(request);
+    }
+    if (name === "search_events") {
+        return handleSearchEvents(request);
+    }
+    if (name === "get_event_definitions") {
+        return handleGetEventDefinitions(request);
+    }
+    if (name === "get_event_notifications") {
+        return handleGetEventNotifications(request);
     }
 
     throw new Error(`Tool not found: ${name}`);
@@ -614,6 +637,234 @@ async function debugHistogramQuery(request) {
             content: [{
                 type: "text",
                 text: `Debug query failed: ${err.message}`,
+            }],
+        };
+    }
+}
+
+function handleSaveSearch(request) {
+    const args = request.params.arguments || {};
+    const name = args.name;
+    if (!name) {
+        return {
+            isError: true,
+            content: [{ type: "text", text: "name is required" }],
+        };
+    }
+
+    const saved = saveSearch(name, args);
+    return {
+        content: [{
+            type: "text",
+            text: JSON.stringify({ message: `Search "${name}" saved successfully`, search: saved }),
+        }],
+    };
+}
+
+function handleListSavedSearches() {
+    const searches = listSavedSearches();
+    return {
+        content: [{
+            type: "text",
+            text: JSON.stringify({ total: searches.length, searches }),
+        }],
+    };
+}
+
+async function handleGetSavedSearch(request) {
+    const args = request.params.arguments || {};
+    const name = args.name;
+    if (!name) {
+        return {
+            isError: true,
+            content: [{ type: "text", text: "name is required" }],
+        };
+    }
+
+    const saved = getSavedSearch(name);
+    if (!saved) {
+        return {
+            isError: true,
+            content: [{ type: "text", text: `Saved search "${name}" not found` }],
+        };
+    }
+
+    const { conn, error } = requireActiveConnection();
+    if (error) return error;
+
+    // Merge saved params with request overrides (overrides win)
+    const merged = {
+        ...saved,
+        timeRange: args.timeRange || saved.timeRange,
+        from: args.from || saved.from,
+        to: args.to || saved.to,
+        pageSize: args.pageSize || saved.pageSize,
+    };
+
+    const { timeRange } = normalizeTimeRangeArgs(merged);
+    const queryString = buildQueryString(merged.query, merged.filters, merged.exactMatch ?? true);
+    const fieldList = resolveFields(merged.fields, getDefaultFields());
+    const pageSize = merged.pageSize ?? 50;
+    const page = args.page ?? 1;
+    const offset = (page - 1) * pageSize;
+
+    const streamFilter = buildStreamFilter(merged.streamIds);
+    const payload = {
+        queries: [{
+            id: "q1",
+            query: { type: "elasticsearch", query_string: queryString },
+            filter: streamFilter,
+            timerange: timeRange,
+            search_types: [{
+                id: "st1",
+                type: "messages",
+                limit: pageSize,
+                offset,
+            }]
+        }]
+    };
+
+    try {
+        const data = await searchGraylog(conn.baseUrl, conn.apiToken, payload);
+        const { totalResults, extracted } = extractMessages(data, fieldList);
+        const totalPages = Math.ceil(totalResults / pageSize);
+
+        return {
+            content: [{
+                type: "text",
+                text: JSON.stringify({
+                    saved_search: name,
+                    total_results: totalResults,
+                    page,
+                    page_size: pageSize,
+                    total_pages: totalPages,
+                    time_range: timeRange,
+                    query: queryString,
+                    messages: extracted,
+                }),
+            }],
+        };
+    } catch (err) {
+        return {
+            isError: true,
+            content: [{
+                type: "text",
+                text: `Error executing saved search "${name}": ${err.message}`,
+            }],
+        };
+    }
+}
+
+function handleDeleteSavedSearch(request) {
+    const args = request.params.arguments || {};
+    const name = args.name;
+    if (!name) {
+        return {
+            isError: true,
+            content: [{ type: "text", text: "name is required" }],
+        };
+    }
+
+    const deleted = deleteSavedSearch(name);
+    if (!deleted) {
+        return {
+            isError: true,
+            content: [{ type: "text", text: `Saved search "${name}" not found` }],
+        };
+    }
+
+    return {
+        content: [{
+            type: "text",
+            text: JSON.stringify({ message: `Search "${name}" deleted successfully` }),
+        }],
+    };
+}
+
+async function handleSearchEvents(request) {
+    const { conn, error } = requireActiveConnection();
+    if (error) return error;
+
+    const args = request.params.arguments || {};
+    const { timeRange } = normalizeTimeRangeArgs(args);
+
+    const payload = {
+        query: args.query || "",
+        filter: {
+            alerts: args.alerts || "include",
+            event_definitions: args.eventDefinitionIds || [],
+        },
+        page: args.page ?? 1,
+        per_page: args.perPage ?? 25,
+        sort_by: args.sortBy || "timestamp",
+        sort_direction: args.sortDirection || "desc",
+        timerange: timeRange,
+    };
+
+    try {
+        const data = await searchEvents(conn.baseUrl, conn.apiToken, payload);
+        return {
+            content: [{
+                type: "text",
+                text: JSON.stringify(data),
+            }],
+        };
+    } catch (err) {
+        return {
+            isError: true,
+            content: [{
+                type: "text",
+                text: `Error searching events: ${err.message}`,
+            }],
+        };
+    }
+}
+
+async function handleGetEventDefinitions(request) {
+    const { conn, error } = requireActiveConnection();
+    if (error) return error;
+
+    const args = request.params.arguments || {};
+
+    try {
+        const data = await fetchEventDefinitions(conn.baseUrl, conn.apiToken, args.page ?? 1, args.perPage ?? 25, args.query);
+        return {
+            content: [{
+                type: "text",
+                text: JSON.stringify(data),
+            }],
+        };
+    } catch (err) {
+        return {
+            isError: true,
+            content: [{
+                type: "text",
+                text: `Error fetching event definitions: ${err.message}`,
+            }],
+        };
+    }
+}
+
+async function handleGetEventNotifications(request) {
+    const { conn, error } = requireActiveConnection();
+    if (error) return error;
+
+    const args = request.params.arguments || {};
+
+    try {
+        const data = await fetchEventNotifications(conn.baseUrl, conn.apiToken, args.page ?? 1, args.perPage ?? 25);
+        return {
+            content: [{
+                type: "text",
+                text: JSON.stringify(data),
+            }],
+        };
+    } catch (err) {
+        return {
+            isError: true,
+            content: [{
+                type: "text",
+                text: `Error fetching event notifications: ${err.message}`,
             }],
         };
     }

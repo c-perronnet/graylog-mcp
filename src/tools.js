@@ -367,4 +367,201 @@ export const toolDefinitions = [
             },
         },
     },
+    {
+        name: "save_search",
+        description: "Save a named search query for later reuse. Saves query parameters so you don't have to re-type complex searches.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                name: {
+                    type: "string",
+                    description: "A unique name for this saved search",
+                },
+                query: {
+                    type: "string",
+                    description: "The query to save",
+                },
+                filters: {
+                    type: "object",
+                    description: "Field filters (e.g. {\"env\": \"production\", \"level\": 3})",
+                },
+                timeRange: {
+                    type: "string",
+                    description: "Time range (e.g., '1h', '2d', '30m')",
+                },
+                from: {
+                    type: "string",
+                    description: "Start time for absolute range (ISO string or timestamp)",
+                },
+                to: {
+                    type: "string",
+                    description: "End time for absolute range (ISO string or timestamp)",
+                },
+                fields: {
+                    type: "string",
+                    description: "Comma-separated field names to return, or '*' for all fields",
+                },
+                streamIds: {
+                    type: "array",
+                    items: { type: "string" },
+                    description: "Optional stream IDs to scope the search",
+                },
+                exactMatch: {
+                    type: "boolean",
+                    description: "If true, wraps the query in quotes for exact match",
+                },
+                pageSize: {
+                    type: "number",
+                    description: "Number of messages per page",
+                },
+            },
+            required: ["name"],
+        },
+    },
+    {
+        name: "list_saved_searches",
+        description: "List all saved searches.",
+        inputSchema: {
+            type: "object",
+            properties: {},
+        },
+    },
+    {
+        name: "get_saved_search",
+        description: "Load and execute a saved search by name. Optional overrides can be provided to adjust the search at execution time.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                name: {
+                    type: "string",
+                    description: "The name of the saved search to execute",
+                },
+                page: {
+                    type: "number",
+                    description: "Page number (starts at 1). Default: 1",
+                },
+                pageSize: {
+                    type: "number",
+                    description: "Override the saved page size",
+                },
+                timeRange: {
+                    type: "string",
+                    description: "Override the saved time range (e.g., '1h', '2d')",
+                },
+                from: {
+                    type: "string",
+                    description: "Override the saved start time",
+                },
+                to: {
+                    type: "string",
+                    description: "Override the saved end time",
+                },
+            },
+            required: ["name"],
+        },
+    },
+    {
+        name: "delete_saved_search",
+        description: "Delete a saved search by name.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                name: {
+                    type: "string",
+                    description: "The name of the saved search to delete",
+                },
+            },
+            required: ["name"],
+        },
+    },
+    {
+        name: "search_events",
+        description: "Search Graylog events and alerts. Use 'use_connection' first to select a connection.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                query: {
+                    type: "string",
+                    description: "Search query for events",
+                },
+                timeRange: {
+                    type: "string",
+                    description: "Time range (e.g., '1h', '2d', '30m') or use from/to for absolute range",
+                },
+                from: {
+                    type: "string",
+                    description: "Start time for absolute range (ISO string or timestamp)",
+                },
+                to: {
+                    type: "string",
+                    description: "End time for absolute range (ISO string or timestamp)",
+                },
+                alerts: {
+                    type: "string",
+                    enum: ["only", "include", "exclude"],
+                    description: "Filter by alert status. 'only' = only alerts, 'include' = alerts + events, 'exclude' = only non-alert events. Default: include",
+                },
+                eventDefinitionIds: {
+                    type: "array",
+                    items: { type: "string" },
+                    description: "Filter by specific event definition IDs",
+                },
+                page: {
+                    type: "number",
+                    description: "Page number (starts at 1). Default: 1",
+                },
+                perPage: {
+                    type: "number",
+                    description: "Number of results per page. Default: 25",
+                },
+                sortBy: {
+                    type: "string",
+                    description: "Field to sort by. Default: timestamp",
+                },
+                sortDirection: {
+                    type: "string",
+                    enum: ["asc", "desc"],
+                    description: "Sort direction. Default: desc",
+                },
+            },
+        },
+    },
+    {
+        name: "get_event_definitions",
+        description: "Get Graylog event definitions. Use 'use_connection' first to select a connection.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                page: {
+                    type: "number",
+                    description: "Page number (starts at 1). Default: 1",
+                },
+                perPage: {
+                    type: "number",
+                    description: "Number of results per page. Default: 25",
+                },
+                query: {
+                    type: "string",
+                    description: "Search query to filter event definitions",
+                },
+            },
+        },
+    },
+    {
+        name: "get_event_notifications",
+        description: "Get Graylog event notifications. Use 'use_connection' first to select a connection.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                page: {
+                    type: "number",
+                    description: "Page number (starts at 1). Default: 1",
+                },
+                perPage: {
+                    type: "number",
+                    description: "Number of results per page. Default: 25",
+                },
+            },
+        },
+    },
 ];
