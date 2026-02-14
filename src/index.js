@@ -19,7 +19,7 @@ import { searchEvents, fetchEventDefinitions, fetchEventNotifications } from "./
 
 const server = new Server({
     name: "graylog-mcp-server",
-    version: "2.1.0",
+    version: "2.2.0",
 }, {
     capabilities: {
         tools: {},
