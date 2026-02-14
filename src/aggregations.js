@@ -26,7 +26,7 @@ function resolveInterval(timeRange, interval) {
  * @param {string} queryString - Query filter
  * @returns {Object} Search payload for time histogram
  */
-export function buildTimeHistogram(timeRange, interval, queryString, streamId) {
+export function buildTimeHistogram(timeRange, interval, queryString, streamIds) {
     interval = resolveInterval(timeRange, interval);
     const intervalMs = parseIntervalToMs(interval);
 
@@ -34,7 +34,7 @@ export function buildTimeHistogram(timeRange, interval, queryString, streamId) {
         queries: [{
             id: "q1",
             query: { type: "elasticsearch", query_string: queryString },
-            filter: buildStreamFilter(streamId),
+            filter: buildStreamFilter(streamIds),
             timerange: timeRange,
             search_types: [{
                 id: "st1",
@@ -78,14 +78,14 @@ function parseIntervalToMs(interval) {
 /**
  * Simple field-time aggregation using basic pivot
  */
-export function buildSimpleFieldTimeAggregation(timeRange, field, interval, queryString, limit, streamId) {
+export function buildSimpleFieldTimeAggregation(timeRange, field, interval, queryString, limit, streamIds) {
     interval = resolveInterval(timeRange, interval);
 
     return {
         queries: [{
             id: "q1",
             query: { type: "elasticsearch", query_string: queryString },
-            filter: buildStreamFilter(streamId),
+            filter: buildStreamFilter(streamIds),
             timerange: timeRange,
             search_types: [{
                 id: "st1",
@@ -113,14 +113,14 @@ export function buildSimpleFieldTimeAggregation(timeRange, field, interval, quer
  * Histogram using exact same pattern as working field-time aggregation
  * This mirrors the successful field-time approach but only does time buckets
  */
-export function buildWorkingHistogram(timeRange, interval, queryString, streamId) {
+export function buildWorkingHistogram(timeRange, interval, queryString, streamIds) {
     interval = resolveInterval(timeRange, interval);
 
     return {
         queries: [{
             id: "q1",
             query: { type: "elasticsearch", query_string: queryString },
-            filter: buildStreamFilter(streamId),
+            filter: buildStreamFilter(streamIds),
             timerange: timeRange,
             search_types: [{
                 id: "st1",
@@ -142,14 +142,14 @@ export function buildWorkingHistogram(timeRange, interval, queryString, streamId
 /**
  * Alternative time histogram using chart search type
  */
-export function buildTimeHistogramChart(timeRange, interval, queryString, streamId) {
+export function buildTimeHistogramChart(timeRange, interval, queryString, streamIds) {
     interval = resolveInterval(timeRange, interval);
 
     return {
         queries: [{
             id: "q1",
             query: { type: "elasticsearch", query_string: queryString },
-            filter: buildStreamFilter(streamId),
+            filter: buildStreamFilter(streamIds),
             timerange: timeRange,
             search_types: [{
                 id: "st1",
@@ -171,14 +171,14 @@ export function buildTimeHistogramChart(timeRange, interval, queryString, stream
 /**
  * Simple time histogram using basic aggregation approach
  */
-export function buildSimpleTimeHistogram(timeRange, interval, queryString, streamId) {
+export function buildSimpleTimeHistogram(timeRange, interval, queryString, streamIds) {
     interval = resolveInterval(timeRange, interval);
 
     return {
         queries: [{
             id: "q1",
             query: { type: "elasticsearch", query_string: queryString },
-            filter: buildStreamFilter(streamId),
+            filter: buildStreamFilter(streamIds),
             timerange: timeRange,
             search_types: [{
                 id: "st1",
@@ -205,7 +205,7 @@ export function buildSimpleTimeHistogram(timeRange, interval, queryString, strea
  * @param {string} valueField - Field to calculate metrics on (for sum/avg/min/max)
  * @returns {Object} Search payload for field aggregation
  */
-export function buildFieldAggregation(timeRange, field, queryString, limit, metrics, valueField, streamId) {
+export function buildFieldAggregation(timeRange, field, queryString, limit, metrics, valueField, streamIds) {
     const series = [];
 
     metrics.forEach(metric => {
@@ -224,7 +224,7 @@ export function buildFieldAggregation(timeRange, field, queryString, limit, metr
         queries: [{
             id: "q1",
             query: { type: "elasticsearch", query_string: queryString },
-            filter: buildStreamFilter(streamId),
+            filter: buildStreamFilter(streamIds),
             timerange: timeRange,
             search_types: [{
                 id: "st1",
@@ -251,7 +251,7 @@ export function buildFieldAggregation(timeRange, field, queryString, limit, metr
  * @param {number} limit - Maximum number of field values
  * @returns {Object} Search payload for 2D aggregation
  */
-export function buildFieldTimeAggregation(timeRange, field, interval, queryString, limit, streamId) {
+export function buildFieldTimeAggregation(timeRange, field, interval, queryString, limit, streamIds) {
     interval = resolveInterval(timeRange, interval);
     const intervalMs = parseIntervalToMs(interval);
 
@@ -259,7 +259,7 @@ export function buildFieldTimeAggregation(timeRange, field, interval, queryStrin
         queries: [{
             id: "q1",
             query: { type: "elasticsearch", query_string: queryString },
-            filter: buildStreamFilter(streamId),
+            filter: buildStreamFilter(streamIds),
             timerange: timeRange,
             search_types: [{
                 id: "st1",

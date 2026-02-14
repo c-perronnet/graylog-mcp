@@ -22,11 +22,18 @@ export function buildQueryString(query, filters, exactMatch = true) {
     return qs;
 }
 
-export function buildStreamFilter(streamId) {
-    if (!streamId) return undefined;
+export function buildStreamFilter(streamIds) {
+    if (!streamIds || streamIds.length === 0) return undefined;
+    // Normalize: MCP clients may pass arrays as JSON strings
+    let ids = streamIds;
+    if (typeof ids === "string") {
+        try { ids = JSON.parse(ids); } catch { ids = [ids]; }
+    }
+    if (!Array.isArray(ids)) ids = [ids];
+    if (ids.length === 0) return undefined;
     return {
         type: "or",
-        filters: [{ type: "stream", id: streamId }]
+        filters: ids.map(id => ({ type: "stream", id }))
     };
 }
 
