@@ -67,6 +67,10 @@ export const toolDefinitions = [
                     type: "boolean",
                     description: "If true (default), wraps the query in quotes for exact match. Set to false for fuzzy/wildcard search.",
                 },
+                streamId: {
+                    type: "string",
+                    description: "Optional stream ID to scope the search. Use 'list_streams' to get available stream IDs.",
+                },
             },
         },
     },
@@ -107,6 +111,10 @@ export const toolDefinitions = [
                 fields: {
                     type: "string",
                     description: "Comma-separated field names to return, or '*' for all fields. Default: returns key fields only (timestamp, gl2_message_id, source, env, level, message, logger_name, thread_name, PODNAME)",
+                },
+                streamId: {
+                    type: "string",
+                    description: "Optional stream ID to scope the search. Use 'list_streams' to get available stream IDs.",
                 },
             },
         },
@@ -161,6 +169,10 @@ export const toolDefinitions = [
                     type: "number",
                     description: "Maximum number of distinct values to return. Default: 20",
                 },
+                streamId: {
+                    type: "string",
+                    description: "Optional stream ID to scope the search. Use 'list_streams' to get available stream IDs.",
+                },
             },
             required: ["field"],
         },
@@ -198,6 +210,10 @@ export const toolDefinitions = [
                 interval: {
                     type: "string",
                     description: "Time interval for buckets (e.g., '1m', '5m', '1h', 'auto'). Default: 'auto'",
+                },
+                streamId: {
+                    type: "string",
+                    description: "Optional stream ID to scope the search. Use 'list_streams' to get available stream IDs.",
                 },
             },
         },
@@ -249,6 +265,10 @@ export const toolDefinitions = [
                     type: "string",
                     description: "Numeric field for sum/avg/min/max calculations (required for non-count metrics)",
                 },
+                streamId: {
+                    type: "string",
+                    description: "Optional stream ID to scope the search. Use 'list_streams' to get available stream IDs.",
+                },
             },
             required: ["field"],
         },
@@ -295,6 +315,10 @@ export const toolDefinitions = [
                     type: "number",
                     description: "Maximum number of field values to return. Default: 10",
                 },
+                streamId: {
+                    type: "string",
+                    description: "Optional stream ID to scope the search. Use 'list_streams' to get available stream IDs.",
+                },
             },
             required: ["field"],
         },
@@ -328,6 +352,10 @@ export const toolDefinitions = [
                 to: {
                     type: "string",
                     description: "End time for absolute range",
+                },
+                streamId: {
+                    type: "string",
+                    description: "Optional stream ID to scope the search. Use 'list_streams' to get available stream IDs.",
                 },
             },
         },

@@ -22,6 +22,14 @@ export function buildQueryString(query, filters, exactMatch = true) {
     return qs;
 }
 
+export function buildStreamFilter(streamId) {
+    if (!streamId) return undefined;
+    return {
+        type: "or",
+        filters: [{ type: "stream", id: streamId }]
+    };
+}
+
 export function resolveFields(fieldsParam, defaultFields) {
     if (fieldsParam === "*") return null; // null = return all fields
     if (fieldsParam) return fieldsParam.split(",").map(s => s.trim());

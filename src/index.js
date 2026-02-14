@@ -10,7 +10,7 @@ import {
     getConfigPath, getConnections, getActiveConnection,
     setActiveConnection, getActiveConnectionConfig, getDefaultFields
 } from "./config.js";
-import { buildQueryString, resolveFields, extractMessages, fetchMessageById, fetchStreams, searchGraylog } from "./query.js";
+import { buildQueryString, resolveFields, extractMessages, fetchMessageById, fetchStreams, searchGraylog, buildStreamFilter } from "./query.js";
 import { buildTimeRange, normalizeTimeRangeArgs } from "./timerange.js";
 import { buildTimeHistogram, buildFieldAggregation, buildFieldTimeAggregation, executeAggregation, buildTimeHistogramChart, buildSimpleTimeHistogram, buildSimpleFieldTimeAggregation, buildWorkingHistogram } from "./aggregations.js";
 import { toolDefinitions } from "./tools.js";
@@ -148,10 +148,12 @@ async function fetchGraylogMessages(request) {
     const page = args.page ?? 1;
     const offset = (page - 1) * pageSize;
 
+    const streamFilter = buildStreamFilter(args.streamId);
     const payload = {
         queries: [{
             id: "q1",
             query: { type: "elasticsearch", query_string: queryString },
+            filter: streamFilter,
             timerange: timeRange,
             search_types: [{
                 id: "st1",
@@ -235,10 +237,12 @@ async function getSurroundingMessages(request) {
     const queryString = buildQueryString(args.query, args.filters, args.exactMatch ?? true);
     const fieldList = resolveFields(args.fields, getDefaultFields());
 
+    const streamFilter = buildStreamFilter(args.streamId);
     const payload = {
         queries: [{
             id: "q1",
             query: { type: "elasticsearch", query_string: queryString },
+            filter: streamFilter,
             timerange: { type: "absolute", from, to },
             search_types: [{
                 id: "st1",
@@ -321,10 +325,12 @@ async function listFieldValues(request) {
     const limit = args.limit ?? 20;
     const queryString = buildQueryString(args.query, args.filters, args.exactMatch ?? true);
 
+    const streamFilter = buildStreamFilter(args.streamId);
     const payload = {
         queries: [{
             id: "q1",
             query: { type: "elasticsearch", query_string: queryString },
+            filter: streamFilter,
             timerange: timeRange,
             search_types: [{
                 id: "st1",
@@ -386,7 +392,7 @@ async function getLogHistogram(request) {
 
     for (const approach of approaches) {
         try {
-            const payload = approach.builder(timeRange, interval, queryString);
+            const payload = approach.builder(timeRange, interval, queryString, args.streamId);
             const result = await executeAggregation(conn.baseUrl, conn.apiToken, payload, 'histogram');
 
             return {
@@ -443,7 +449,7 @@ async function getFieldAggregation(request) {
     }
 
     try {
-        const payload = buildFieldAggregation(timeRange, field, queryString, limit, metrics, valueField);
+        const payload = buildFieldAggregation(timeRange, field, queryString, limit, metrics, valueField, args.streamId);
         const result = await executeAggregation(conn.baseUrl, conn.apiToken, payload, 'field');
 
         return {
@@ -496,7 +502,7 @@ async function getFieldTimeAggregation(request) {
 
     for (const approach of approaches) {
         try {
-            const payload = approach.builder(timeRange, field, interval, queryString, limit);
+            const payload = approach.builder(timeRange, field, interval, queryString, limit, args.streamId);
             const result = await executeAggregation(conn.baseUrl, conn.apiToken, payload, 'field-time');
 
             return {
@@ -535,11 +541,14 @@ async function debugHistogramQuery(request) {
     const queryString = buildQueryString(args.query, args.filters, args.exactMatch ?? true);
 
     try {
+        const streamFilter = buildStreamFilter(args.streamId);
+
         // First test: Basic message search to see if query finds anything
         const basicPayload = {
             queries: [{
                 id: "q1",
                 query: { type: "elasticsearch", query_string: queryString },
+                filter: streamFilter,
                 timerange: timeRange,
                 search_types: [{
                     id: "st1",
@@ -558,6 +567,7 @@ async function debugHistogramQuery(request) {
             queries: [{
                 id: "q1",
                 query: { type: "elasticsearch", query_string: queryString },
+                filter: streamFilter,
                 timerange: timeRange,
                 search_types: [{
                     id: "st1",
