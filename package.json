@@ -1,7 +1,7 @@
 {
     "name": "graylog-mcp-server",
     "version": "2.0.2",
-    "description": "MCP server for Graylog — search logs, filter by fields, view surrounding messages, list streams, and discover field values",
+    "description": "MCP server for Graylog — advanced log search, aggregations, time-series analysis, field statistics, and flexible time ranges",
     "main": "src/index.js",
     "type": "module",
     "scripts": {
@@ -16,7 +16,11 @@
         "logging",
         "model-context-protocol",
         "log-search",
-        "observability"
+        "observability",
+        "log-aggregation",
+        "time-series",
+        "analytics",
+        "statistics"
     ],
     "author": "Jagadeesh Pulamarasetti",
     "license": "MIT",
@@ -31,7 +35,6 @@
     "dependencies": {
         "@modelcontextprotocol/sdk": "^1.18.0",
         "axios": "^1.12.2",
-        "npm": "^11.6.0",
         "zod": "^3.25.76"
     },
     "devDependencies": {

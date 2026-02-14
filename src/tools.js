@@ -31,9 +31,21 @@ export const toolDefinitions = [
                     type: "string",
                     description: "The query to search for, with the respective fields and values",
                 },
+                timeRange: {
+                    type: "string",
+                    description: "Time range (e.g., '1h', '2d', '30m') or use from/to for absolute range",
+                },
+                from: {
+                    type: "string",
+                    description: "Start time for absolute range (ISO string or timestamp)",
+                },
+                to: {
+                    type: "string",
+                    description: "End time for absolute range (ISO string or timestamp)",
+                },
                 searchTimeRangeInSeconds: {
                     type: "number",
-                    description: "The time range to search for, in seconds",
+                    description: "[DEPRECATED] Use timeRange instead. Time range in seconds",
                 },
                 pageSize: {
                     type: "number",
@@ -129,9 +141,21 @@ export const toolDefinitions = [
                     type: "boolean",
                     description: "If true (default), wraps the query in quotes for exact match. Set to false for fuzzy/wildcard search.",
                 },
+                timeRange: {
+                    type: "string",
+                    description: "Time range (e.g., '1h', '2d', '30m') or use from/to for absolute range",
+                },
+                from: {
+                    type: "string",
+                    description: "Start time for absolute range (ISO string or timestamp)",
+                },
+                to: {
+                    type: "string",
+                    description: "End time for absolute range (ISO string or timestamp)",
+                },
                 timeRangeInSeconds: {
                     type: "number",
-                    description: "Time range in seconds. Default: 3600 (1 hour)",
+                    description: "[DEPRECATED] Use timeRange instead. Time range in seconds. Default: 3600 (1 hour)",
                 },
                 limit: {
                     type: "number",
@@ -139,6 +163,173 @@ export const toolDefinitions = [
                 },
             },
             required: ["field"],
+        },
+    },
+    {
+        name: "get_log_histogram",
+        description: "Get a time-based histogram of log messages. Shows message counts over time intervals.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                query: {
+                    type: "string",
+                    description: "Query to filter messages",
+                },
+                filters: {
+                    type: "object",
+                    description: "Field filters (e.g. {\"env\": \"production\", \"level\": 3})",
+                },
+                exactMatch: {
+                    type: "boolean",
+                    description: "If true (default), wraps the query in quotes for exact match.",
+                },
+                timeRange: {
+                    type: "string",
+                    description: "Time range (e.g., '1h', '2d', '30m') or use from/to for absolute range",
+                },
+                from: {
+                    type: "string",
+                    description: "Start time for absolute range (ISO string or timestamp)",
+                },
+                to: {
+                    type: "string",
+                    description: "End time for absolute range (ISO string or timestamp)",
+                },
+                interval: {
+                    type: "string",
+                    description: "Time interval for buckets (e.g., '1m', '5m', '1h', 'auto'). Default: 'auto'",
+                },
+            },
+        },
+    },
+    {
+        name: "get_field_aggregation",
+        description: "Aggregate log messages by field values with statistics. Get counts, sums, averages, etc. for field values.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                field: {
+                    type: "string",
+                    description: "Field to aggregate on (e.g., 'source', 'env', 'logger_name', 'level')",
+                },
+                query: {
+                    type: "string",
+                    description: "Query to filter messages",
+                },
+                filters: {
+                    type: "object",
+                    description: "Field filters (e.g. {\"env\": \"production\"})",
+                },
+                exactMatch: {
+                    type: "boolean",
+                    description: "If true (default), wraps the query in quotes for exact match.",
+                },
+                timeRange: {
+                    type: "string",
+                    description: "Time range (e.g., '1h', '2d', '30m') or use from/to for absolute range",
+                },
+                from: {
+                    type: "string",
+                    description: "Start time for absolute range (ISO string or timestamp)",
+                },
+                to: {
+                    type: "string",
+                    description: "End time for absolute range (ISO string or timestamp)",
+                },
+                limit: {
+                    type: "number",
+                    description: "Maximum number of field values to return. Default: 20",
+                },
+                metrics: {
+                    type: "array",
+                    items: { type: "string", enum: ["count", "sum", "avg", "min", "max"] },
+                    description: "Metrics to calculate. Default: ['count']",
+                },
+                valueField: {
+                    type: "string",
+                    description: "Numeric field for sum/avg/min/max calculations (required for non-count metrics)",
+                },
+            },
+            required: ["field"],
+        },
+    },
+    {
+        name: "get_field_time_aggregation",
+        description: "Two-dimensional aggregation: field values over time. Shows how field values change over time intervals.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                field: {
+                    type: "string",
+                    description: "Field to aggregate on (e.g., 'source', 'env', 'level')",
+                },
+                query: {
+                    type: "string",
+                    description: "Query to filter messages",
+                },
+                filters: {
+                    type: "object",
+                    description: "Field filters (e.g. {\"env\": \"production\"})",
+                },
+                exactMatch: {
+                    type: "boolean",
+                    description: "If true (default), wraps the query in quotes for exact match.",
+                },
+                timeRange: {
+                    type: "string",
+                    description: "Time range (e.g., '1h', '2d', '30m') or use from/to for absolute range",
+                },
+                from: {
+                    type: "string",
+                    description: "Start time for absolute range (ISO string or timestamp)",
+                },
+                to: {
+                    type: "string",
+                    description: "End time for absolute range (ISO string or timestamp)",
+                },
+                interval: {
+                    type: "string",
+                    description: "Time interval for buckets (e.g., '1m', '5m', '1h', 'auto'). Default: 'auto'",
+                },
+                limit: {
+                    type: "number",
+                    description: "Maximum number of field values to return. Default: 10",
+                },
+            },
+            required: ["field"],
+        },
+    },
+    {
+        name: "debug_histogram_query",
+        description: "Debug helper to test if the histogram query finds any messages at all. Use this if histogram returns empty buckets.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                query: {
+                    type: "string",
+                    description: "Query to test",
+                },
+                filters: {
+                    type: "object",
+                    description: "Field filters to test",
+                },
+                exactMatch: {
+                    type: "boolean",
+                    description: "If true (default), wraps the query in quotes for exact match.",
+                },
+                timeRange: {
+                    type: "string",
+                    description: "Time range (e.g., '1h', '30m', '2d')",
+                },
+                from: {
+                    type: "string",
+                    description: "Start time for absolute range",
+                },
+                to: {
+                    type: "string",
+                    description: "End time for absolute range",
+                },
+            },
         },
     },
 ];

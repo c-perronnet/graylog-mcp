@@ -11,11 +11,13 @@ import {
     setActiveConnection, getActiveConnectionConfig, getDefaultFields
 } from "./config.js";
 import { buildQueryString, resolveFields, extractMessages, fetchMessageById, fetchStreams, searchGraylog } from "./query.js";
+import { buildTimeRange, normalizeTimeRangeArgs } from "./timerange.js";
+import { buildTimeHistogram, buildFieldAggregation, buildFieldTimeAggregation, executeAggregation, buildTimeHistogramChart, buildSimpleTimeHistogram, buildSimpleFieldTimeAggregation, buildWorkingHistogram } from "./aggregations.js";
 import { toolDefinitions } from "./tools.js";
 
 const server = new Server({
-    name: "simple-graylog-mcp",
-    version: "1.0.0",
+    name: "graylog-mcp-server",
+    version: "2.0.2",
 }, {
     capabilities: {
         tools: {},
@@ -46,6 +48,18 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
     if (name === "list_field_values") {
         return listFieldValues(request);
+    }
+    if (name === "get_log_histogram") {
+        return getLogHistogram(request);
+    }
+    if (name === "get_field_aggregation") {
+        return getFieldAggregation(request);
+    }
+    if (name === "get_field_time_aggregation") {
+        return getFieldTimeAggregation(request);
+    }
+    if (name === "debug_histogram_query") {
+        return debugHistogramQuery(request);
     }
 
     throw new Error(`Tool not found: ${name}`);
@@ -79,7 +93,10 @@ function listConnections() {
 function useConnection(request) {
     const connectionName = request.params.arguments?.name;
     if (!connectionName) {
-        throw new Error("Connection name is required");
+        return {
+            isError: true,
+            content: [{ type: "text", text: "Connection name is required" }],
+        };
     }
 
     const connections = getConnections();
@@ -108,6 +125,7 @@ function requireActiveConnection() {
         const available = Object.keys(getConnections()).join(", ");
         return {
             error: {
+                isError: true,
                 content: [{
                     type: "text",
                     text: `No active connection. Use 'use_connection' first. Available: ${available || "none"}`,
@@ -123,6 +141,7 @@ async function fetchGraylogMessages(request) {
     if (error) return error;
 
     const args = request.params.arguments || {};
+    const { timeRange } = normalizeTimeRangeArgs(args);
     const queryString = buildQueryString(args.query, args.filters, args.exactMatch ?? true);
     const fieldList = resolveFields(args.fields, getDefaultFields());
     const pageSize = args.pageSize ?? 50;
@@ -133,7 +152,7 @@ async function fetchGraylogMessages(request) {
         queries: [{
             id: "q1",
             query: { type: "elasticsearch", query_string: queryString },
-            timerange: { type: "relative", range: args.searchTimeRangeInSeconds ?? 900 },
+            timerange: timeRange,
             search_types: [{
                 id: "st1",
                 type: "messages",
@@ -156,12 +175,15 @@ async function fetchGraylogMessages(request) {
                     page,
                     page_size: pageSize,
                     total_pages: totalPages,
+                    time_range: timeRange,
+                    query: queryString,
                     messages: extracted,
                 }),
             }],
         };
     } catch (err) {
         return {
+            isError: true,
             content: [{
                 type: "text",
                 text: `Error fetching messages: ${err.message}`,
@@ -182,6 +204,7 @@ async function getSurroundingMessages(request) {
         const msg = await fetchMessageById(conn.baseUrl, conn.apiToken, args.messageId);
         if (!msg) {
             return {
+                isError: true,
                 content: [{
                     type: "text",
                     text: `Message not found: ${args.messageId}`,
@@ -192,12 +215,18 @@ async function getSurroundingMessages(request) {
     }
 
     if (!messageTimestamp) {
-        throw new Error("Either messageId or messageTimestamp is required");
+        return {
+            isError: true,
+            content: [{ type: "text", text: "Either messageId or messageTimestamp is required" }],
+        };
     }
 
     const targetTime = new Date(messageTimestamp);
     if (isNaN(targetTime.getTime())) {
-        throw new Error(`Invalid timestamp: ${messageTimestamp}`);
+        return {
+            isError: true,
+            content: [{ type: "text", text: `Invalid timestamp: ${messageTimestamp}` }],
+        };
     }
 
     const surroundingSeconds = args.surroundingSeconds ?? 5;
@@ -237,6 +266,7 @@ async function getSurroundingMessages(request) {
         };
     } catch (err) {
         return {
+            isError: true,
             content: [{
                 type: "text",
                 text: `Error fetching surrounding messages: ${err.message}`,
@@ -265,6 +295,7 @@ async function listStreams() {
         };
     } catch (err) {
         return {
+            isError: true,
             content: [{
                 type: "text",
                 text: `Error fetching streams: ${err.message}`,
@@ -280,9 +311,13 @@ async function listFieldValues(request) {
     const args = request.params.arguments || {};
     const field = args.field;
     if (!field) {
-        throw new Error("field is required");
+        return {
+            isError: true,
+            content: [{ type: "text", text: "field is required" }],
+        };
     }
 
+    const { timeRange } = normalizeTimeRangeArgs(args);
     const limit = args.limit ?? 20;
     const queryString = buildQueryString(args.query, args.filters, args.exactMatch ?? true);
 
@@ -290,7 +325,7 @@ async function listFieldValues(request) {
         queries: [{
             id: "q1",
             query: { type: "elasticsearch", query_string: queryString },
-            timerange: { type: "relative", range: args.timeRangeInSeconds ?? 3600 },
+            timerange: timeRange,
             search_types: [{
                 id: "st1",
                 type: "pivot",
@@ -312,14 +347,263 @@ async function listFieldValues(request) {
         return {
             content: [{
                 type: "text",
-                text: JSON.stringify({ field, total: values.length, values }),
+                text: JSON.stringify({
+                    field,
+                    total: values.length,
+                    time_range: timeRange,
+                    query: queryString,
+                    values
+                }),
             }],
         };
     } catch (err) {
         return {
+            isError: true,
             content: [{
                 type: "text",
                 text: `Error fetching field values: ${err.message}`,
+            }],
+        };
+    }
+}
+
+async function getLogHistogram(request) {
+    const { conn, error } = requireActiveConnection();
+    if (error) return error;
+
+    const args = request.params.arguments || {};
+    const { timeRange } = normalizeTimeRangeArgs(args);
+    const queryString = buildQueryString(args.query, args.filters, args.exactMatch ?? true);
+    const interval = args.interval || 'auto';
+
+    // Try multiple approaches - put the working pattern first
+    const approaches = [
+        { name: 'working-pattern', builder: buildWorkingHistogram },
+        { name: 'chart', builder: buildTimeHistogramChart },
+        { name: 'simple-pivot', builder: buildSimpleTimeHistogram },
+        { name: 'complex-pivot', builder: buildTimeHistogram }
+    ];
+
+    for (const approach of approaches) {
+        try {
+            const payload = approach.builder(timeRange, interval, queryString);
+            const result = await executeAggregation(conn.baseUrl, conn.apiToken, payload, 'histogram');
+
+            return {
+                content: [{
+                    type: "text",
+                    text: JSON.stringify({
+                        method: approach.name,
+                        query: queryString,
+                        time_range: timeRange,
+                        interval: interval,
+                        ...result,
+                    }),
+                }],
+            };
+        } catch (err) {
+            console.error(`Histogram approach ${approach.name} failed: ${err.message}`);
+        }
+    }
+
+    return {
+        isError: true,
+        content: [{
+            type: "text",
+            text: `Error getting log histogram: All approaches failed. Attempted: ${approaches.map(a => a.name).join(', ')}`,
+        }],
+    };
+}
+
+async function getFieldAggregation(request) {
+    const { conn, error } = requireActiveConnection();
+    if (error) return error;
+
+    const args = request.params.arguments || {};
+    const field = args.field;
+    if (!field) {
+        return {
+            isError: true,
+            content: [{ type: "text", text: "field is required" }],
+        };
+    }
+
+    const { timeRange } = normalizeTimeRangeArgs(args);
+    const queryString = buildQueryString(args.query, args.filters, args.exactMatch ?? true);
+    const limit = args.limit ?? 20;
+    const metrics = args.metrics || ['count'];
+    const valueField = args.valueField;
+
+    const needsValueField = metrics.some(m => ['sum', 'avg', 'min', 'max'].includes(m));
+    if (needsValueField && !valueField) {
+        return {
+            isError: true,
+            content: [{ type: "text", text: "valueField is required for sum, avg, min, max metrics" }],
+        };
+    }
+
+    try {
+        const payload = buildFieldAggregation(timeRange, field, queryString, limit, metrics, valueField);
+        const result = await executeAggregation(conn.baseUrl, conn.apiToken, payload, 'field');
+
+        return {
+            content: [{
+                type: "text",
+                text: JSON.stringify({
+                    field: field,
+                    metrics: metrics,
+                    value_field: valueField,
+                    query: queryString,
+                    time_range: timeRange,
+                    ...result,
+                }),
+            }],
+        };
+    } catch (err) {
+        return {
+            isError: true,
+            content: [{
+                type: "text",
+                text: `Error getting field aggregation: ${err.message}`,
+            }],
+        };
+    }
+}
+
+async function getFieldTimeAggregation(request) {
+    const { conn, error } = requireActiveConnection();
+    if (error) return error;
+
+    const args = request.params.arguments || {};
+    const field = args.field;
+    if (!field) {
+        return {
+            isError: true,
+            content: [{ type: "text", text: "field is required" }],
+        };
+    }
+
+    const { timeRange } = normalizeTimeRangeArgs(args);
+    const queryString = buildQueryString(args.query, args.filters, args.exactMatch ?? true);
+    const interval = args.interval || 'auto';
+    const limit = args.limit ?? 10;
+
+    // Try multiple approaches
+    const approaches = [
+        { name: 'simple-pivot', builder: buildSimpleFieldTimeAggregation },
+        { name: 'complex-pivot', builder: buildFieldTimeAggregation }
+    ];
+
+    for (const approach of approaches) {
+        try {
+            const payload = approach.builder(timeRange, field, interval, queryString, limit);
+            const result = await executeAggregation(conn.baseUrl, conn.apiToken, payload, 'field-time');
+
+            return {
+                content: [{
+                    type: "text",
+                    text: JSON.stringify({
+                        method: approach.name,
+                        field: field,
+                        query: queryString,
+                        time_range: timeRange,
+                        interval: interval,
+                        ...result,
+                    }),
+                }],
+            };
+        } catch (err) {
+            console.error(`Field-time approach ${approach.name} failed: ${err.message}`);
+        }
+    }
+
+    return {
+        isError: true,
+        content: [{
+            type: "text",
+            text: `Error getting field-time aggregation: All approaches failed. Attempted: ${approaches.map(a => a.name).join(', ')}`,
+        }],
+    };
+}
+
+async function debugHistogramQuery(request) {
+    const { conn, error } = requireActiveConnection();
+    if (error) return error;
+
+    const args = request.params.arguments || {};
+    const { timeRange } = normalizeTimeRangeArgs(args);
+    const queryString = buildQueryString(args.query, args.filters, args.exactMatch ?? true);
+
+    try {
+        // First test: Basic message search to see if query finds anything
+        const basicPayload = {
+            queries: [{
+                id: "q1",
+                query: { type: "elasticsearch", query_string: queryString },
+                timerange: timeRange,
+                search_types: [{
+                    id: "st1",
+                    type: "messages",
+                    limit: 10,
+                }]
+            }]
+        };
+
+        const basicResult = await searchGraylog(conn.baseUrl, conn.apiToken, basicPayload);
+        const basicMessages = basicResult?.results?.q1?.search_types?.st1?.messages || [];
+        const totalMessages = basicResult?.results?.q1?.search_types?.st1?.total_results || 0;
+
+        // Second test: Simple count aggregation
+        const countPayload = {
+            queries: [{
+                id: "q1",
+                query: { type: "elasticsearch", query_string: queryString },
+                timerange: timeRange,
+                search_types: [{
+                    id: "st1",
+                    type: "pivot",
+                    series: [{ type: "count" }],
+                    rollup: false
+                }]
+            }]
+        };
+
+        const countResult = await searchGraylog(conn.baseUrl, conn.apiToken, countPayload);
+        const countRows = countResult?.results?.q1?.search_types?.st1?.rows || [];
+
+        return {
+            content: [{
+                type: "text",
+                text: JSON.stringify({
+                    debug_type: "histogram_query_debug",
+                    query: queryString,
+                    time_range: timeRange,
+                    basic_search: {
+                        total_messages: totalMessages,
+                        sample_messages_count: basicMessages.length,
+                        first_message_timestamp: basicMessages[0]?.message?.timestamp || null
+                    },
+                    count_aggregation: {
+                        row_count: countRows.length,
+                        total_count: countRows[0]?.values?.[0]?.value || 0
+                    },
+                    diagnosis: {
+                        has_data: totalMessages > 0,
+                        query_works: totalMessages > 0 ? "YES" : "NO - Query finds no messages",
+                        aggregation_works: countRows.length > 0 ? "YES" : "NO - Count aggregation fails",
+                        likely_issue: totalMessages === 0 ? "Query or time range too restrictive" :
+                                    countRows.length === 0 ? "Aggregation compatibility issue" :
+                                    "Histogram-specific formatting issue"
+                    }
+                }),
+            }],
+        };
+    } catch (err) {
+        return {
+            isError: true,
+            content: [{
+                type: "text",
+                text: `Debug query failed: ${err.message}`,
             }],
         };
     }

@@ -82,16 +82,27 @@ export async function fetchStreams(baseUrl, apiToken) {
 }
 
 export async function searchGraylog(baseUrl, apiToken, payload) {
-    const response = await axios.post(`${baseUrl}/api/views/search/sync`, payload, {
-        headers: {
-            'Accept': 'application/json',
-            'Content-Type': 'application/json',
-            'X-Requested-By': 'graylog-mcp',
-        },
-        auth: {
-            username: apiToken,
-            password: 'token',
-        },
-    });
-    return response.data;
+    try {
+        const response = await axios.post(`${baseUrl}/api/views/search/sync`, payload, {
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json',
+                'X-Requested-By': 'graylog-mcp',
+            },
+            auth: {
+                username: apiToken,
+                password: 'token',
+            },
+        });
+        return response.data;
+    } catch (error) {
+        // Enhanced error logging for debugging
+        console.error('Graylog API Error:', {
+            status: error.response?.status,
+            statusText: error.response?.statusText,
+            data: error.response?.data,
+            request_payload: JSON.stringify(payload, null, 2)
+        });
+        throw error;
+    }
 }
