@@ -247,7 +247,6 @@ const messages = [
 
 const { assignments, templates } = drain3Strategy.cluster(inst, messages, {
     similarityThreshold: 0.4,
-    treeDepth: 4,
     maxChildren: 100,
 });
 
@@ -259,7 +258,7 @@ assert.equal(templates.length, 2);
 
 // Re-feed: no new templates
 const r2 = drain3Strategy.cluster(inst, messages, {
-    similarityThreshold: 0.4, treeDepth: 4, maxChildren: 100,
+    similarityThreshold: 0.4, maxChildren: 100,
 });
 assert.ok(r2.templates.every(t => !t.isNew), "no new templates on second pass");
 
@@ -267,7 +266,7 @@ assert.ok(r2.templates.every(t => !t.isNew), "no new templates on second pass");
 const snap = drain3Strategy.serialize(inst);
 const restored = drain3Strategy.hydrate(snap);
 const r3 = drain3Strategy.cluster(restored, ["User dave failed login from IP <*>"], {
-    similarityThreshold: 0.4, treeDepth: 4, maxChildren: 100,
+    similarityThreshold: 0.4, maxChildren: 100,
 });
 assert.equal(r3.templates[0].isNew, false, "restored instance reuses templates");
 
@@ -310,9 +309,13 @@ function relax(existing, candidate) {
 }
 
 // State shape:
-// { lengthBuckets: { [len]: { children: { [token]: NodeOrLeaf } } } }
-// Leaf nodes: { templates: [{ id, tokens }] }
-// Inner nodes: { children: { [token]: ... } }
+// { lengthBuckets: { [len]: { templates: [{ id, tokens }] } } }
+// Templates are bucketed by token count; within a bucket we do a linear
+// best-match similarity scan. The classic Drain3 prefix tree is a perf
+// optimization for very large template counts; for our scale (≤10k messages,
+// low-hundreds of templates per bucket) the linear scan is correct and
+// simpler. `maxChildren` caps templates kept per length bucket (LRU evict
+// oldest on overflow).
 
 export const drain3Strategy = {
     name: "drain3",
@@ -329,7 +332,7 @@ export const drain3Strategy = {
     },
 
     cluster(instance, messages, opts) {
-        const { similarityThreshold = 0.4, treeDepth = 4, maxChildren = 100 } = opts || {};
+        const { similarityThreshold = 0.4, maxChildren = 100 } = opts || {};
         const assignments = [];
         const touched = new Map(); // id -> { id, template, tokens, isNew }
 
@@ -339,28 +342,11 @@ export const drain3Strategy = {
             const len = tokens.length;
             if (len === 0) continue;
 
-            instance.lengthBuckets[len] ??= { children: {} };
-            let node = instance.lengthBuckets[len];
+            instance.lengthBuckets[len] ??= { templates: [] };
+            const bucket = instance.lengthBuckets[len];
 
-            // Walk inner nodes by first treeDepth-1 non-wildcard tokens
-            const depth = Math.min(treeDepth - 1, len);
-            for (let d = 0; d < depth; d++) {
-                const key = tokens[d] === WILDCARD ? "*" : tokens[d];
-                if (!node.children[key]) {
-                    if (Object.keys(node.children).length >= maxChildren) {
-                        // Evict oldest child (insertion order)
-                        const firstKey = Object.keys(node.children)[0];
-                        delete node.children[firstKey];
-                    }
-                    node.children[key] = (d === depth - 1) ? { templates: [] } : { children: {} };
-                }
-                node = node.children[key];
-            }
-
-            // Leaf: find best matching template
-            node.templates ??= [];
             let best = null, bestScore = 0;
-            for (const tpl of node.templates) {
+            for (const tpl of bucket.templates) {
                 const s = similarity(tpl.tokens, tokens);
                 if (s > bestScore) { bestScore = s; best = tpl; }
             }
@@ -373,11 +359,20 @@ export const drain3Strategy = {
                     best.tokens = newTokens;
                     best.id = templateId(newTokens);
                 }
+                // LRU: move matched template to tail
+                const idx = bucket.templates.indexOf(best);
+                if (idx !== -1 && idx !== bucket.templates.length - 1) {
+                    bucket.templates.splice(idx, 1);
+                    bucket.templates.push(best);
+                }
                 id = best.id;
                 touched.set(id, { id, template: newTokens.join(" "), tokens: newTokens, isNew: false });
             } else {
                 id = templateId(tokens);
-                node.templates.push({ id, tokens });
+                bucket.templates.push({ id, tokens });
+                if (bucket.templates.length > maxChildren) {
+                    bucket.templates.shift(); // evict oldest
+                }
                 touched.set(id, { id, template: tokens.join(" "), tokens, isNew: true });
             }
 
@@ -974,7 +969,6 @@ export async function handleClusterLogMessages(request) {
     try {
         clusterResult = strategy.cluster(instance, normalized, {
             similarityThreshold: args.similarityThreshold ?? 0.4,
-            treeDepth: args.treeDepth ?? 4,
             maxChildren: args.maxChildren ?? 100,
         });
     } catch (err) {
@@ -1057,8 +1051,7 @@ Open `src/tools.js`. Find the closing `];` at the bottom of `toolDefinitions`. J
                 readOnly: { type: "boolean", description: "If true, do not update template library. Default false." },
                 includeSamples: { type: "number", description: "Sample messages per cluster (first/middle/last by time). Default 3." },
                 similarityThreshold: { type: "number", description: "Drain3 similarity threshold 0-1. Default 0.4." },
-                treeDepth: { type: "number", description: "Drain3 prefix-tree depth. Default 4." },
-                maxChildren: { type: "number", description: "Drain3 max children per node. Default 100." },
+                maxChildren: { type: "number", description: "Max templates per length bucket (LRU evict beyond this). Default 100." },
             },
         },
     },
