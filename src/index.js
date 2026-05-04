@@ -12,7 +12,7 @@ import {
 } from "./config.js";
 import { buildQueryString, resolveFields, extractMessages, fetchMessageById, fetchStreams, searchGraylog, buildStreamFilter } from "./query.js";
 import { buildTimeRange, normalizeTimeRangeArgs } from "./timerange.js";
-import { buildTimeHistogram, buildFieldAggregation, buildFieldTimeAggregation, executeAggregation, buildTimeHistogramChart, buildSimpleTimeHistogram, buildSimpleFieldTimeAggregation, buildWorkingHistogram } from "./aggregations.js";
+import { buildTimeHistogram, buildFieldAggregation, buildFieldTimeAggregation, executeAggregation, buildTimeHistogramChart, buildSimpleTimeHistogram, buildSimpleFieldTimeAggregation, buildWorkingHistogram, buildSeriesFromMetrics } from "./aggregations.js";
 import { toolDefinitions } from "./tools.js";
 import { saveSearch, getSavedSearch, listSavedSearches, deleteSavedSearch } from "./saved-searches.js";
 import { searchEvents, fetchEventDefinitions, fetchEventNotifications } from "./events.js";
@@ -404,6 +404,18 @@ async function getLogHistogram(request) {
     const { timeRange } = normalizeTimeRangeArgs(args);
     const queryString = buildQueryString(args.query, args.filters, args.exactMatch ?? true);
     const interval = args.interval || 'auto';
+    const metrics = args.metrics || ['count'];
+    const valueField = args.valueField;
+
+    const needsValueField = metrics.some(m => ['sum', 'avg', 'min', 'max'].includes(m));
+    if (needsValueField && !valueField) {
+        return {
+            isError: true,
+            content: [{ type: "text", text: "valueField is required for sum, avg, min, max metrics" }],
+        };
+    }
+
+    const series = buildSeriesFromMetrics(metrics, valueField);
 
     // Try multiple approaches - put the working pattern first
     const approaches = [
@@ -415,7 +427,7 @@ async function getLogHistogram(request) {
 
     for (const approach of approaches) {
         try {
-            const payload = approach.builder(timeRange, interval, queryString, args.streamIds);
+            const payload = approach.builder(timeRange, interval, queryString, args.streamIds, series);
             const result = await executeAggregation(conn.baseUrl, conn.apiToken, payload, 'histogram');
 
             return {
@@ -426,6 +438,8 @@ async function getLogHistogram(request) {
                         query: queryString,
                         time_range: timeRange,
                         interval: interval,
+                        metrics: metrics,
+                        value_field: valueField,
                         ...result,
                     }),
                 }],

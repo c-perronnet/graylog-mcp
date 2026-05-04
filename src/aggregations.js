@@ -20,13 +20,30 @@ function resolveInterval(timeRange, interval) {
 }
 
 /**
+ * Build Graylog series array from metrics list
+ */
+export function buildSeriesFromMetrics(metrics, valueField) {
+    const series = [];
+    metrics.forEach(metric => {
+        if (metric === 'count') {
+            series.push({ type: "count", id: "count" });
+        } else if (['sum', 'avg', 'min', 'max'].includes(metric) && valueField) {
+            series.push({ type: metric, id: metric, field: valueField });
+        }
+    });
+    return series.length > 0 ? series : [{ type: "count", id: "count" }];
+}
+
+/**
  * Create a time histogram aggregation
  * @param {Object} timeRange - Graylog timerange object
  * @param {string} interval - Time interval (e.g., '1m', '5m', '1h')
  * @param {string} queryString - Query filter
+ * @param {Array} streamIds - Optional stream IDs
+ * @param {Array} series - Series definitions (default: count only)
  * @returns {Object} Search payload for time histogram
  */
-export function buildTimeHistogram(timeRange, interval, queryString, streamIds) {
+export function buildTimeHistogram(timeRange, interval, queryString, streamIds, series) {
     interval = resolveInterval(timeRange, interval);
     const intervalMs = parseIntervalToMs(interval);
 
@@ -47,7 +64,7 @@ export function buildTimeHistogram(timeRange, interval, queryString, streamIds) 
                         value: intervalMs
                     }
                 }],
-                series: [{ type: "count", id: "count" }],
+                series: series || [{ type: "count", id: "count" }],
                 rollup: false,
                 sort: [{ type: "pivot", field: "timestamp", direction: "ASC" }],
             }]
@@ -113,7 +130,7 @@ export function buildSimpleFieldTimeAggregation(timeRange, field, interval, quer
  * Histogram using exact same pattern as working field-time aggregation
  * This mirrors the successful field-time approach but only does time buckets
  */
-export function buildWorkingHistogram(timeRange, interval, queryString, streamIds) {
+export function buildWorkingHistogram(timeRange, interval, queryString, streamIds, series) {
     interval = resolveInterval(timeRange, interval);
 
     return {
@@ -129,11 +146,11 @@ export function buildWorkingHistogram(timeRange, interval, queryString, streamId
                     {
                         type: "time",
                         field: "timestamp",
-                        interval: interval  // Same format that works for field-time
+                        interval: interval
                     }
                 ],
-                series: [{ type: "count" }],  // Same series as field-time
-                rollup: false                 // Same rollup setting
+                series: series || [{ type: "count" }],
+                rollup: false
             }]
         }]
     };
@@ -142,7 +159,7 @@ export function buildWorkingHistogram(timeRange, interval, queryString, streamId
 /**
  * Alternative time histogram using chart search type
  */
-export function buildTimeHistogramChart(timeRange, interval, queryString, streamIds) {
+export function buildTimeHistogramChart(timeRange, interval, queryString, streamIds, series) {
     interval = resolveInterval(timeRange, interval);
 
     return {
@@ -157,7 +174,7 @@ export function buildTimeHistogramChart(timeRange, interval, queryString, stream
                 time_range: timeRange,
                 streams: [],
                 name: "Timeline",
-                series: [{
+                series: series || [{
                     type: "count",
                     id: "count"
                 }],
@@ -171,7 +188,7 @@ export function buildTimeHistogramChart(timeRange, interval, queryString, stream
 /**
  * Simple time histogram using basic aggregation approach
  */
-export function buildSimpleTimeHistogram(timeRange, interval, queryString, streamIds) {
+export function buildSimpleTimeHistogram(timeRange, interval, queryString, streamIds, series) {
     interval = resolveInterval(timeRange, interval);
 
     return {
@@ -188,7 +205,7 @@ export function buildSimpleTimeHistogram(timeRange, interval, queryString, strea
                     field: "timestamp",
                     interval: interval
                 }],
-                series: [{ type: "count" }],
+                series: series || [{ type: "count" }],
                 rollup: false
             }]
         }]
@@ -319,10 +336,18 @@ export async function executeAggregation(baseUrl, apiToken, payload, aggregation
  * Format histogram results
  */
 function formatHistogramResults(rows) {
-    const buckets = rows.map(row => ({
-        timestamp: row.key?.[0],
-        count: row.values?.[0]?.value ?? 0,
-    }));
+    const buckets = rows.map(row => {
+        const result = { timestamp: row.key?.[0] };
+        if (row.values?.length === 1 && (!row.values[0].key || row.values[0].key === 'count')) {
+            result.count = row.values[0].value ?? 0;
+        } else {
+            row.values?.forEach(value => {
+                const metric = value.key || 'count';
+                result[metric] = value.value;
+            });
+        }
+        return result;
+    });
 
     return {
         type: 'time_histogram',

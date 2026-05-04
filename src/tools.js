@@ -214,6 +214,15 @@ export const toolDefinitions = [
                     type: "string",
                     description: "Time interval for buckets (e.g., '1m', '5m', '1h', 'auto'). Default: 'auto'",
                 },
+                metrics: {
+                    type: "array",
+                    items: { type: "string", enum: ["count", "sum", "avg", "min", "max"] },
+                    description: "Metrics to calculate per time bucket. Default: ['count']. Use with valueField for numeric aggregations.",
+                },
+                valueField: {
+                    type: "string",
+                    description: "Numeric field for sum/avg/min/max calculations (e.g., 'latencies_request'). Required when metrics include non-count metrics.",
+                },
                 streamIds: {
                     type: "array",
                     items: { type: "string" },
