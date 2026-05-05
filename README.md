@@ -357,6 +357,50 @@ src/
 - ✅ **Field-Time Aggregation**: Fully working
 - 🔧 **Log Histogram**: Fixed with multiple fallback approaches
 
+## Log Clustering (Drain3)
+
+Group similar log messages into structural templates. Templates are learned per
+connection and persisted at `~/.graylog-mcp/templates/<connection>.json`.
+
+### Tools
+
+- `cluster_log_messages` — fetch and cluster a sample of messages
+- `list_log_templates` — list learned templates
+- `delete_log_template` — remove a template
+- `rename_log_template` — give a template a human-readable label
+- `export_log_templates` — dump library as JSON
+- `import_log_templates` — bulk load templates (merge or replace)
+
+### Example
+
+After selecting a connection with `use_connection`:
+
+```json
+{
+    "tool": "cluster_log_messages",
+    "arguments": {
+        "query": "level:ERROR",
+        "timeRange": "1h",
+        "sampleSize": 500,
+        "minClusterSize": 2,
+        "includeSamples": 3
+    }
+}
+```
+
+The response groups the 500 sampled messages into a small number of templates,
+each with a count, sample messages, and the set of sources where it appeared.
+Subsequent calls reuse and reinforce the same templates.
+
+### Adding a new clustering algorithm
+
+1. Create `src/clustering/strategies/<name>.js` implementing the strategy
+   contract (`hydrate`, `serialize`, `cluster`) — see `drain3.js` for reference.
+2. Import and `register("<name>", strategy)` in `src/clustering/index.js`.
+3. Pass `algorithm: "<name>"` to `cluster_log_messages`.
+
+No other code changes required.
+
 ## License
 
 MIT

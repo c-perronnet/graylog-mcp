@@ -573,4 +573,80 @@ export const toolDefinitions = [
             },
         },
     },
+    {
+        name: "cluster_log_messages",
+        description: "Cluster similar log messages into Drain3-style templates. Fetches messages with the same args as fetch_graylog_messages, then groups them by structural similarity. Templates are persisted per connection and reused across calls.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                query: { type: "string", description: "Query string (same as fetch_graylog_messages)" },
+                filters: { type: "object", description: "Field filters" },
+                timeRange: { type: "string", description: "Time range (e.g. '1h', '30m')" },
+                from: { type: "string", description: "Absolute start time (ISO)" },
+                to: { type: "string", description: "Absolute end time (ISO)" },
+                streamIds: { type: "array", items: { type: "string" }, description: "Optional stream IDs" },
+                exactMatch: { type: "boolean", description: "Wrap query in quotes (default true)" },
+                sampleSize: { type: "number", description: "Max messages to fetch & cluster. Default 1000, max 10000." },
+                field: { type: "string", description: "Field to cluster on. Default 'message'." },
+                algorithm: { type: "string", description: "Clustering algorithm. Default 'drain3'." },
+                minClusterSize: { type: "number", description: "Singletons collapsed under '_misc' cluster. Default 2." },
+                readOnly: { type: "boolean", description: "If true, do not update template library. Default false." },
+                includeSamples: { type: "number", description: "Sample messages per cluster (first/middle/last by time). Default 3." },
+                similarityThreshold: { type: "number", description: "Drain3 similarity threshold 0-1. Default 0.6. Lower = more aggressive merging." },
+                maxChildren: { type: "number", description: "Max templates per length bucket (LRU evict beyond this). Default 100." },
+            },
+        },
+    },
+    {
+        name: "list_log_templates",
+        description: "List learned log templates for the active connection.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                limit: { type: "number", description: "Max templates to return. Default 50." },
+                sortBy: { type: "string", enum: ["count", "last_seen", "first_seen"], description: "Sort key. Default 'count'." },
+                filterLabel: { type: "string", description: "Only return templates with this label." },
+            },
+        },
+    },
+    {
+        name: "delete_log_template",
+        description: "Delete a learned log template by ID.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                templateId: { type: "string", description: "Template ID (e.g. tpl_a3f1b2)" },
+            },
+            required: ["templateId"],
+        },
+    },
+    {
+        name: "rename_log_template",
+        description: "Set or update a human-readable label for a template.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                templateId: { type: "string", description: "Template ID" },
+                label: { type: "string", description: "Human-readable label (e.g. 'AuthFailure')" },
+            },
+            required: ["templateId", "label"],
+        },
+    },
+    {
+        name: "export_log_templates",
+        description: "Export all learned templates for the active connection as JSON.",
+        inputSchema: { type: "object", properties: {} },
+    },
+    {
+        name: "import_log_templates",
+        description: "Import templates into the active connection's library.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                templates: { type: "object", description: "Map of templateId → template object" },
+                mode: { type: "string", enum: ["merge", "replace"], description: "merge keeps existing; replace wipes first. Default 'merge'." },
+            },
+            required: ["templates"],
+        },
+    },
 ];
