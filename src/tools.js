@@ -592,7 +592,7 @@ export const toolDefinitions = [
                 minClusterSize: { type: "number", description: "Singletons collapsed under '_misc' cluster. Default 2." },
                 readOnly: { type: "boolean", description: "If true, do not update template library. Default false." },
                 includeSamples: { type: "number", description: "Sample messages per cluster (first/middle/last by time). Default 3." },
-                similarityThreshold: { type: "number", description: "Drain3 similarity threshold 0-1. Default 0.4." },
+                similarityThreshold: { type: "number", description: "Drain3 similarity threshold 0-1. Default 0.6. Lower = more aggressive merging." },
                 maxChildren: { type: "number", description: "Max templates per length bucket (LRU evict beyond this). Default 100." },
             },
         },

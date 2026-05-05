@@ -102,11 +102,21 @@ export async function handleClusterLogMessages(request) {
     let clusterResult;
     try {
         clusterResult = strategy.cluster(instance, normalized, {
-            similarityThreshold: args.similarityThreshold ?? 0.4,
+            similarityThreshold: args.similarityThreshold ?? 0.6,
             maxChildren: args.maxChildren ?? 100,
         });
     } catch (err) {
         return errorResponse(`Clustering failed: ${err.message}`);
+    }
+
+    // Pre-tally per-template: count + sources contributed by THIS batch.
+    const perTemplate = new Map();
+    for (const a of clusterResult.assignments) {
+        let bucket = perTemplate.get(a.templateId);
+        if (!bucket) { bucket = { count: 0, sources: new Set() }; perTemplate.set(a.templateId, bucket); }
+        bucket.count++;
+        const src = keptMessages[a.messageIndex]?.source;
+        if (src) bucket.sources.add(src);
     }
 
     // Update store unless readOnly
@@ -114,22 +124,26 @@ export async function handleClusterLogMessages(request) {
     const nowIso = new Date().toISOString();
     if (!args.readOnly) {
         for (const t of clusterResult.templates) {
+            const tally = perTemplate.get(t.id) || { count: 0, sources: new Set() };
             const existing = store.templates[t.id];
             if (existing) {
-                existing.count += clusterResult.assignments.filter(a => a.templateId === t.id).length;
+                existing.count += tally.count;
                 existing.last_seen = nowIso;
                 existing.template = t.template;
                 existing.tokens = t.tokens;
+                const merged = new Set(existing.sources_seen || []);
+                for (const s of tally.sources) merged.add(s);
+                existing.sources_seen = [...merged];
             } else {
                 store.templates[t.id] = {
                     id: t.id,
                     template: t.template,
                     label: null,
                     tokens: t.tokens,
-                    count: clusterResult.assignments.filter(a => a.templateId === t.id).length,
+                    count: tally.count,
                     first_seen: nowIso,
                     last_seen: nowIso,
-                    sources_seen: [],
+                    sources_seen: [...tally.sources],
                 };
             }
         }
