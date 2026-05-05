@@ -93,3 +93,41 @@ const r3 = drain3Strategy.cluster(restored, ["User dave failed login from IP <*>
 assert.equal(r3.templates[0].isNew, false, "restored instance reuses templates");
 
 console.log("✓ drain3 tests passed");
+
+console.log("=== Template store ===");
+import { mkdtempSync, writeFileSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import {
+    loadTemplateStore, saveTemplateStore, _withStorePathOverride
+} from "./src/clustering/template-store.js";
+
+const dir = mkdtempSync(join(tmpdir(), "tpl-test-"));
+_withStorePathOverride(() => join(dir, "store.json"));
+
+// Empty load
+let store = loadTemplateStore("conn1");
+assert.equal(store.version, 1);
+assert.deepEqual(store.templates, {});
+
+// Save + reload roundtrip
+store.templates["tpl_x"] = {
+    id: "tpl_x", template: "hello <*>", tokens: ["hello", "<*>"],
+    label: null, count: 1,
+    first_seen: "2026-05-04T10:00:00Z", last_seen: "2026-05-04T10:00:00Z",
+    sources_seen: ["a"],
+};
+store.algorithm_state = { lengthBuckets: { 2: { children: {} } } };
+saveTemplateStore("conn1", store);
+
+const reloaded = loadTemplateStore("conn1");
+assert.equal(reloaded.templates.tpl_x.template, "hello <*>");
+assert.equal(reloaded.algorithm_state.lengthBuckets["2"].children.constructor, Object);
+
+// Corrupt file → empty store + warning
+writeFileSync(join(dir, "store.json"), "not json", "utf-8");
+const recovered = loadTemplateStore("conn1");
+assert.deepEqual(recovered.templates, {});
+
+rmSync(dir, { recursive: true, force: true });
+console.log("✓ template store tests passed");
