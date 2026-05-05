@@ -74,3 +74,47 @@ export async function handleRenameTemplate(request) {
         content: [{ type: "text", text: JSON.stringify({ message: "label updated", template: t }) }],
     };
 }
+
+export async function handleExportTemplates(request) {
+    const args = request.params.arguments || {};
+    const r = resolveConnection(args);
+    if (r.error) return r.error;
+    const store = loadTemplateStore(r.name);
+    return {
+        content: [{
+            type: "text",
+            text: JSON.stringify({
+                connection: r.name,
+                algorithm: store.algorithm,
+                templates: store.templates,
+            }),
+        }],
+    };
+}
+
+export async function handleImportTemplates(request) {
+    const args = request.params.arguments || {};
+    if (!args.templates || typeof args.templates !== "object") {
+        return errorResponse("templates (object) is required");
+    }
+    const mode = args.mode || "merge";
+    if (mode !== "merge" && mode !== "replace") {
+        return errorResponse(`mode must be "merge" or "replace", got "${mode}"`);
+    }
+    const r = resolveConnection(args);
+    if (r.error) return r.error;
+    const store = loadTemplateStore(r.name);
+    if (mode === "replace") store.templates = {};
+    let added = 0;
+    for (const [id, tpl] of Object.entries(args.templates)) {
+        store.templates[id] = { ...tpl, id };
+        added++;
+    }
+    saveTemplateStore(r.name, store);
+    return {
+        content: [{
+            type: "text",
+            text: JSON.stringify({ message: `imported ${added} templates (mode: ${mode})`, total: Object.keys(store.templates).length }),
+        }],
+    };
+}

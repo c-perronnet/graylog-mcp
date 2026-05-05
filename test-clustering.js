@@ -264,3 +264,45 @@ assert.equal(afterDelete.templates.tpl_b, undefined);
 
 rmSync(dir3, { recursive: true, force: true });
 console.log("✓ template management tests passed");
+
+console.log("=== Template management: export/import ===");
+import { handleExportTemplates, handleImportTemplates } from "./src/tools/template-mgmt.js";
+
+const dir4 = mkdtempSync(join(tmpdir(), "tpl-eximport-"));
+_withStorePathOverride((conn) => join(dir4, `${conn}.json`));
+
+saveTemplateStore("conn-x", {
+    version: 1, connection: "conn-x", algorithm: "drain3", algorithm_state: {},
+    templates: {
+        tpl_x: { id: "tpl_x", template: "x <*>", label: null, tokens: ["x","<*>"], count: 1,
+                 first_seen: "2026-05-04T00:00:00Z", last_seen: "2026-05-04T00:00:00Z", sources_seen: [] },
+    },
+});
+
+const exported = JSON.parse(
+    (await handleExportTemplates({ params: { arguments: { _testConnection: "conn-x" } } })).content[0].text
+);
+assert.equal(Object.keys(exported.templates).length, 1);
+
+// Import (merge)
+const importBody = {
+    templates: {
+        tpl_y: { id: "tpl_y", template: "y <*>", label: "Y", tokens: ["y","<*>"], count: 3,
+                 first_seen: "2026-05-04T00:00:00Z", last_seen: "2026-05-04T00:00:00Z", sources_seen: [] },
+    },
+    mode: "merge",
+    _testConnection: "conn-x",
+};
+await handleImportTemplates({ params: { arguments: importBody } });
+const merged = loadTemplateStore("conn-x");
+assert.equal(Object.keys(merged.templates).length, 2);
+assert.equal(merged.templates.tpl_y.label, "Y");
+
+// Import (replace)
+await handleImportTemplates({ params: { arguments: { ...importBody, mode: "replace" } } });
+const replaced = loadTemplateStore("conn-x");
+assert.equal(Object.keys(replaced.templates).length, 1);
+assert.ok(replaced.templates.tpl_y);
+
+rmSync(dir4, { recursive: true, force: true });
+console.log("✓ template export/import tests passed");

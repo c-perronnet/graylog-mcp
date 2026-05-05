@@ -17,7 +17,10 @@ import { toolDefinitions } from "./tools.js";
 import { saveSearch, getSavedSearch, listSavedSearches, deleteSavedSearch } from "./saved-searches.js";
 import { searchEvents, fetchEventDefinitions, fetchEventNotifications } from "./events.js";
 import { handleClusterLogMessages } from "./tools/cluster-errors.js";
-import { handleListTemplates, handleDeleteTemplate, handleRenameTemplate } from "./tools/template-mgmt.js";
+import {
+    handleListTemplates, handleDeleteTemplate, handleRenameTemplate,
+    handleExportTemplates, handleImportTemplates
+} from "./tools/template-mgmt.js";
 
 const server = new Server({
     name: "graylog-mcp-server",
@@ -94,6 +97,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     if (name === "list_log_templates") return handleListTemplates(request);
     if (name === "delete_log_template") return handleDeleteTemplate(request);
     if (name === "rename_log_template") return handleRenameTemplate(request);
+    if (name === "export_log_templates") return handleExportTemplates(request);
+    if (name === "import_log_templates") return handleImportTemplates(request);
 
     throw new Error(`Tool not found: ${name}`);
 });

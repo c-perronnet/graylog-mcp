@@ -632,4 +632,21 @@ export const toolDefinitions = [
             required: ["templateId", "label"],
         },
     },
+    {
+        name: "export_log_templates",
+        description: "Export all learned templates for the active connection as JSON.",
+        inputSchema: { type: "object", properties: {} },
+    },
+    {
+        name: "import_log_templates",
+        description: "Import templates into the active connection's library.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                templates: { type: "object", description: "Map of templateId → template object" },
+                mode: { type: "string", enum: ["merge", "replace"], description: "merge keeps existing; replace wipes first. Default 'merge'." },
+            },
+            required: ["templates"],
+        },
+    },
 ];
