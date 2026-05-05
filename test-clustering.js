@@ -220,3 +220,47 @@ assert.ok(body.new_templates_learned >= 1);
 
 rmSync(dir2, { recursive: true, force: true });
 console.log("✓ cluster_log_messages handler tests passed");
+
+console.log("=== Template management: list/delete/rename ===");
+import {
+    handleListTemplates, handleDeleteTemplate, handleRenameTemplate,
+} from "./src/tools/template-mgmt.js";
+
+const dir3 = mkdtempSync(join(tmpdir(), "tpl-mgmt-"));
+_withStorePathOverride((conn) => join(dir3, `${conn}.json`));
+
+// Seed a store
+const seeded = {
+    version: 1, connection: "conn-mgmt", algorithm: "drain3", algorithm_state: {},
+    templates: {
+        tpl_a: { id: "tpl_a", template: "alpha <*>", label: null, tokens: ["alpha","<*>"], count: 5,
+                 first_seen: "2026-05-01T00:00:00Z", last_seen: "2026-05-04T00:00:00Z", sources_seen: [] },
+        tpl_b: { id: "tpl_b", template: "beta <*>", label: null, tokens: ["beta","<*>"], count: 1,
+                 first_seen: "2026-05-02T00:00:00Z", last_seen: "2026-05-02T00:00:00Z", sources_seen: [] },
+    },
+};
+saveTemplateStore("conn-mgmt", seeded);
+
+const listed = JSON.parse(
+    (await handleListTemplates({ params: { arguments: { _testConnection: "conn-mgmt" } } })).content[0].text
+);
+assert.equal(listed.total, 2);
+assert.equal(listed.templates[0].id, "tpl_a"); // sortBy count desc
+
+const renamed = JSON.parse(
+    (await handleRenameTemplate({ params: { arguments: { templateId: "tpl_a", label: "Alpha", _testConnection: "conn-mgmt" } } })).content[0].text
+);
+assert.equal(renamed.template.label, "Alpha");
+
+const afterRename = loadTemplateStore("conn-mgmt");
+assert.equal(afterRename.templates.tpl_a.label, "Alpha");
+
+const deleted = JSON.parse(
+    (await handleDeleteTemplate({ params: { arguments: { templateId: "tpl_b", _testConnection: "conn-mgmt" } } })).content[0].text
+);
+assert.match(deleted.message, /deleted/);
+const afterDelete = loadTemplateStore("conn-mgmt");
+assert.equal(afterDelete.templates.tpl_b, undefined);
+
+rmSync(dir3, { recursive: true, force: true });
+console.log("✓ template management tests passed");

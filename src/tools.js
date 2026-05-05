@@ -597,4 +597,39 @@ export const toolDefinitions = [
             },
         },
     },
+    {
+        name: "list_log_templates",
+        description: "List learned log templates for the active connection.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                limit: { type: "number", description: "Max templates to return. Default 50." },
+                sortBy: { type: "string", enum: ["count", "last_seen", "first_seen"], description: "Sort key. Default 'count'." },
+                filterLabel: { type: "string", description: "Only return templates with this label." },
+            },
+        },
+    },
+    {
+        name: "delete_log_template",
+        description: "Delete a learned log template by ID.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                templateId: { type: "string", description: "Template ID (e.g. tpl_a3f1b2)" },
+            },
+            required: ["templateId"],
+        },
+    },
+    {
+        name: "rename_log_template",
+        description: "Set or update a human-readable label for a template.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                templateId: { type: "string", description: "Template ID" },
+                label: { type: "string", description: "Human-readable label (e.g. 'AuthFailure')" },
+            },
+            required: ["templateId", "label"],
+        },
+    },
 ];
