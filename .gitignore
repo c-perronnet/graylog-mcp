@@ -95,3 +95,6 @@ logs
 
 # Docker
 .dockerignore
+# Claude Code
+.claude/
+scripts/
