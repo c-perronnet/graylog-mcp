@@ -27,3 +27,10 @@ export function list() {
 export function _clearForTests() {
     strategies.clear();
 }
+
+// Built-in strategies — auto-register on first import of this module.
+// To add a new built-in: import its module here so its register() side-effect runs.
+import { drain3Strategy } from "./strategies/drain3.js";
+if (!strategies.has("drain3")) {
+    register("drain3", drain3Strategy);
+}
