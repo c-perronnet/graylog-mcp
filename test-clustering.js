@@ -53,10 +53,14 @@ assert.deepEqual(list(), ["fake"]);
 assert.throws(() => register("fake", fakeStrategy), /already registered/);
 assert.throws(() => get("missing"), /Unknown clustering algorithm "missing"\. Registered: fake/);
 
+// Restore drain3 so subsequent tests that use the registry can find it
+_clearForTests();
+import { drain3Strategy } from "./src/clustering/strategies/drain3.js";
+register("drain3", drain3Strategy);
+
 console.log("✓ registry tests passed");
 
 console.log("=== Drain3 ===");
-import { drain3Strategy } from "./src/clustering/strategies/drain3.js";
 
 const inst = drain3Strategy.hydrate({});
 const messages = [
@@ -185,3 +189,34 @@ assert.equal(misc.count, 4);
 
 console.log("✓ formatter tests passed");
 }
+
+console.log("=== cluster_log_messages handler (mocked) ===");
+import { _setSearchOverride } from "./src/clustering/_test_hooks.js";
+import { handleClusterLogMessages } from "./src/tools/cluster-errors.js";
+
+// Reset store path for this test
+const dir2 = mkdtempSync(join(tmpdir(), "cluster-test-"));
+_withStorePathOverride((conn) => join(dir2, `${conn}.json`));
+
+// Stub the search path
+_setSearchOverride(async () => ({
+    total_results: 4,
+    messages: [
+        { timestamp: "2026-05-04T10:00:00Z", source: "svc-a", message: "User alice failed login" },
+        { timestamp: "2026-05-04T10:00:05Z", source: "svc-a", message: "User bob failed login" },
+        { timestamp: "2026-05-04T10:00:10Z", source: "svc-b", message: "User carol failed login" },
+        { timestamp: "2026-05-04T10:01:00Z", source: "svc-c", message: "Cache miss for key foo" },
+    ],
+}));
+
+const result = await handleClusterLogMessages({
+    params: { arguments: { sampleSize: 100, includeSamples: 2, minClusterSize: 1, _testConnection: "conn-test" } }
+});
+
+const body = JSON.parse(result.content[0].text);
+assert.equal(body.total_messages_clustered, 4);
+assert.ok(body.clusters.length >= 1);
+assert.ok(body.new_templates_learned >= 1);
+
+rmSync(dir2, { recursive: true, force: true });
+console.log("✓ cluster_log_messages handler tests passed");

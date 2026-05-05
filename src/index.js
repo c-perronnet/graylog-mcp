@@ -16,6 +16,7 @@ import { buildTimeHistogram, buildFieldAggregation, buildFieldTimeAggregation, e
 import { toolDefinitions } from "./tools.js";
 import { saveSearch, getSavedSearch, listSavedSearches, deleteSavedSearch } from "./saved-searches.js";
 import { searchEvents, fetchEventDefinitions, fetchEventNotifications } from "./events.js";
+import { handleClusterLogMessages } from "./tools/cluster-errors.js";
 
 const server = new Server({
     name: "graylog-mcp-server",
@@ -83,6 +84,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
     if (name === "get_event_notifications") {
         return handleGetEventNotifications(request);
+    }
+
+    if (name === "cluster_log_messages") {
+        return handleClusterLogMessages(request);
     }
 
     throw new Error(`Tool not found: ${name}`);
