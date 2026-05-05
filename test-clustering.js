@@ -131,3 +131,57 @@ assert.deepEqual(recovered.templates, {});
 
 rmSync(dir, { recursive: true, force: true });
 console.log("✓ template store tests passed");
+
+import { formatClusterResponse } from "./src/clustering/formatter.js";
+
+console.log("=== Formatter ===");
+{
+const messages = [
+    { timestamp: "2026-05-04T10:00:00Z", source: "svc-a", message: "User alice failed" },
+    { timestamp: "2026-05-04T10:00:05Z", source: "svc-a", message: "User bob failed" },
+    { timestamp: "2026-05-04T10:00:10Z", source: "svc-b", message: "User carol failed" },
+    { timestamp: "2026-05-04T10:01:00Z", source: "svc-c", message: "Cache miss foo" },
+];
+const assignments = [
+    { messageIndex: 0, templateId: "tpl_user" },
+    { messageIndex: 1, templateId: "tpl_user" },
+    { messageIndex: 2, templateId: "tpl_user" },
+    { messageIndex: 3, templateId: "tpl_cache" },
+];
+const templates = [
+    { id: "tpl_user", template: "User <*> failed", tokens: ["User","<*>","failed"], isNew: true },
+    { id: "tpl_cache", template: "Cache miss <*>", tokens: ["Cache","miss","<*>"], isNew: true },
+];
+const labels = { tpl_user: "AuthFailure" };
+
+const out = formatClusterResponse({
+    messages, assignments, templates, labels,
+    minClusterSize: 2, includeSamples: 3,
+    skippedMessages: 0,
+});
+
+assert.equal(out.total_messages_clustered, 4);
+assert.equal(out.total_clusters, 2);
+assert.equal(out.new_templates_learned, 2);
+
+const userCluster = out.clusters.find(c => c.template_id === "tpl_user");
+assert.equal(userCluster.count, 3);
+assert.equal(userCluster.percentage, 75);
+assert.equal(userCluster.label, "AuthFailure");
+assert.equal(userCluster.label_present, true);
+assert.deepEqual(userCluster.sources.sort(), ["svc-a", "svc-b"]);
+assert.equal(userCluster.sample_messages.length, 3);
+assert.equal(userCluster.first_seen, "2026-05-04T10:00:00Z");
+assert.equal(userCluster.last_seen, "2026-05-04T10:00:10Z");
+
+// minClusterSize collapses singletons into _misc
+const out2 = formatClusterResponse({
+    messages, assignments, templates, labels: {},
+    minClusterSize: 4, includeSamples: 1, skippedMessages: 0,
+});
+const misc = out2.clusters.find(c => c.template_id === "_misc");
+assert.ok(misc, "expected _misc cluster");
+assert.equal(misc.count, 4);
+
+console.log("✓ formatter tests passed");
+}
