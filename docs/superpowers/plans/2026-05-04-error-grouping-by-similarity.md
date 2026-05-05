@@ -357,8 +357,9 @@ export const drain3Strategy = {
                 const changed = newTokens.some((t, idx) => t !== best.tokens[idx]);
                 if (changed) {
                     best.tokens = newTokens;
-                    best.id = templateId(newTokens);
                 }
+                // Template id is stable from creation; only the token pattern relaxes.
+                // (Mutating id would orphan earlier assignments still pointing at the old id.)
                 // LRU: move matched template to tail
                 const idx = bucket.templates.indexOf(best);
                 if (idx !== -1 && idx !== bucket.templates.length - 1) {
