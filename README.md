@@ -1,76 +1,96 @@
-# Graylog MCP Server
+# 🔍 Graylog MCP Server
 
-An MCP (Model Context Protocol) server for Graylog that enables AI assistants to search logs, filter by fields, view surrounding context, list streams, and discover field values.
+An [MCP](https://modelcontextprotocol.io/) server that gives AI assistants direct access to your Graylog logs -- search, aggregate, analyze, and cluster log data through natural language.
 
-## Features
+## What It Does
 
-- **Multi-connection support** — configure and switch between multiple Graylog instances
-- **Advanced log search** — query logs with field-level filters (env, level, source, logger_name, etc.)
-- **Advanced time ranges** — flexible time specifications (`1h`, `30m`, `2d`) and absolute ranges
-- **Log aggregations** — histograms, field statistics, and time-series analysis
-- **Exact match by default** — queries use exact matching unless explicitly set to fuzzy/wildcard
-- **Surrounding messages** — view messages around a specific log entry by message ID or timestamp
-- **Pagination** — page through large result sets
-- **Stream listing** — list all available Graylog streams
-- **Field value discovery** — find distinct values for any field (top N by count)
-- **Default fields** — returns only key fields by default, reducing noise from internal Graylog fields
+This server exposes your Graylog instance(s) as MCP tools, so AI assistants like Claude, Cursor, and others can query logs on your behalf. Instead of context-switching to the Graylog UI, you describe what you're looking for and the assistant handles the rest.
 
-## Requirements
+**25 tools** covering:
 
-- Node.js 18+
-- Graylog 6.x (tested on 6.2.10)
+- **Log search** -- full-text and field-filtered queries with pagination, exact/fuzzy matching, and configurable field selection
+- **Contextual analysis** -- fetch surrounding messages around a specific log entry
+- **Aggregations** -- histograms, field statistics, and two-dimensional field-over-time breakdowns
+- **Log clustering** -- group similar messages into structural templates using Drain3, with persistent template libraries per connection
+- **Events** -- search Graylog events, list event definitions and notifications
+- **Saved searches** -- save, list, and reuse query configurations
+- **Multi-connection** -- switch between Graylog instances (e.g., nonprod vs prod) within one session
+- **Stream & field discovery** -- list streams, discover distinct field values
+
+## Prerequisites
+
+- **Node.js** 18+
+- **Graylog** 6.x (tested on 6.2)
+- A Graylog API token ([how to create one](https://go2docs.graylog.org/current/setting_up_graylog/rest_api_access_tokens.html))
 
 ## Installation
 
+### Via npx (recommended)
+
+No installation needed. Configure your MCP client to run:
+
+```json
+{
+  "mcpServers": {
+    "graylog": {
+      "command": "npx",
+      "args": ["graylog-mcp-server"]
+    }
+  }
+}
+```
+
+### From source
+
 ```bash
-git clone git@github.com:jagadeesh52423/graylog-mcp.git
+git clone https://github.com/jagadeesh52423/graylog-mcp.git
 cd graylog-mcp
 npm install
 ```
 
+Then point your MCP client to the local entry point:
+
+```json
+{
+  "mcpServers": {
+    "graylog": {
+      "command": "node",
+      "args": ["/absolute/path/to/graylog-mcp/src/index.js"]
+    }
+  }
+}
+```
+
 ## Configuration
 
-Create a config file at `~/.graylog-mcp/config.json`:
+Create `~/.graylog-mcp/config.json`:
 
 ```json
 {
   "connections": {
     "nonprod": {
-      "baseUrl": "http://your-graylog-server:9000",
-      "apiToken": "your_graylog_api_token",
-      "defaultFields": ["timestamp", "gl2_message_id", "source", "env", "level", "message", "logger_name"]
+      "baseUrl": "http://graylog-nonprod:9000",
+      "apiToken": "your_api_token"
     },
     "prod": {
-      "baseUrl": "http://prod-graylog:9000",
-      "apiToken": "your_prod_api_token"
+      "baseUrl": "http://graylog-prod:9000",
+      "apiToken": "your_prod_api_token",
+      "defaultFields": ["timestamp", "message", "level", "source", "PODNAME"]
     }
   },
-  "defaultFields": ["timestamp", "message", "level", "source", "PODNAME"]
+  "defaultFields": ["timestamp", "gl2_message_id", "source", "env", "level", "message", "logger_name"]
 }
 ```
 
-**Configuration options:**
+| Option | Scope | Description |
+|---|---|---|
+| `connections` | Root | Named Graylog instances, each with `baseUrl` and `apiToken` |
+| `defaultFields` | Root | Global default fields returned in search results |
+| `defaultFields` | Connection | Per-connection override (takes priority over global) |
 
-| Option | Level | Description |
-|--------|-------|-------------|
-| `connections` | Root | Named Graylog instances with `baseUrl` and `apiToken` |
-| `defaultFields` | Root | Global default fields for all connections (optional) |
-| `defaultFields` | Connection | Override default fields for a specific connection (optional) |
+If no `defaultFields` are set, all fields (`*`) are returned.
 
-**Field resolution priority:**
-1. Connection-specific `defaultFields` (highest)
-2. Global `defaultFields`
-3. All fields (`*`) if neither is set
-
-## Use with an MCP Client
-
-Add this server to your MCP client configuration. Common locations:
-
-- **Claude Code**: `~/.claude/mcp.json`
-- **Cursor**: `~/.cursor/mcp.json`
-- **Claude Desktop (macOS)**: `~/Library/Application Support/Claude/claude_desktop_config.json`
-
-Example config using npx (recommended):
+Override the config path with the `GRAYLOG_CONFIG_PATH` environment variable:
 
 ```json
 {
@@ -79,328 +99,140 @@ Example config using npx (recommended):
       "command": "npx",
       "args": ["graylog-mcp-server"],
       "env": {
-        "GRAYLOG_CONFIG_PATH": "/path/to/your/config.json"
+        "GRAYLOG_CONFIG_PATH": "/path/to/custom/config.json"
       }
     }
   }
 }
 ```
 
-The `GRAYLOG_CONFIG_PATH` environment variable is optional. If not set, it defaults to `~/.graylog-mcp/config.json`.
+### MCP Client Config Locations
 
-Or with a local clone:
+| Client | Config file |
+|---|---|
+| Claude Code | `~/.claude/mcp.json` |
+| Cursor | `~/.cursor/mcp.json` |
+| Claude Desktop (macOS) | `~/Library/Application Support/Claude/claude_desktop_config.json` |
 
-```json
-{
-  "mcpServers": {
-    "graylog": {
-      "command": "node",
-      "args": ["/path/to/graylog-mcp/src/index.js"]
-    }
-  }
-}
+## Usage
+
+Once connected, talk to your AI assistant naturally. Some examples:
+
+```
+Connect to nonprod and show me error logs from the last hour
 ```
 
-## Time Range Specifications
-
-The MCP server supports flexible time range specifications:
-
-### Relative Time Ranges
-Use simple time expressions for relative ranges:
-- `1h` - 1 hour
-- `30m` - 30 minutes
-- `2d` - 2 days
-- `1w` - 1 week
-- `3M` - 3 months
-
-**Supported units:** `s` (seconds), `m` (minutes), `h` (hours), `d` (days), `w` (weeks), `M` (months), `y` (years)
-
-### Absolute Time Ranges
-Specify exact time windows with `from` and `to` parameters:
-- ISO timestamps: `2024-01-15T10:30:00.000Z`
-- Date strings: `2024-01-15 10:30:00`
-- Unix timestamps: `1705312200000`
-
-### Examples
 ```
-# Last 2 hours of error logs
-timeRange: "2h", filters: {"level": 3}
-
-# Specific time window
-from: "2024-01-15T09:00:00Z", to: "2024-01-15T17:00:00Z"
-
-# Last 30 minutes (default if no time specified)
-timeRange: "30m"
+What are the top error sources in production over the past 6 hours?
 ```
+
+```
+Show me a histogram of level 3 errors over the past day, broken down by hour
+```
+
+```
+Cluster the last 1000 error messages and show me the top patterns
+```
+
+```
+Show me the messages surrounding log ID 01KH5PDR893AZJQBYJJ87AQTW5
+```
+
+### Time Ranges
+
+Relative: `30m`, `1h`, `2d`, `1w`, `3M`, `1y`
+
+Absolute: provide `from`/`to` as ISO timestamps (`2024-01-15T09:00:00Z`) or Unix millis.
+
+Default is 15 minutes if unspecified.
 
 ## Available Tools
 
-### list_connections
+### Connection Management
 
-List all configured Graylog connections.
+| Tool | Description |
+|---|---|
+| `list_connections` | List configured Graylog connections |
+| `use_connection` | Switch to a named connection |
 
-### use_connection
+### Log Search
 
-Connect to a specific Graylog instance by name. Must be called before using other tools.
+| Tool | Description |
+|---|---|
+| `fetch_graylog_messages` | Search logs with query, filters, time range, pagination |
+| `get_surrounding_messages` | Get messages around a specific log entry by ID or timestamp |
+| `list_streams` | List available Graylog streams |
+| `list_field_values` | Discover distinct values for a field (top N by count) |
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `name` | string | Yes | Connection name from config |
+### Aggregations
 
-### fetch_graylog_messages
+| Tool | Description |
+|---|---|
+| `get_log_histogram` | Time-bucketed message counts |
+| `get_field_aggregation` | Group by field with metrics (count, sum, avg, min, max) |
+| `get_field_time_aggregation` | Two-dimensional: field values over time intervals |
+| `debug_histogram_query` | Debug helper for empty histogram results |
 
-Search and fetch log messages from Graylog.
+### Log Clustering
 
-| Parameter | Type | Required | Default | Description |
-|-----------|------|----------|---------|-------------|
-| `query` | string | No | `*` | Search query |
-| `filters` | object | No | | Field filters (e.g. `{"env": "marketplace_loki", "level": 7}`) |
-| `exactMatch` | boolean | No | `true` | Wrap query in quotes for exact match. Set `false` for fuzzy/wildcard |
-| `timeRange` | string | No | `15m` | Time range (e.g., `1h`, `30m`, `2d`) |
-| `from` | string | No | | Start time for absolute range |
-| `to` | string | No | | End time for absolute range |
-| `pageSize` | number | No | `50` | Messages per page |
-| `page` | number | No | `1` | Page number |
-| `fields` | string | No | default set | Comma-separated fields, or `*` for all |
+| Tool | Description |
+|---|---|
+| `cluster_log_messages` | Group similar messages into structural templates (Drain3) |
+| `list_log_templates` | List learned templates for the active connection |
+| `delete_log_template` | Remove a template |
+| `rename_log_template` | Give a template a human-readable label |
+| `export_log_templates` | Export template library as JSON |
+| `import_log_templates` | Bulk import templates (merge or replace) |
 
-**Default fields returned:** `timestamp`, `gl2_message_id`, `source`, `env`, `level`, `message`, `logger_name`, `thread_name`, `PODNAME`
+Templates are persisted at `~/.graylog-mcp/templates/<connection>.json` and improve over time as more messages are clustered.
 
-### get_surrounding_messages
+### Events
 
-View messages around a specific log entry. Useful for understanding context.
+| Tool | Description |
+|---|---|
+| `search_events` | Search Graylog events with filters |
+| `get_event_definitions` | List event definitions |
+| `get_event_notifications` | List event notifications |
 
-| Parameter | Type | Required | Default | Description |
-|-----------|------|----------|---------|-------------|
-| `messageId` | string | No* | | `gl2_message_id` of the target message (preferred) |
-| `messageTimestamp` | string | No* | | ISO timestamp (fallback) |
-| `surroundingSeconds` | number | No | `5` | Time window (± seconds) |
-| `query` | string | No | `*` | Additional query filter |
-| `filters` | object | No | | Field filters |
-| `exactMatch` | boolean | No | `true` | Exact match for query |
-| `limit` | number | No | `50` | Max messages to return |
-| `fields` | string | No | default set | Comma-separated fields, or `*` for all |
+### Saved Searches
 
-*Either `messageId` or `messageTimestamp` must be provided.
-
-### list_streams
-
-List all available Graylog streams in the active connection. No parameters required.
-
-### list_field_values
-
-Discover distinct values for a field, sorted by message count (descending).
-
-| Parameter | Type | Required | Default | Description |
-|-----------|------|----------|---------|-------------|
-| `field` | string | Yes | | Field name (e.g. `source`, `env`, `logger_name`) |
-| `query` | string | No | `*` | Scope the results |
-| `filters` | object | No | | Field filters to narrow scope |
-| `exactMatch` | boolean | No | `true` | Exact match for query |
-| `timeRange` | string | No | `1h` | Time range (e.g., `1h`, `30m`, `2d`) |
-| `from` | string | No | | Start time for absolute range |
-| `to` | string | No | | End time for absolute range |
-| `limit` | number | No | `20` | Max distinct values |
-
-### get_log_histogram
-
-Get a time-based histogram of log messages. Shows message counts over time intervals.
-
-| Parameter | Type | Required | Default | Description |
-|-----------|------|----------|---------|-------------|
-| `query` | string | No | `*` | Query to filter messages |
-| `filters` | object | No | | Field filters (e.g. `{"env": "production", "level": 3}`) |
-| `exactMatch` | boolean | No | `true` | Exact match for query |
-| `timeRange` | string | No | `15m` | Time range (e.g., `1h`, `30m`, `2d`) |
-| `from` | string | No | | Start time for absolute range |
-| `to` | string | No | | End time for absolute range |
-| `interval` | string | No | `auto` | Time interval for buckets (e.g., `1m`, `5m`, `1h`) |
-
-### get_field_aggregation
-
-Aggregate log messages by field values with statistics. Get counts, sums, averages, etc. for field values.
-
-| Parameter | Type | Required | Default | Description |
-|-----------|------|----------|---------|-------------|
-| `field` | string | Yes | | Field to aggregate on (e.g., `source`, `env`, `logger_name`) |
-| `query` | string | No | `*` | Query to filter messages |
-| `filters` | object | No | | Field filters (e.g. `{"env": "production"}`) |
-| `exactMatch` | boolean | No | `true` | Exact match for query |
-| `timeRange` | string | No | `15m` | Time range (e.g., `1h`, `30m`, `2d`) |
-| `from` | string | No | | Start time for absolute range |
-| `to` | string | No | | End time for absolute range |
-| `limit` | number | No | `20` | Maximum number of field values |
-| `metrics` | array | No | `["count"]` | Metrics to calculate (`count`, `sum`, `avg`, `min`, `max`) |
-| `valueField` | string | No | | Numeric field for sum/avg/min/max calculations |
-
-### get_field_time_aggregation
-
-Two-dimensional aggregation: field values over time. Shows how field values change over time intervals.
-
-| Parameter | Type | Required | Default | Description |
-|-----------|------|----------|---------|-------------|
-| `field` | string | Yes | | Field to aggregate on (e.g., `source`, `env`, `level`) |
-| `query` | string | No | `*` | Query to filter messages |
-| `filters` | object | No | | Field filters (e.g. `{"env": "production"}`) |
-| `exactMatch` | boolean | No | `true` | Exact match for query |
-| `timeRange` | string | No | `15m` | Time range (e.g., `1h`, `30m`, `2d`) |
-| `from` | string | No | | Start time for absolute range |
-| `to` | string | No | | End time for absolute range |
-| `interval` | string | No | `auto` | Time interval for buckets (e.g., `1m`, `5m`, `1h`) |
-| `limit` | number | No | `10` | Maximum number of field values |
-
-### debug_histogram_query
-
-Debug helper to test if the histogram query finds any messages at all. Use this if histogram returns empty buckets.
-
-| Parameter | Type | Required | Default | Description |
-|-----------|------|----------|---------|-------------|
-| `query` | string | No | `*` | Query to test |
-| `filters` | object | No | | Field filters to test |
-| `exactMatch` | boolean | No | `true` | Exact match for query |
-| `timeRange` | string | No | `15m` | Time range to test |
-| `from` | string | No | | Start time for absolute range |
-| `to` | string | No | | End time for absolute range |
-
-## Example Prompts
-
-### Basic Search
-```
-Connect to nonprod and show me the latest error logs from prefr-management in marketplace_loki
-```
-
-```
-Show me logs from the last 2 hours with level 3 errors
-```
-
-### Field Discovery
-```
-List all available sources in the last hour
-```
-
-```
-What environments are available?
-```
-
-### Log Aggregations
-```
-Show me a histogram of error logs over the past day with 1-hour intervals
-```
-
-```
-Get aggregated error counts by service for the last 6 hours
-```
-
-```
-Show me how error levels have changed over time in the last 4 hours
-```
-
-### Advanced Time Ranges
-```
-Show me logs from January 15th 9 AM to 5 PM
-```
-
-```
-Get field statistics for the production environment over the past week
-```
-
-### Context Analysis
-```
-Show me the surrounding messages for this log entry: 01KH5PDR893AZJQBYJJ87AQTW5
-```
-
-```
-Find error patterns in the marketplace_loki environment over the last day
-```
+| Tool | Description |
+|---|---|
+| `save_search` | Save a query configuration for reuse |
+| `list_saved_searches` | List all saved searches |
+| `get_saved_search` | Retrieve a saved search by name |
+| `delete_saved_search` | Delete a saved search |
 
 ## Project Structure
 
 ```
 src/
-├── index.js        — Server bootstrap, routing, and handlers
-├── config.js       — Connection config and default fields
-├── query.js        — Query building, Graylog API client, message extraction
-├── tools.js        — Tool schema definitions
-├── timerange.js    — Advanced time range parsing and utilities
-└── aggregations.js — Log aggregation and statistical analysis
+├── index.js                          Server bootstrap and request routing
+├── config.js                         Connection config and field defaults
+├── query.js                          Query building and Graylog API client
+├── tools.js                          Tool schema definitions (25 tools)
+├── timerange.js                      Flexible time range parsing
+├── aggregations.js                   Histogram, field stats, time-series
+├── events.js                         Graylog events API
+├── saved-searches.js                 Persistent saved search store
+├── clustering/
+│   ├── index.js                      Strategy registry
+│   ├── preprocess.js                 Message normalization and tokenization
+│   ├── formatter.js                  Cluster response formatting
+│   ├── template-store.js             Per-connection template persistence
+│   └── strategies/
+│       └── drain3.js                 Drain3 log clustering algorithm
+└── tools/
+    ├── cluster-errors.js             cluster_log_messages handler
+    └── template-mgmt.js              Template CRUD handlers
 ```
 
-## Troubleshooting
+### Adding a Clustering Algorithm
 
-### Basic Setup
-- Ensure `~/.graylog-mcp/config.json` exists with valid connections
-- Verify Node.js version is 18+ (`node --version`)
-- Run `npm install` if dependencies are missing
-- Use `list_connections` to verify your config is loaded
-- Use `use_connection` before any search tools
-
-### Aggregation Issues
-
-**Empty Histogram Buckets:**
-1. Use `debug_histogram_query` with same parameters to test if query finds any data
-2. Try shorter time ranges (e.g., `"30m"` instead of `"2d"`)
-3. Simplify query (try `"*"` to search all messages)
-4. Check if your time range has any log activity
-
-**400 Bad Request Errors:**
-- The server now tries multiple fallback approaches automatically
-- Check server console logs for detailed error information
-- Ensure your Graylog version supports pivot aggregations (6.x+)
-
-**Field Aggregation Working but Histogram Failing:**
-- Use the `debug_histogram_query` tool to isolate the issue
-- The server will automatically try: `working-pattern` → `chart` → `simple-pivot` → `complex-pivot`
-- Enhanced logging shows which approach succeeds
-
-### Feature Status
-- ✅ **Field Aggregation**: Fully working
-- ✅ **Advanced Time Ranges**: Fully working
-- ✅ **Field-Time Aggregation**: Fully working
-- 🔧 **Log Histogram**: Fixed with multiple fallback approaches
-
-## Log Clustering (Drain3)
-
-Group similar log messages into structural templates. Templates are learned per
-connection and persisted at `~/.graylog-mcp/templates/<connection>.json`.
-
-### Tools
-
-- `cluster_log_messages` — fetch and cluster a sample of messages
-- `list_log_templates` — list learned templates
-- `delete_log_template` — remove a template
-- `rename_log_template` — give a template a human-readable label
-- `export_log_templates` — dump library as JSON
-- `import_log_templates` — bulk load templates (merge or replace)
-
-### Example
-
-After selecting a connection with `use_connection`:
-
-```json
-{
-    "tool": "cluster_log_messages",
-    "arguments": {
-        "query": "level:ERROR",
-        "timeRange": "1h",
-        "sampleSize": 500,
-        "minClusterSize": 2,
-        "includeSamples": 3
-    }
-}
-```
-
-The response groups the 500 sampled messages into a small number of templates,
-each with a count, sample messages, and the set of sources where it appeared.
-Subsequent calls reuse and reinforce the same templates.
-
-### Adding a new clustering algorithm
-
-1. Create `src/clustering/strategies/<name>.js` implementing the strategy
-   contract (`hydrate`, `serialize`, `cluster`) — see `drain3.js` for reference.
-2. Import and `register("<name>", strategy)` in `src/clustering/index.js`.
-3. Pass `algorithm: "<name>"` to `cluster_log_messages`.
-
-No other code changes required.
+1. Create `src/clustering/strategies/<name>.js` implementing `hydrate`, `serialize`, and `cluster` (see `drain3.js`)
+2. Register it in `src/clustering/index.js`
+3. Pass `algorithm: "<name>"` to `cluster_log_messages`
 
 ## License
 
-MIT
+[MIT](LICENSE)
