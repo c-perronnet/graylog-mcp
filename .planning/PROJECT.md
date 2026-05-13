@@ -54,8 +54,8 @@ The existing v2.3 codebase covers read/analyze (search, aggregations, histograms
 - [ ] Pipeline-rule DSL: the agent emits Graylog `when … then …` rule source; tools provide rule-DSL generation helpers / validators (not just pass-through strings)
 - [ ] **Dry-run safety:** every mutating tool takes `dryRun: boolean` defaulting to `true`. Dry-run returns the would-be HTTP request payload and a confirmation token; agent passes `dryRun: false` to apply.
 - [ ] All mutating tools reuse the existing connection registry + API-token auth; insufficient permissions surface as Graylog's 403 response
-- [ ] Verify existing v2.3 read tools still work against Graylog 7.2; fix any v7 breakage encountered, no new features on read side
-- [ ] Target Graylog 7.2.0-SNAPSHOT (current local source at `source-code/graylog2-server/`); single-version target this milestone
+- [ ] Verify existing v2.3 read tools still work against Graylog 7.0.6; fix any v7 breakage encountered, no new features on read side
+- [ ] Target **Graylog 7.0.6** (live test instance at `<graylog-host>`); the local source at `source-code/graylog2-server/` is 7.2.0-SNAPSHOT and is kept as a forward-compatibility reference, but every endpoint shape this milestone ships MUST be verified against 7.0.6 before claiming "done". Single-version target.
 
 ### Out of Scope
 
@@ -65,7 +65,7 @@ The existing v2.3 codebase covers read/analyze (search, aggregations, histograms
 - **Users / roles / API token management** — explicitly excluded as a high-risk surface; not in this milestone's threat model
 - **Content packs** — bundling/distribution is its own subsystem; out of scope
 - **Sidecar / collector management** — covers fleet-side agents, not server-side config; out of scope
-- **Multi-version compatibility (4.x / 5.x / 6.x)** — single target is Graylog 7.2; broadening is a separate effort
+- **Multi-version compatibility (anything other than 7.0.x)** — single target is Graylog 7.0.6 (the live test instance); 6.x and earlier are out, and divergence with the 7.2-source clone is treated as a known-future-issue not addressed this milestone
 - **Full widget construction from arbitrary search specs** — only curated widget templates this milestone; arbitrary-widget construction deferred
 - **Backward changes to existing v2.3 read tools** — only verify-against-v7; no refactors as part of this milestone
 - **User-editable blueprint library** — blueprints ship in source; user-defined blueprints (similar to saved searches) are a possible follow-up
@@ -81,9 +81,11 @@ The existing v2.3 codebase covers read/analyze (search, aggregations, histograms
 - No input validation (zod declared but unused) — admin payloads need real validation
 - No query-string escaping in `buildQueryString` — same risk shape returns when building rule DSL programmatically
 - `src/index.js` already at 903 lines with a long `if (name === "...")` dispatch chain — adding ~50+ admin tools to that file is not viable; the natural pattern is to extract under `src/tools/<domain>/` (precedent: `src/tools/cluster-errors.js`)
-- Histogram fallback chain (`getLogHistogram`) hides Graylog API drift — risk that admin tools across two major versions develop the same scar tissue; pinning to Graylog 7.2 keeps this clean
+- Histogram fallback chain (`getLogHistogram`) hides Graylog API drift — risk that admin tools across two major versions develop the same scar tissue; pinning to Graylog 7.0.x keeps this clean
 
-**Graylog server source:** Available locally at `source-code/graylog2-server/` (Graylog 7.2.0-SNAPSHOT). The `api-specs/` directory is sparse (single YAML); the researcher will read Java REST resource classes directly under `graylog2-server/src/main/java/.../rest/resources/` rather than relying on docs.
+**Graylog test environment:** Live instance at `http://<graylog-host>`, version `7.0.6` (codename "Noir"), credentials stored in `~/.graylog-mcp/config.json` (mode 0600, out of the repo). Every admin endpoint shipped this milestone is verified against this live instance before "done". Connection name: `test`.
+
+**Graylog server source (reference, not authoritative):** Available locally at `source-code/graylog2-server/` — version `7.2.0-SNAPSHOT`. **Note:** the source clone is two minors ahead of the live test instance. The `api-specs/` directory is sparse (single YAML); the researcher will read Java REST resource classes directly under `graylog2-server/src/main/java/.../rest/resources/` for endpoint shapes. Any divergence between 7.0.6 (live) and 7.2-snapshot (source) is resolved in favour of the live behaviour — the source is a forward-compat sanity check, not the ship target.
 
 **Pipeline rule DSL:** Graylog's pipeline-rule language has `when` / `then` blocks, a small set of built-in functions, and supports user-defined function references. The agent generating rule DSL is a leverage point: helpers can validate syntax client-side before round-tripping, catching errors before they reach Graylog. Reference rule grammar in source: `source-code/graylog2-server/graylog2-server/src/main/java/.../plugin/pipelineprocessor/`.
 
@@ -92,7 +94,7 @@ The existing v2.3 codebase covers read/analyze (search, aggregations, histograms
 ## Constraints
 
 - **Tech stack:** Node.js ≥18 ESM; existing dependencies (`@modelcontextprotocol/sdk`, `axios`, `zod`) — adopt `zod` for the long-deferred input validation rather than adding a new dep
-- **Graylog version:** 7.2.0-SNAPSHOT only — single target; no multi-version branching
+- **Graylog version:** 7.0.6 only (the live test instance) — single target; no multi-version branching. The local 7.2-source clone is a reference, not a ship target.
 - **Auth model:** Existing connection registry + API token (HTTP Basic with token-as-username, `password: "token"`). No new auth concepts. Insufficient permissions surface as upstream 403.
 - **Safety:** Every mutating tool MUST default to `dryRun: true`. Applying without an explicit `dryRun: false` is a bug.
 - **Backward compat:** Existing v2.3 tool contracts unchanged. Existing connection-config schema additive only.
@@ -103,7 +105,7 @@ The existing v2.3 codebase covers read/analyze (search, aggregations, histograms
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| Target Graylog 7.2 only (no multi-version) | User runs v7; local source available; multi-version branching would double the scope and the test surface | — Pending |
+| Target Graylog 7.0.6 only (no multi-version) | User runs 7.0.6 on the test instance (`<graylog-host>`); local 7.2-source clone is forward-compat reference but live behaviour wins on divergence. Retargeted from 7.2 on 2026-05-13 after live env was provisioned. | — Pending |
 | Reuse existing connection registry + API token for admin auth | Existing UX is good; Graylog already returns 403 on insufficient role; introducing a "writable" flag is a per-call dryRun flag's job, not a connection concept | — Pending |
 | Per-call `dryRun: true` default (not connection-level) | Lets the agent reason about each mutation independently; same connection can preview some calls and apply others; aligns with how agents iterate | — Pending |
 | Two tool layers: CRUD primitives AND blueprints | CRUD is necessary for any unanticipated workflow; blueprints make common setups one-shot. Both needed for the "agent bootstraps from prompt" goal. | — Pending |
@@ -132,4 +134,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-13 after initialization*
+*Last updated: 2026-05-13 after Graylog version retarget (7.2.0-SNAPSHOT → 7.0.6 live test instance)*

@@ -1,9 +1,11 @@
 # Research Summary — Graylog MCP Admin Surface (v3 milestone)
 
 **Synthesized:** 2026-05-13
-**Scope:** Adds ~64 tools (58 CRUD primitives + 6 blueprints) across 6 Graylog 7.2 admin domains to the existing v2.3 codebase (~27 read/analyze tools). Total projected MCP surface: ~91 tools.
+**Scope:** Adds ~64 tools (58 CRUD primitives + 6 blueprints) across 6 Graylog admin domains to the existing v2.3 codebase (~27 read/analyze tools). Total projected MCP surface: ~91 tools.
 **Research files:** STACK.md · FEATURES.md · ARCHITECTURE.md · PITFALLS.md
 **Confidence:** HIGH on phase order and critical design decisions; MEDIUM on exact version pins and some Graylog endpoint shapes.
+
+> **⚠ Version retarget (2026-05-13, post-synthesis):** The research in this folder was conducted against the local `source-code/graylog2-server/` clone (Graylog 7.2.0-SNAPSHOT). The milestone has since been **retargeted to Graylog 7.0.6** — the live test instance the user provisioned at `<graylog-host>`. See PROJECT.md "Graylog test environment" and the relevant Key Decision. The phase order, architecture, features, and pitfalls below are still load-bearing — most are version-stable within v7 — but **endpoint shapes, payload schemas, and changelog citations (especially in PITFALLS.md backward-compat tables) must be re-verified against 7.0.6 during Phase 1+ planning**, with the live instance as authoritative. Treat any 7.0↔7.2 divergence as a known-future-issue, not in scope this milestone.
 
 ---
 
