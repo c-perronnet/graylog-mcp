@@ -98,3 +98,6 @@ logs
 # Claude Code
 .claude/
 scripts/
+
+# Read-only Graylog server reference clone (used by researchers for API shape)
+source-code/
