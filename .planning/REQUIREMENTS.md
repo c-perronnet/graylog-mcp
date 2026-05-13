@@ -199,17 +199,99 @@ Explicit exclusions for this milestone. Documented to prevent re-adding mid-mile
 
 ## Traceability
 
-Empty until roadmap creation. The roadmapper agent populates this section.
+Populated by the roadmapper on 2026-05-13. Every v1 requirement maps to exactly one phase.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| (populated by roadmapper) | | |
+| FOUND-01 | Phase 0 | Pending |
+| FOUND-02 | Phase 0 | Pending |
+| FOUND-03 | Phase 0 | Pending |
+| FOUND-04 | Phase 0 | Pending |
+| FOUND-05 | Phase 0 | Pending |
+| FOUND-06 | Phase 0 | Pending |
+| FOUND-07 | Phase 0 | Pending |
+| FOUND-08 | Phase 0 | Pending |
+| FOUND-09 | Phase 0 | Pending |
+| FOUND-10 | Phase 0 | Pending |
+| FOUND-11 | Phase 0 | Pending |
+| FOUND-12 | Phase 0 | Pending |
+| FOUND-13 | Phase 0 | Pending |
+| INPUT-01 | Phase 1 | Pending |
+| INPUT-02 | Phase 1 | Pending |
+| INPUT-03 | Phase 1 | Pending |
+| INPUT-04 | Phase 1 | Pending |
+| INPUT-05 | Phase 1 | Pending |
+| INPUT-06 | Phase 1 | Pending |
+| INPUT-07 | Phase 1 | Pending |
+| INPUT-08 | Phase 1 | Pending |
+| INPUT-09 | Phase 1 | Pending |
+| INPUT-10 | Phase 1 | Pending |
+| INPUT-11 | Phase 1 | Pending |
+| INDEX-01 | Phase 2 | Pending |
+| INDEX-02 | Phase 2 | Pending |
+| INDEX-03 | Phase 2 | Pending |
+| INDEX-04 | Phase 2 | Pending |
+| INDEX-05 | Phase 2 | Pending |
+| INDEX-06 | Phase 2 | Pending |
+| INDEX-07 | Phase 2 | Pending |
+| INDEX-08 | Phase 2 | Pending |
+| STREAM-01 | Phase 3 | Pending |
+| STREAM-02 | Phase 3 | Pending |
+| STREAM-03 | Phase 3 | Pending |
+| STREAM-04 | Phase 3 | Pending |
+| STREAM-05 | Phase 3 | Pending |
+| STREAM-06 | Phase 3 | Pending |
+| STREAM-07 | Phase 3 | Pending |
+| STREAM-08 | Phase 3 | Pending |
+| STREAM-09 | Phase 3 | Pending |
+| STREAM-10 | Phase 3 | Pending |
+| STREAM-11 | Phase 3 | Pending |
+| PIPE-01 | Phase 4 | Pending |
+| PIPE-02 | Phase 4 | Pending |
+| PIPE-03 | Phase 4 | Pending |
+| PIPE-04 | Phase 4 | Pending |
+| PIPE-05 | Phase 4 | Pending |
+| PIPE-06 | Phase 4 | Pending |
+| PIPE-07 | Phase 4 | Pending |
+| PIPE-08 | Phase 4 | Pending |
+| PIPE-09 | Phase 4 | Pending |
+| PIPE-10 | Phase 4 | Pending |
+| PIPE-11 | Phase 4 | Pending |
+| PIPE-12 | Phase 4 | Pending |
+| EVENT-01 | Phase 5 | Pending |
+| EVENT-02 | Phase 5 | Pending |
+| EVENT-03 | Phase 5 | Pending |
+| EVENT-04 | Phase 5 | Pending |
+| EVENT-05 | Phase 5 | Pending |
+| EVENT-06 | Phase 5 | Pending |
+| EVENT-07 | Phase 5 | Pending |
+| EVENT-08 | Phase 5 | Pending |
+| EVENT-09 | Phase 5 | Pending |
+| DASH-01 | Phase 6 | Pending |
+| DASH-02 | Phase 6 | Pending |
+| DASH-03 | Phase 6 | Pending |
+| DASH-04 | Phase 6 | Pending |
+| DASH-05 | Phase 6 | Pending |
+| DASH-06 | Phase 6 | Pending |
+| DASH-07 | Phase 6 | Pending |
+| DASH-08 | Phase 6 | Pending |
+| BLUE-01 | Phase 6 | Pending |
+| BLUE-02 | Phase 6 | Pending |
+| BLUE-03 | Phase 6 | Pending |
+| BLUE-04 | Phase 6 | Pending |
+| BLUE-05 | Phase 6 | Pending |
+| BLUE-06 | Phase 6 | Pending |
+| HARD-01 | Phase 7 | Pending |
+| HARD-02 | Phase 7 | Pending |
+| HARD-03 | Phase 7 | Pending |
+| HARD-04 | Phase 7 | Pending |
+| HARD-05 | Phase 7 | Pending |
 
 **Coverage:**
 - v1 requirements: 71 total (13 FOUND + 11 INPUT + 8 INDEX + 11 STREAM + 12 PIPE + 9 EVENT + 8 DASH + 6 BLUE + 5 HARD; widget-template list under DASH-08 counted as one)
-- Mapped to phases: 0 (pending roadmap)
-- Unmapped: 71
+- Mapped to phases: 71
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-05-13*
-*Last updated: 2026-05-13 after initial definition*
+*Last updated: 2026-05-13 after roadmap creation (traceability populated)*
