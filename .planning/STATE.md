@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v2.3
 milestone_name: milestone
-status: Executing Phase 00
-last_updated: "2026-05-13T17:14:59.637Z"
+status: Ready to execute
+last_updated: "2026-05-13T17:18:49.344Z"
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 6
-  completed_plans: 0
-  percent: 0
+  completed_plans: 1
+  percent: 17
 ---
 
 # Project Memory: Graylog MCP — Full Admin Surface
@@ -28,12 +28,12 @@ progress:
 ## Current Position
 
 Phase: 00 (foundation) — EXECUTING
-Plan: 1 of 6
+Plan: 2 of 6
 
 - **Phase**: 0 — Foundation
-- **Plan**: (not yet decomposed — run `/gsd-plan-phase 0`)
-- **Status**: Roadmap created; awaiting phase planning
-- **Progress bar**: `[░░░░░░░░] 0/8 phases complete`
+- **Plan**: 2 of 6 — Wave 1 (00-01 test-harness bootstrap) shipped; next up is 00-02 (test-existing migration + delete root scripts)
+- **Status**: Phase 0 in progress; `npm test` green via `node --test`, scaffold ready for Plans 02–06
+- **Progress bar**: `[██░░░░░░░░] 17%` (1 of 6 Phase 0 plans complete)
 
 ## Performance Metrics
 
@@ -41,9 +41,10 @@ Plan: 1 of 6
 |--------|-------|
 | v1 requirements | 71 mapped / 71 total |
 | Phases | 0 complete / 8 total |
-| Plans complete | 0 |
+| Plans complete | 1 |
 | Net-new tools target | ~64 (58 CRUD primitives + 6 blueprints) |
 | Total MCP surface at milestone end | ~91 tools |
+| Phase 00-foundation P01 | 2min | 2 tasks | 13 files |
 
 ## Accumulated Context
 
@@ -61,6 +62,13 @@ Drawn from `PROJECT.md` Key Decisions table — restated here for quick referenc
 - **Code organization**: Per-domain extraction under `src/tools/<domain>/`
 - **Source of REST shape**: Java REST resource classes in `source-code/graylog2-server/` (not Swagger)
 - **Read tools**: Verify-against-v7 only; no refactors
+
+### Decisions Made During Execution
+
+- **Plan 00-01 (test harness bootstrap)**:
+  - `setResolveSnapshotPath` redirects snapshots to `test/__snapshots__/` instead of node:test's default sibling-file location (honors D-06; keeps test tree readable).
+  - `scripts.test` glob is single-quoted (`node --test 'test/**/*.test.js'`) so Node — not bash — performs the expansion. Without quoting bash matches only one path and breaks the runner. Treated as a Rule 1 bug fix on top of Task 1's value.
+  - `@types/node` bumped to `^22.0.0` so devDep types align with the new engine floor (`>= 22.3.0`).
 
 ### Foundation Primitives To Be Built In Phase 0
 
@@ -110,9 +118,11 @@ None.
 
 ## Session Continuity
 
-**Last action**: Roadmap and STATE initialized; 71/71 requirements mapped; ready for Phase 0 planning.
+**Last action**: Completed `00-01-PLAN.md` — bumped `engines.node` to `>= 22.3.0`, fixed `scripts.test`, created `test/snapshot-config.js` + 10 stub test files + `test/__snapshots__/.gitkeep`. `npm test` exits 0 with 10 passing scaffold lines. Commits: `2639926`, `10635a0`. FOUND-06 marked complete.
 
-**Next action**: `/gsd-plan-phase 0` to decompose Phase 0 Foundation into executable plans.
+**Stopped at**: Completed 00-01-PLAN.md
+
+**Next action**: Execute `00-02-PLAN.md` (test-existing migration: move/clean up the 4 root `test-*.js` scripts into `test/existing/`, drop them from the repo, and continue Phase 0 Wave 2).
 
 ---
 *State initialized: 2026-05-13*
