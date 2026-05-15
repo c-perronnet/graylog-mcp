@@ -30,7 +30,7 @@
 **Plans**: 6 plans
   - [x] 00-01-PLAN.md — Project bootstrap + test scaffolding (FOUND-06 partial)
   - [x] 00-02-PLAN.md — Migrate 4 existing test-*.js scripts to node:test (FOUND-06 closure via D-05)
-  - [ ] 00-03-PLAN.md — Graylog HTTP client layer (FOUND-02, FOUND-08 + D-07 client-side)
+  - [x] 00-03-PLAN.md — Graylog HTTP client layer (FOUND-02, FOUND-08 + D-07 client-side)
   - [ ] 00-04-PLAN.md — Handler primitives defineMutatingHandler/defineListHandler (FOUND-03/04/05/09/10/11/12 + D-07 wrapper-side)
   - [ ] 00-05-PLAN.md — Dispatch refactor + tool naming hard rename (FOUND-01, FOUND-13)
   - [ ] 00-06-PLAN.md — Snapshot fixture pass + auth-redaction + schema-parity scaffold (FOUND-07)

@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v2.3
 milestone_name: milestone
 status: Ready to execute
-last_updated: "2026-05-15T06:40:06.928Z"
+last_updated: "2026-05-15T06:49:29.534Z"
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 6
-  completed_plans: 2
-  percent: 33
+  completed_plans: 3
+  percent: 50
 ---
 
 # Project Memory: Graylog MCP — Full Admin Surface
@@ -28,12 +28,12 @@ progress:
 ## Current Position
 
 Phase: 00 (foundation) — EXECUTING
-Plan: 3 of 6
+Plan: 4 of 6
 
 - **Phase**: 0 — Foundation
-- **Plan**: 3 of 6 — Wave 2 (00-02 test-existing migration) shipped; next up is 00-03 (graylog-client extraction)
-- **Status**: Phase 0 in progress; `npm test` green via `node --test`, full unified suite running (64 tests / 18 suites)
-- **Progress bar**: `[███░░░░░░░] 33%` (2 of 6 Phase 0 plans complete)
+- **Plan**: 4 of 6 — Wave 2 graylog-client extraction (00-03) shipped; next up is 00-04 (defineMutatingHandler factory)
+- **Status**: Phase 0 in progress; `npm test` green via `node --test`, full unified suite running (85 tests / 18 suites)
+- **Progress bar**: `[█████░░░░░] 50%` (3 of 6 Phase 0 plans complete)
 
 ## Performance Metrics
 
@@ -41,11 +41,12 @@ Plan: 3 of 6
 |--------|-------|
 | v1 requirements | 71 mapped / 71 total |
 | Phases | 0 complete / 8 total |
-| Plans complete | 2 |
+| Plans complete | 3 |
 | Net-new tools target | ~64 (58 CRUD primitives + 6 blueprints) |
 | Total MCP surface at milestone end | ~91 tools |
 | Phase 00-foundation P01 | 2min | 2 tasks | 13 files |
 | Phase 00-foundation P02 | ~15 min | 2 tasks | 12 files |
+| Phase 00-foundation P03 | ~3 min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -76,6 +77,13 @@ Drawn from `PROJECT.md` Key Decisions table — restated here for quick referenc
   - Swallowed `try { ... } catch (error) { console.error(...) }` in `test-features.js` removed during migration — let node:test reporter fail red on broken assertions rather than log-and-zero-exit (RESEARCH.md Q8).
   - Synced `package-lock.json` to Plan 01's `package.json` bumps (Rule 3 blocking fix). Plan 01 bumped `@types/node ^22` + `engines.node >= 22.3.0` without running `npm install`; axios was missing from `node_modules` and the migrated tests couldn't import production code. Committed as a separate `chore(00-02): sync package-lock.json` so the lockfile churn didn't muddy the test-migration commits.
   - Deleted (not archived) the 4 root-level scripts — git history is the archive.
+
+- **Plan 00-03 (graylog-client extraction)**:
+  - Status-code → typed-error mapping is tested via direct `mapGraylogError()` calls, NOT via `mock.module()`. Node 22's `mock.module()` requires `--experimental-test-module-mocks` and is brittle across 22.x patch versions. The `_setCaptureRequest` seam tests prove `makeClient.request` reaches the classifier; the direct `mapGraylogError` tests prove the classifier produces the right typed subclass. Plan `<action>` explicitly authorised this fallback.
+  - `src/query.js` is NOT modified. `searchGraylog` and `fetchStreams` stay as-is; the new `makeClient` is purely additive. Migration of existing read tools to `makeClient` is deferred to per-domain phases (Phase 3+). Phase 0's job is to land the primitive, not retrofit.
+  - D-07 / Pitfall 4 client-layer defense-in-depth: when `conn.writable === false`, every non-GET request is refused BEFORE axios is reached, throwing `GraylogError(status: 0)` with a "read-only" message. Complements (does not replace) the wrapper-layer check in Plan 04.
+  - `_setCaptureRequest` / `_clearCaptureRequest` are exported (not module-internal toggles) so tests can import them cleanly; the `_` prefix plus an explicit test-only comment block in `client.js` flags production-misuse risk. `afterEach(() => _clearCaptureRequest())` is the canonical reset pattern for any test file mutating the seam.
+  - `GraylogError` constructor accepts a default empty options object (`({ status, method, path, body } = {})`) so callers that throw the base class without remembering to pass ctx still get a well-formed instance rather than a destructuring TypeError.
 
 ### Foundation Primitives To Be Built In Phase 0
 
@@ -125,11 +133,11 @@ None.
 
 ## Session Continuity
 
-**Last action**: Completed `00-02-PLAN.md` — migrated the 4 root `test-*.js` scripts into 7 node:test files under `test/existing/`, deleted the originals, and synced `package-lock.json` to Plan 01's `package.json` bumps so axios resolves. `npm test` exits 0 with 64 tests / 18 suites green. Commits: `688480f` (Task 1: clustering split into 4 files), `19133ed` (Task 2: features/aggregation-fixes/histogram-fixes + deletions), `acf12c4` (Rule 3 lockfile sync). FOUND-06 already complete.
+**Last action**: Completed `00-03-PLAN.md` — built the single Graylog HTTP-client layer under `src/graylog/` (`client.js`, `auth.js`, `errors.js`, `normalize.js`) via strict TDD with RED + GREEN per task. `makeClient(conn).request` is the single axios call site; typed-error hierarchy (Validation/Permission/NotFound/Conflict/Unprocessable) maps 400/403/404/409/422; D-07 client-layer defense-in-depth refuses non-GET against `writable: false`. `npm test` exits 0 with 85 tests / 18 suites green (+21 net-new). Commits: `dc9f444` (Task 1 RED normalize), `7b97fb4` (Task 1 GREEN auth/errors/normalize), `d29bf29` (Task 2 RED client), `8cddb7e` (Task 2 GREEN client.js). FOUND-02 + FOUND-08 complete. `src/query.js` untouched.
 
-**Stopped at**: Completed 00-02-PLAN.md
+**Stopped at**: Completed 00-03-PLAN.md
 
-**Next action**: Execute `00-03-PLAN.md` (graylog-client extraction — first src/ touch of Phase 0).
+**Next action**: Execute `00-04-PLAN.md` (defineMutatingHandler factory + `runOrPreview` + per-call `connectionName` + writable wrapper-layer check — consumes `GraylogError` / `mapGraylogError` from this plan).
 
 ---
 *State initialized: 2026-05-13*

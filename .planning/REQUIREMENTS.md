@@ -12,13 +12,13 @@ All requirements for the admin-surface milestone. Categories follow the 8-phase 
 Cross-cutting infrastructure that every domain phase depends on. Cannot be folded into Phase 1.
 
 - [ ] **FOUND-01**: Dispatch refactor — replace the `if (name === "...")` chain in `src/index.js` with a `Map<toolName, handler>` in `src/dispatch.js`; add a startup assertion that every tool in `src/tools.js` has a registered handler.
-- [ ] **FOUND-02**: Single Graylog HTTP client at `src/graylog/client.js` with auth, `X-Requested-By` header, and typed error mapping for 400/403/404/409/422 responses.
+- [x] **FOUND-02**: Single Graylog HTTP client at `src/graylog/client.js` with auth, `X-Requested-By` header, and typed error mapping for 400/403/404/409/422 responses.
 - [ ] **FOUND-03**: `defineMutatingHandler` factory that centralizes `dryRun: true` enforcement and the build/apply split for every mutating tool.
 - [ ] **FOUND-04**: `runOrPreview` helper that returns a structured preview payload (HTTP method, path, body) with `__SERVER_ASSIGNED__` ID sentinels in dry-run mode.
 - [ ] **FOUND-05**: Adopt `zod ^3.25.76` (already declared) for input validation; establish the per-domain `schemas.js` co-location pattern.
 - [x] **FOUND-06**: Bump `engines.node` to `>= 22.3.0` (or `>= 20.6.0` minimum) so `node:test` `t.snapshot()` is stable; fix the broken `npm test` script.
 - [ ] **FOUND-07**: Snapshot test infrastructure proven with 5–10 fixture tests before any domain phase begins.
-- [ ] **FOUND-08**: Cross-cutting response normalizer that returns `{ id, body }` regardless of Graylog's inconsistent create-response shapes (200 DTO vs 201 partial vs 201+Location header).
+- [x] **FOUND-08**: Cross-cutting response normalizer that returns `{ id, body }` regardless of Graylog's inconsistent create-response shapes (200 DTO vs 201 partial vs 201+Location header).
 - [ ] **FOUND-09**: Per-call `connectionName` argument with singleton fallback on every mutating tool's zod schema; existing read tools unchanged.
 - [ ] **FOUND-10**: Idempotency-key mechanism for create tools — auto-generated from `hash(connectionName, toolName, args)`, agent can override.
 - [ ] **FOUND-11**: Create-conflict pre-check pattern — `existingMatches` field in every create tool's dry-run output.
@@ -204,13 +204,13 @@ Populated by the roadmapper on 2026-05-13. Every v1 requirement maps to exactly 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | FOUND-01 | Phase 0 | Pending |
-| FOUND-02 | Phase 0 | Pending |
+| FOUND-02 | Phase 0 | Complete |
 | FOUND-03 | Phase 0 | Pending |
 | FOUND-04 | Phase 0 | Pending |
 | FOUND-05 | Phase 0 | Pending |
 | FOUND-06 | Phase 0 | Complete |
 | FOUND-07 | Phase 0 | Pending |
-| FOUND-08 | Phase 0 | Pending |
+| FOUND-08 | Phase 0 | Complete |
 | FOUND-09 | Phase 0 | Pending |
 | FOUND-10 | Phase 0 | Pending |
 | FOUND-11 | Phase 0 | Pending |
