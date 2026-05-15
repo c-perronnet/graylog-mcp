@@ -27,9 +27,9 @@ Cross-cutting infrastructure that every domain phase depends on. Cannot be folde
 
 ### Inputs & Extractors (INPUT)
 
-- [ ] **INPUT-01**: `list_input_types` — calls `GET /system/inputs/types/all`, returns the dynamic type catalogue
-- [ ] **INPUT-02**: `list_inputs` — narrow projection by default; full DTO with `expand: true`
-- [ ] **INPUT-03**: `get_input` — full configuration for a single input
+- [x] **INPUT-01**: `list_input_types` — calls `GET /system/inputs/types/all`, returns the dynamic type catalogue
+- [x] **INPUT-02**: `list_inputs` — narrow projection by default; full DTO with `expand: true`
+- [x] **INPUT-03**: `get_input` — full configuration for a single input
 - [ ] **INPUT-04**: `create_input` — typed via zod schemas per input type; supports common types (GELF, Beats, Syslog, Raw/Plaintext)
 - [ ] **INPUT-05**: `update_input` — partial-update only; wrapper fetches current config and merges to avoid zeroing encrypted fields (C3)
 - [ ] **INPUT-06**: `delete_input` — dry-run preview shows affected extractors and message-handling impact
@@ -216,9 +216,9 @@ Populated by the roadmapper on 2026-05-13. Every v1 requirement maps to exactly 
 | FOUND-11 | Phase 0 | Complete |
 | FOUND-12 | Phase 0 | Complete |
 | FOUND-13 | Phase 0 | Complete |
-| INPUT-01 | Phase 1 | Pending |
-| INPUT-02 | Phase 1 | Pending |
-| INPUT-03 | Phase 1 | Pending |
+| INPUT-01 | Phase 1 | Complete |
+| INPUT-02 | Phase 1 | Complete |
+| INPUT-03 | Phase 1 | Complete |
 | INPUT-04 | Phase 1 | Pending |
 | INPUT-05 | Phase 1 | Pending |
 | INPUT-06 | Phase 1 | Pending |

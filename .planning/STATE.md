@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v2.3
 milestone_name: milestone
-status: Executing Phase 01
-last_updated: "2026-05-15T10:18:11.326Z"
+status: Ready to execute
+last_updated: "2026-05-15T10:28:09.080Z"
 progress:
   total_phases: 8
   completed_phases: 1
   total_plans: 11
-  completed_plans: 6
-  percent: 55
+  completed_plans: 7
+  percent: 64
 ---
 
 # Project Memory: Graylog MCP — Full Admin Surface
@@ -28,12 +28,12 @@ progress:
 ## Current Position
 
 Phase: 01 (inputs-extractors) — EXECUTING
-Plan: 1 of 5
+Plan: 2 of 5
 
-- **Phase**: 0 — Foundation
-- **Plan**: 6 of 6 — Plan 00-06 shipped (snapshot infrastructure proven + auth-redaction + schema-parity scaffold); Phase 0 closed with `wave_0_complete: true` + `nyquist_compliant: true` in VALIDATION.md
-- **Status**: All 13 FOUND requirements green; `npm test` exits 0 with 153 tests / 18 suites; 10 deterministic snapshot fixtures pass byte-identically across two consecutive runs
-- **Progress bar**: `[██████████] 100%` (6 of 6 Phase 0 plans complete)
+- **Phase**: 1 — Inputs & Extractors
+- **Plan**: 1 of 5 complete (01-01-PLAN.md shipped: A4 + A2 amendments + D-06 type-catalogue cache + defineListHandler defaultFields override + INPUT-01/02/03 read tools)
+- **Status**: 177 tests / 18 suites green (+24 net-new over Phase 0 baseline of 153); all Phase 0 contracts preserved (Test 20 specifically pins back-compat for defineListHandler callers without defaultFields)
+- **Progress bar**: `[██████░░░░] 64%` (7 of 11 milestone plans complete: 6 Phase 0 + 1 Phase 1)
 
 ## Performance Metrics
 
@@ -50,6 +50,7 @@ Plan: 1 of 5
 | Phase 00-foundation P04 | ~7min | 2 tasks | 13 files |
 | Phase 00-foundation P05 | ~26 min | 3 tasks | 13 files |
 | Phase 00-foundation P06 | ~10 min | 3 tasks | 11 files |
+| Phase 01-inputs-extractors P01 | ~6min | 2 tasks | 16 files |
 
 ## Accumulated Context
 
@@ -113,6 +114,17 @@ Drawn from `PROJECT.md` Key Decisions table — restated here for quick referenc
   - Synthetic-fixture sanity check: dropped `"Authorization": "Bearer xyz"` plus a 40-char alphanumeric into a tampered snapshot file under `/tmp/test_auth_check/__snapshots__/` and ran the auth-redaction test; confirmed it correctly fires with 2 violations listed. The allowlist does not over-allow.
   - Zero deviations from plan. RED→GREEN sequence clean: Task 1 RED at `422f942` (ERR_INVALID_STATE on missing snapshots); GREEN at `ab6c628` after `--test-update-snapshots`; Task 2 at `2f643e0` (stub-replace, not strict RED/GREEN — both stubs already trivially passed); Task 3 at `e6bfb72` (VALIDATION.md frontmatter flip).
 
+- **Plan 01-01 (foundation amendments + read-only input tools)**:
+  - **A4 amendment (await build)**: `defineMutatingHandler` now wraps `const req = await build(args)` in a try/catch routed through `wrapGraylogError(err, name)`. The plan contracted only the `await` widening, but the existing wrapper had no protection against a build rejection — once `build()` can do async pre-flight reads (Plan 02's update_input GETs current input + cached type catalogue inside build), a 404 from the preflight would crash the test runner with an unhandled rejection. The minimal extension surfaces it as an MCP error envelope instead. Test 2 ("rejected promise") asserts `res.isError === true`; the try/catch is what makes that test green.
+  - **A2 amendment (real findExistingMatches)**: Phase 0 stub replaced. Accepts `{ listPath, matchFn, similarityReason? }`; fires `client.request("GET", listPath, null)`; normalizes envelope shapes (`inputs ?? streams ?? extractors ?? items ?? bare array`); projects `{ id, title, similarity_reason }`. `similarityReason` is either a literal string (defaults to `"exact"`) or a per-item function. Back-compat preserved: empty opts OR missing matchFn return `[]` without firing the GET.
+  - **BLOCKER #3 fix (defaultFields override)**: `defineListHandler` accepts optional `spec.defaultFields`. When provided AND `args.fields` is absent, the override wins over the framework `DEFAULT_FIELDS`. Existing list tools (Phase 0) that don't pass `defaultFields` see no change — Test 20 specifically pins the back-compat. `list_inputs` uses it to narrow to `[id, title, type, global]` (D-M6 rationale: description is rarely set on inputs; type and global are the most filterable fields for an agent).
+  - **D-06 type-catalogue cache**: `src/tools/inputs/type-catalogue.js` exports `getCachedTypeCatalogue(connectionName, conn)` backed by a module-level `Map<connectionName, { fetchedAt, catalogue }>`. One GET per connection per process. `_clearTypeCatalogueForTests()` resets for test isolation. `getEncryptedFieldNamesForType(catalogue, typeFQCN)` returns a Set of fields with `is_encrypted: true` — ready for Plan 02's C3 mitigation. Threat-model T-01-01-03 honored: cache keyed by connectionName, so connection A's catalogue can never reach connection B.
+  - **`_connectionName` + `_conn` pass-through in defineListHandler fetch**: Plan suggested calling `resolveConnection(seamArgs)` a second time inside `list-input-types.js`'s fetch to feed the cache. Cleaner: thread the already-resolved `connectionName` + `conn` through fetch's args under leading-underscore framework-internal keys. Matches the `_testConnection` seam convention (underscore = framework internal, never agent input).
+  - **Per-domain module layout proven end-to-end**: `src/tools/inputs/` now contains `schemas.js` + 3 handlers + the cache + `index.js` registration barrel. `_register.js` imports the barrel via a single side-effect line (`import "./inputs/index.js"`). Plans 02-04 (create / update / delete + extractors) extend `schemas.js` and add new handlers under the same module.
+  - **3 read-only tools** (INPUT-01 list_input_types, INPUT-02 list_inputs, INPUT-03 get_input) registered. `assertAllToolsRegistered(toolDefinitions)` returns OK. `list_input_types` is the first list tool to consume the per-tool cache pattern; `list_inputs` is the first to use `defaultFields`; `get_input` is a plain async handler (single DTO, not a list — wouldn't survive the framework's narrow projection).
+  - **Test growth**: 153 → 177 (+24). Focused run = 49/49 pass; full `npm test` = 177/177 pass; zero regressions on the Phase 0 baseline. Commits: `c05817d` (Task 1 RED, 9 failures across 5 files), `1b9504e` (Task 2 GREEN, all 24 new tests pass + 153 baseline preserved).
+  - **Plan 02 hand-off**: `update_input` can now compose `getCachedTypeCatalogue` + `getEncryptedFieldNamesForType` inside its `build()` for C3 mitigation. `create_input` can wire `findExistingMatches({ listPath: "/api/system/inputs", matchFn })` for list-before-create idempotency. The `cascades-forwarding amendment` on `delete_input` and the `assertSchemaParityForTool` enrichment of `test/schema-parity.test.js` are owed by Plan 02 (no mutating-tool schemas yet exist to enrich; this plan was read-only).
+
 ### Foundation Primitives To Be Built In Phase 0
 
 These are the cross-cutting concerns every later phase depends on. They live in `FOUND-01` through `FOUND-13`:
@@ -161,11 +173,11 @@ None.
 
 ## Session Continuity
 
-**Last action**: Completed `00-06-PLAN.md` — Phase 0 closing plan. Added 10 `t.assert.snapshot()` calls across handler.test.js (4), list.test.js (3), normalize.test.js (1 combined of 3 shapes), and dispatch.test.js (2). Generated the 4 fixture files under `test/__snapshots__/`. Verified determinism: two consecutive `npm test` runs produced byte-identical md5sums for all 4 snapshot files. Replaced the Plan 01 stubs at `test/auth-redaction.test.js` (Pitfall 6 scan for Authorization headers / 32+ char apiToken-like strings / password literals, with context-aware idempotency-key allowlist) and `test/schema-parity.test.js` (Pitfall 3 scaffold asserting mutatingBase + listBase shape keys; Phase 1+ enrichment pattern documented in a comment block). Flipped `wave_0_complete: true` + `nyquist_compliant: true` in `00-VALIDATION.md` frontmatter. `npm test` exits 0 with 153 tests / 18 suites green (+11 net-new). Commits: `422f942` (Task 1 RED), `ab6c628` (Task 1 GREEN), `2f643e0` (Task 2 — auth-redaction + schema-parity implementations), `e6bfb72` (Task 3 — VALIDATION.md flip). FOUND-07 complete; all 13 FOUND requirements green; Phase 0 fully closed.
+**Last action**: Completed `01-01-PLAN.md` — Phase 1's foundation-amendments plan. Shipped the A4 (`await build()` in `defineMutatingHandler` + try/catch routing build rejections through `wrapGraylogError`), A2 (real `findExistingMatches({ listPath, matchFn })` with envelope-shape normalization and callable similarityReason), and BLOCKER #3 fix (`defineListHandler` per-tool `defaultFields` override). Created `src/tools/inputs/type-catalogue.js` with the D-06 per-connection cache + `getEncryptedFieldNamesForType` helper for Plan 02's C3 mitigation. Wired 3 read-only tools (INPUT-01 list_input_types, INPUT-02 list_inputs default projection [id,title,type,global], INPUT-03 get_input). Per-domain module layout proven end-to-end under `src/tools/inputs/`. Test growth 153 → 177 (+24); focused run 49/49; full `npm test` 177/177 pass; zero regressions. Commits: `c05817d` (Task 1 RED), `1b9504e` (Task 2 GREEN).
 
-**Stopped at**: Completed 00-06-PLAN.md — Phase 0 ready for verification.
+**Stopped at**: Completed 01-01-PLAN.md — every Plan 02 blocker cleared; ready for Plan 02 (create_input + update_input with C3 mitigation).
 
-**Next action**: Run `/gsd-verify-work` to verify Phase 0 end-to-end, then proceed to Phase 1 (Inputs & Extractors) which can now compose every mutating tool through `defineMutatingHandler` / `defineListHandler` and every list tool through `defineListHandler`. Phase 1's first plan MUST extend `test/schema-parity.test.js` with one `assertSchemaParityForTool(toolName, zodSchema)` call per the commented enrichment template.
+**Next action**: Execute `01-02-PLAN.md` (create_input + delete_input — the two simpler CRUD endpoints) OR `01-02/03-PLAN.md` per the phase planning sequence. Plan 02 inherits: (1) `await build()` so update_input can pre-flight inside build; (2) real `findExistingMatches` for create-before-list idempotency; (3) `getCachedTypeCatalogue` + `getEncryptedFieldNamesForType` for update_input's C3 mitigation. Plan 02 still owes: cascade-forwarding amendment in handler.js for delete_input's dry-run; `assertSchemaParityForTool` enrichment of `test/schema-parity.test.js` for the first set of mutating-tool schemas; the C3-mitigation snapshot fixture (encrypted field absent from update_input dry-run body).
 
 ---
 *State initialized: 2026-05-13*

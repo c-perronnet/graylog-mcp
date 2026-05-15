@@ -45,7 +45,7 @@
   3. An agent can list inputs filtered by type via `list_input_types` (dynamic discovery against `GET /system/inputs/types/all`) and list extractors per input with the partial-update pattern reused for extractor mutations.
   4. `delete_input` dry-run output enumerates the affected extractors and warns the operator before message-handling impact is applied.
 **Plans**: 5 plans
-  - [ ] 01-01-PLAN.md — Foundation amendments (A4 async build, A2 conflict pre-check, D-06 type-catalogue cache) + INPUT-01/02/03 read tools
+  - [x] 01-01-PLAN.md — Foundation amendments (A4 async build, A2 conflict pre-check, D-06 type-catalogue cache) + INPUT-01/02/03 read tools
   - [ ] 01-02-PLAN.md — Input CRUD: create_input (D-04 redaction), update_input (C3 mitigation centerpiece — INPUT-05), delete_input (D-05 cascade enumeration)
   - [ ] 01-03-PLAN.md — Input lifecycle: start_input (PUT) + stop_input (DELETE) (INPUT-07)
   - [ ] 01-04-PLAN.md — Extractor CRUD: list_extractors + create_extractor (all 8 Graylog types per A1) + update_extractor + delete_extractor (INPUT-08..11)
