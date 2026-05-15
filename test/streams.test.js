@@ -21,6 +21,8 @@ import { handleGetStream } from "../src/tools/streams/get-stream.js";
 import { handleListStreamRules } from "../src/tools/streams/list-stream-rules.js";
 import { handleCreateStream } from "../src/tools/streams/create-stream.js";
 import { handleUpdateStream } from "../src/tools/streams/update-stream.js";
+import { handleStartStream } from "../src/tools/streams/start-stream.js";
+import { handlePauseStream } from "../src/tools/streams/pause-stream.js";
 import {
     ListStreamsSchema,
     GetStreamSchema,
@@ -846,4 +848,188 @@ test("update_stream refuses on writable:false connection BEFORE pre-flight GET f
     assert.equal(res.isError, true);
     assert.equal(res.reason, "connection_read_only");
     assert.equal(getFired, false, "no GET should fire when writable gate refuses");
+});
+
+// =====================================================================
+// Plan 03-02 Task 3 — start_stream + pause_stream lifecycle handler tests
+// =====================================================================
+//
+// Both tools compose through defineMutatingHandler per D-12 (lifecycle-as-
+// mutation; no special-cased runtime path). Both pre-flight D-09 mutable;
+// both POST to /api/streams/{streamId}/resume or /pause respectively with
+// body undefined (Graylog returns 204).
+
+// ---------- start_stream ----------
+
+test("start_stream dry-run on mutable stream previews POST /api/streams/{id}/resume with undefined body", async () => {
+    _setCaptureRequest(streamsMultiCapture([
+        {
+            method: "GET",
+            pathPattern: "/api/streams/s1",
+            response: () => ({ id: "s1", title: "App", is_editable: true, disabled: true }),
+        },
+    ]));
+    const res = await handleStartStream({
+        params: { arguments: { _testConnection: "fake", streamId: "s1" } },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.dryRun, true);
+    assert.equal(payload.tool, "start_stream");
+    assert.equal(payload.preview.method, "POST");
+    assert.equal(payload.preview.path, "/api/streams/s1/resume");
+    assert.equal(payload.preview.body, undefined);
+    assert.equal(payload.postApplyEstimate.id, "s1");
+    assert.equal(payload.postApplyEstimate.disabled, false);
+});
+
+test("start_stream D-09 mutable pre-flight refuses with stream_immutable; no POST fires", async () => {
+    const captured = [];
+    _setCaptureRequest(streamsMultiCapture([
+        {
+            method: "GET",
+            pathPattern: "/api/streams/s1",
+            response: (req) => {
+                captured.push(req);
+                return { id: "s1", title: "Builtin", is_editable: false };
+            },
+        },
+        {
+            method: "POST",
+            pathPattern: "/api/streams/s1/resume",
+            response: () => {
+                throw new Error("POST must NOT fire when D-09 refuses");
+            },
+        },
+    ]));
+    const res = await handleStartStream({
+        params: { arguments: { _testConnection: "fake", streamId: "s1" } },
+    });
+    assert.equal(res.isError, true);
+    assert.match(res.content[0].text, /stream_immutable|non-editable/i);
+    assert.equal(captured.length, 1, "only the GET should fire");
+});
+
+test("start_stream apply path POSTs /api/streams/{id}/resume with empty body", async () => {
+    const captured = [];
+    _setCaptureRequest(streamsMultiCapture([
+        {
+            method: "GET",
+            pathPattern: "/api/streams/s1",
+            response: () => ({ id: "s1", is_editable: true, disabled: true }),
+        },
+        {
+            method: "POST",
+            pathPattern: "/api/streams/s1/resume",
+            response: (req) => {
+                captured.push(req);
+                return null;  // Graylog returns 204
+            },
+        },
+    ]));
+    const res = await handleStartStream({
+        params: { arguments: { _testConnection: "fake", streamId: "s1", dryRun: false } },
+    });
+    assert.equal(captured.length, 1);
+    assert.equal(captured[0].method, "POST");
+    assert.equal(captured[0].path, "/api/streams/s1/resume");
+    assert.equal(captured[0].body, undefined);
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.applied, true);
+});
+
+test("start_stream refuses on writable:false connection BEFORE pre-flight GET", async () => {
+    _setConnectionsForTests({
+        readonly: { baseUrl: "x", apiToken: "x", writable: false },
+    });
+    let getFired = false;
+    _setCaptureRequest(() => {
+        getFired = true;
+        return { id: "s1", is_editable: true };
+    });
+    const res = await handleStartStream({
+        params: {
+            arguments: { connectionName: "readonly", streamId: "s1" },
+        },
+    });
+    assert.equal(res.isError, true);
+    assert.equal(res.reason, "connection_read_only");
+    assert.equal(getFired, false);
+});
+
+// ---------- pause_stream ----------
+
+test("pause_stream dry-run on mutable stream previews POST /api/streams/{id}/pause with undefined body", async () => {
+    _setCaptureRequest(streamsMultiCapture([
+        {
+            method: "GET",
+            pathPattern: "/api/streams/s1",
+            response: () => ({ id: "s1", title: "App", is_editable: true, disabled: false }),
+        },
+    ]));
+    const res = await handlePauseStream({
+        params: { arguments: { _testConnection: "fake", streamId: "s1" } },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.dryRun, true);
+    assert.equal(payload.tool, "pause_stream");
+    assert.equal(payload.preview.method, "POST");
+    assert.equal(payload.preview.path, "/api/streams/s1/pause");
+    assert.equal(payload.preview.body, undefined);
+    assert.equal(payload.postApplyEstimate.id, "s1");
+    assert.equal(payload.postApplyEstimate.disabled, true);
+});
+
+test("pause_stream D-09 mutable pre-flight refuses with stream_immutable; no POST fires", async () => {
+    const captured = [];
+    _setCaptureRequest(streamsMultiCapture([
+        {
+            method: "GET",
+            pathPattern: "/api/streams/s1",
+            response: (req) => {
+                captured.push(req);
+                return { id: "s1", title: "Builtin", is_editable: false };
+            },
+        },
+        {
+            method: "POST",
+            pathPattern: "/api/streams/s1/pause",
+            response: () => {
+                throw new Error("POST must NOT fire when D-09 refuses");
+            },
+        },
+    ]));
+    const res = await handlePauseStream({
+        params: { arguments: { _testConnection: "fake", streamId: "s1" } },
+    });
+    assert.equal(res.isError, true);
+    assert.match(res.content[0].text, /stream_immutable|non-editable/i);
+    assert.equal(captured.length, 1);
+});
+
+test("pause_stream apply path POSTs /api/streams/{id}/pause with empty body", async () => {
+    const captured = [];
+    _setCaptureRequest(streamsMultiCapture([
+        {
+            method: "GET",
+            pathPattern: "/api/streams/s1",
+            response: () => ({ id: "s1", is_editable: true, disabled: false }),
+        },
+        {
+            method: "POST",
+            pathPattern: "/api/streams/s1/pause",
+            response: (req) => {
+                captured.push(req);
+                return null;
+            },
+        },
+    ]));
+    const res = await handlePauseStream({
+        params: { arguments: { _testConnection: "fake", streamId: "s1", dryRun: false } },
+    });
+    assert.equal(captured.length, 1);
+    assert.equal(captured[0].method, "POST");
+    assert.equal(captured[0].path, "/api/streams/s1/pause");
+    assert.equal(captured[0].body, undefined);
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.applied, true);
 });

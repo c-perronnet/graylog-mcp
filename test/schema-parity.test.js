@@ -226,3 +226,13 @@ test("schema-parity: update_stream", async () => {
     const { UpdateStreamSchema } = await import("../src/tools/streams/schemas.js");
     await assertSchemaParityForTool("update_stream", UpdateStreamSchema);
 });
+
+test("schema-parity: start_stream", async () => {
+    const { StartStreamSchema } = await import("../src/tools/streams/schemas.js");
+    await assertSchemaParityForTool("start_stream", StartStreamSchema);
+});
+
+test("schema-parity: pause_stream", async () => {
+    const { PauseStreamSchema } = await import("../src/tools/streams/schemas.js");
+    await assertSchemaParityForTool("pause_stream", PauseStreamSchema);
+});
