@@ -22,6 +22,14 @@ import {
     // the dispatch name; the v2.3 function in ../handlers.js stays exported
     // for HARD-03 audit reference (Phase 7) but is no longer wired into
     // dispatch.
+    //
+    // Phase 5 Plan 01 (Pitfall S5 displacement): the v2.3
+    // getEventDefinitionsHandler and getEventNotificationsHandler exports
+    // in ../handlers.js are intentionally NOT imported here. The new Phase 5
+    // list_event_definitions and list_event_notifications (registered via
+    // ./events/index.js below in Plan 05-02 / 05-04) claim the dispatch
+    // names; the v2.3 functions in ../handlers.js stay exported for HARD-03
+    // audit reference (Phase 7) but are no longer wired into dispatch.
     listFieldValuesHandler,
     getLogHistogramHandler,
     getFieldAggregationHandler,
@@ -32,8 +40,6 @@ import {
     getSavedSearchHandler,
     deleteSavedSearchHandler,
     searchEventsHandler,
-    getEventDefinitionsHandler,
-    getEventNotificationsHandler,
 } from "../handlers.js";
 
 import { handleClusterLogMessages } from "./cluster-errors.js";
@@ -60,6 +66,15 @@ import "./streams/index.js";
 // PIPE-01..PIPE-05). Plans 04-03/04/05 will extend with the 9 remaining
 // pipeline-rule + connection tools.
 import "./pipelines/index.js";
+// Phase 5 domain barrel — Plan 05-01 ships this as an empty side-effect
+// barrel (cascade-hash + discriminator + migrator + envelope amendments
+// shipped; no handlers yet). Plans 05-02/03/04 populate this barrel with
+// 11 handlers: list_event_definitions (replaces v2.3), get_event_definition,
+// create_event_definition, update_event_definition, delete_event_definition,
+// enable_event_definition, disable_event_definition,
+// list_event_notifications (replaces v2.3), create_event_notification,
+// update_event_notification, delete_event_notification.
+import "./events/index.js";
 
 // Names that already fit `<verb>_<domain>_<noun>` (10 of 23 — list_streams
 // displaced; the new Phase 3 handler is registered via ./streams/index.js
@@ -85,6 +100,4 @@ register("get_aggregation_field_over_time", getFieldTimeAggregationHandler);
 register("debug_query_histogram", debugHistogramQueryHandler);
 register("create_saved_search", saveSearchHandler);
 register("search_events_graylog", searchEventsHandler);
-register("list_event_definitions", getEventDefinitionsHandler);
-register("list_event_notifications", getEventNotificationsHandler);
 register("update_log_template", handleRenameTemplate);

@@ -715,44 +715,14 @@ export const toolDefinitions = [
             },
         },
     },
-    {
-        name: "list_event_definitions",
-        description: "Get Graylog event definitions. Use 'set_active_connection' first to select a connection.",
-        inputSchema: {
-            type: "object",
-            properties: {
-                page: {
-                    type: "number",
-                    description: "Page number (starts at 1). Default: 1",
-                },
-                perPage: {
-                    type: "number",
-                    description: "Number of results per page. Default: 25",
-                },
-                query: {
-                    type: "string",
-                    description: "Search query to filter event definitions",
-                },
-            },
-        },
-    },
-    {
-        name: "list_event_notifications",
-        description: "Get Graylog event notifications. Use 'set_active_connection' first to select a connection.",
-        inputSchema: {
-            type: "object",
-            properties: {
-                page: {
-                    type: "number",
-                    description: "Page number (starts at 1). Default: 1",
-                },
-                perPage: {
-                    type: "number",
-                    description: "Number of results per page. Default: 25",
-                },
-            },
-        },
-    },
+    // Plan 05-01 S5 displacement: the v2.3 `list_event_definitions` and
+    // `list_event_notifications` tool-definition entries were removed here.
+    // Plan 05-02 re-adds list_event_definitions with a narrow-projection
+    // /paginated-backed shape (tool count returns to 67); Plan 05-04 re-adds
+    // list_event_notifications (count → 68). The v2.3 handlers stay exported
+    // in src/handlers.js for HARD-03 audit reference (Phase 7) but are no
+    // longer wired into dispatch — see src/tools/_register.js for the
+    // Phase 3 S5 precedent narrative.
     {
         name: "cluster_log_messages",
         description: "Cluster similar log messages into Drain3-style templates. Fetches messages with the same args as search_messages_graylog, then groups them by structural similarity. Templates are persisted per connection and reused across calls.",
