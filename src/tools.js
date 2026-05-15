@@ -1296,4 +1296,35 @@ export const toolDefinitions = [
             required: ["ruleId"],
         },
     },
+    {
+        name: "create_pipeline_rule",
+        description: "Create a Graylog pipeline rule from typed structured intent OR raw DSL source (mutually exclusive per D-10). Structured intent compiles via emit.js (every literal escape-routed); raw DSL forwards verbatim. Both modes run client-side lint (validate.js over the merged catalogue — Pitfall 5 — live-only function names accepted) THEN the server-authoritative parse pre-flight (POST /api/system/pipelines/rule/parse — C4 acceptance gate). On parse failure refuses apply with reason `rule_parse_failed` and parseResult.error carrying [{line, position_in_line, type, message}] (Pitfall 6 camelCase→snake_case). postApplyEstimate.id is __SERVER_ASSIGNED__. Use simulate_pipeline_rule (Plan 04-04) to verify semantics — this tool's parse pre-flight only validates grammar; side-effect functions (from_input, route_to_stream) cannot be meaningfully simulated.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                connectionName: { type: "string", description: "Optional per-call connection override" },
+                dryRun: { type: "boolean", description: "Default true. Set to false to apply." },
+                idempotencyKey: { type: "string", description: "Optional agent-supplied idempotency key" },
+                structured: { type: "object", description: "Typed structured intent: { name, when: Condition, then: Action[] }. RuleSpec compiles to DSL via emit.js. Provide EXACTLY ONE of `structured` or `ruleSource`." },
+                ruleSource: { type: "string", description: "Raw rule DSL string (alternative to `structured`). Title is derived from the leading `rule \"...\"` clause." },
+                description: { type: "string", description: "Optional rule description" },
+                simulator_message: { type: ["string", "null"], description: "Optional Nullable String — sample message for the rule simulator (pass null to leave unset)." },
+            },
+        },
+    },
+    {
+        name: "update_pipeline_rule",
+        description: "Partial-update a Graylog pipeline rule's mutable fields. STRICT_NO_ECHO wire-build (per 04-U1-SMOKE.md): only the fields you pass in `changes` are sent on the wire — unchanged fields stay server-side. Parse pre-flight (POST /api/system/pipelines/rule/parse) fires ONLY when changes.structured OR changes.ruleSource is set; refuses apply with reason `rule_parse_failed` on parse error (Pitfall 6 camelCase→snake_case). Pre-flights GET on the current rule; 404 surfaces a clean MCP error envelope. NO mutable check (rules have no is_editable). simulator_message preserves omit-vs-explicit-null clear-intent (Nullable String). Schema: { ruleId, changes: { structured?, ruleSource?, description?, simulator_message? } } — structured XOR ruleSource within changes.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                connectionName: { type: "string", description: "Optional per-call connection override" },
+                dryRun: { type: "boolean", description: "Default true. Set to false to apply." },
+                idempotencyKey: { type: "string", description: "Optional agent-supplied idempotency key" },
+                ruleId: { type: "string", description: "Pipeline-rule ID (from list_pipeline_rules)" },
+                changes: { type: "object", description: "Partial-update subset: { structured?, ruleSource?, description?, simulator_message? }. Pass simulator_message:null to explicitly clear; omit to leave unchanged. structured and ruleSource are mutually exclusive." },
+            },
+            required: ["ruleId", "changes"],
+        },
+    },
 ];

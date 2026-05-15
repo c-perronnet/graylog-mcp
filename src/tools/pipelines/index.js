@@ -17,6 +17,8 @@ import { handleUpdatePipeline } from "./update-pipeline.js";
 import { handleDeletePipeline } from "./delete-pipeline.js";
 import { handleListPipelineRules } from "./list-pipeline-rules.js";
 import { handleGetPipelineRule } from "./get-pipeline-rule.js";
+import { handleCreatePipelineRule } from "./create-pipeline-rule.js";
+import { handleUpdatePipelineRule } from "./update-pipeline-rule.js";
 
 register("list_pipelines", handleListPipelines);
 register("get_pipeline", handleGetPipeline);
@@ -25,3 +27,5 @@ register("update_pipeline", handleUpdatePipeline);
 register("delete_pipeline", handleDeletePipeline);
 register("list_pipeline_rules", handleListPipelineRules);
 register("get_pipeline_rule", handleGetPipelineRule);
+register("create_pipeline_rule", handleCreatePipelineRule);
+register("update_pipeline_rule", handleUpdatePipelineRule);
