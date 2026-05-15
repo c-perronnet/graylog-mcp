@@ -291,3 +291,13 @@ test("schema-parity: delete_stream_rule", async () => {
     const { DeleteStreamRuleSchema } = await import("../src/tools/streams/schemas.js");
     await assertSchemaParityForTool("delete_stream_rule", DeleteStreamRuleSchema);
 });
+
+test("schema-parity: update_stream_rule", async () => {
+    const { UpdateStreamRuleSchema } = await import("../src/tools/streams/schemas.js");
+    await assertSchemaParityForTool("update_stream_rule", UpdateStreamRuleSchema);
+});
+
+test("schema-parity: test_stream_match", async () => {
+    const { TestStreamMatchSchema } = await import("../src/tools/streams/schemas.js");
+    await assertSchemaParityForTool("test_stream_match", TestStreamMatchSchema);
+});

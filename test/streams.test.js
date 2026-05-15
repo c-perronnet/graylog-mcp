@@ -24,10 +24,11 @@ import { handleUpdateStream } from "../src/tools/streams/update-stream.js";
 import { handleStartStream } from "../src/tools/streams/start-stream.js";
 import { handlePauseStream } from "../src/tools/streams/pause-stream.js";
 import { handleDeleteStream } from "../src/tools/streams/delete-stream.js";
-// Plan 03-04 Task 1 — create_stream_rule + delete_stream_rule.
-// Task 2 will append imports for handleUpdateStreamRule + handleTestStreamMatch.
+// Plan 03-04 — stream-rule CRUD + test_stream_match handlers.
 import { handleCreateStreamRule } from "../src/tools/streams/create-stream-rule.js";
 import { handleDeleteStreamRule } from "../src/tools/streams/delete-stream-rule.js";
+import { handleUpdateStreamRule } from "../src/tools/streams/update-stream-rule.js";
+import { handleTestStreamMatch } from "../src/tools/streams/test-stream-match.js";
 import { computeCascadeHash } from "../src/tools/_shared/cascade-hash.js";
 import {
     ListStreamsSchema,
@@ -2103,3 +2104,340 @@ test("delete_stream_rule apply path fires DELETE /api/streams/{id}/rules/{ruleId
     const payload = JSON.parse(res.content[0].text);
     assert.equal(payload.applied, true);
 });
+
+// =====================================================================
+// Plan 03-04 Task 2 — update_stream_rule + test_stream_match
+// =====================================================================
+//
+// U1 smoke RESULT: UNREACHABLE_STRICT_NO_ECHO (per 03-U1-SMOKE.md) →
+// STRICT_NO_ECHO branch is locked. Tests 1-7 cover update_stream_rule's
+// STRICT_NO_ECHO behavior + Pitfall S8 type-from-current echo +
+// D-09 parent-mutable pre-flight. Tests 8-11 cover test_stream_match's
+// D-07 server-side wrapper contract + literal outer key `{ message: ... }`.
+
+// ---------- Test 16 — UpdateStreamRuleSchema accepts non-type changes ----------
+
+test("UpdateStreamRuleSchema accepts changes:{ value }", () => {
+    const parsed = UpdateStreamRuleSchema.parse({
+        streamId: "s1",
+        ruleId: "r1",
+        changes: { value: "new" },
+    });
+    assert.equal(parsed.streamId, "s1");
+    assert.equal(parsed.ruleId, "r1");
+    assert.equal(parsed.changes.value, "new");
+});
+
+// ---------- Test 17 — UpdateStreamRuleSchema rejects `type` in changes (Pitfall S8 immutability) ----------
+
+test("UpdateStreamRuleSchema rejects `type` in changes (Pitfall S8 immutability)", () => {
+    // The default zod ZodObject strips unknown keys rather than throwing.
+    // UpdateStreamRuleChangesShape does NOT declare `type` — so .parse() must
+    // either strip it (preserving Pitfall S8 immutability at the wire layer)
+    // OR reject it (stricter contract). We assert the agent-visible outcome:
+    // parsed.changes.type must NOT exist after parsing — regardless of zod
+    // mode (strip vs. strict).
+    const parsed = UpdateStreamRuleSchema.parse({
+        streamId: "s1",
+        ruleId: "r1",
+        changes: { type: "regex", value: "x" },
+    });
+    assert.equal(
+        Object.prototype.hasOwnProperty.call(parsed.changes, "type"),
+        false,
+        "Pitfall S8: parsed.changes must not expose type — it is server-immutable",
+    );
+    // value still flows through.
+    assert.equal(parsed.changes.value, "x");
+});
+
+// ---------- Test 18 — update_stream_rule D-09 parent-mutable refusal ----------
+
+test("update_stream_rule D-09 parent-mutable pre-flight refuses; NO PUT and NO rule GET fire", async () => {
+    const captured = [];
+    _setCaptureRequest(streamsMultiCapture([
+        {
+            method: "GET",
+            pathPattern: "/api/streams/s1",
+            response: (req) => {
+                captured.push(req);
+                return { id: "s1", title: "All messages", is_editable: false };
+            },
+        },
+        {
+            method: "GET",
+            pathPattern: "/api/streams/s1/rules/r1",
+            response: () => {
+                throw new Error("rule GET MUST NOT fire when parent is immutable");
+            },
+        },
+        {
+            method: "PUT",
+            pathPattern: "/api/streams/s1/rules/r1",
+            response: () => {
+                throw new Error("PUT MUST NOT fire when parent is immutable");
+            },
+        },
+    ]));
+    const res = await handleUpdateStreamRule({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                streamId: "s1",
+                ruleId: "r1",
+                changes: { value: "new" },
+            },
+        },
+    });
+    assert.equal(res.isError, true);
+    assert.equal(res.reason, "stream_immutable");
+    assert.match(res.content[0].text, /stream_immutable|non-editable/i);
+    assert.equal(captured.length, 1, "only the parent-mutable GET should fire");
+    assert.equal(captured[0].path, "/api/streams/s1");
+});
+
+// ---------- Test 19 — update_stream_rule Pitfall S8 type-echo from current ----------
+
+test("update_stream_rule wire body emits type from current.type unconditionally (Pitfall S8)", async () => {
+    _setCaptureRequest(streamsMultiCapture([
+        {
+            method: "GET",
+            pathPattern: "/api/streams/s1",
+            response: () => ({ id: "s1", title: "App", is_editable: true }),
+        },
+        {
+            method: "GET",
+            pathPattern: "/api/streams/s1/rules/r1",
+            response: () => ({
+                id: "r1",
+                type: 2,  // REGEX wire-int
+                field: "msg",
+                value: "old",
+                inverted: false,
+                description: null,
+            }),
+        },
+    ]));
+    const res = await handleUpdateStreamRule({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                streamId: "s1",
+                ruleId: "r1",
+                changes: { value: "new" },  // type NOT in changes (immutable per S8)
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.preview.method, "PUT");
+    assert.equal(payload.preview.path, "/api/streams/s1/rules/r1");
+    // Pitfall S8: type MUST be on the wire — echoed from current.type (=2).
+    assert.equal(payload.preview.body.type, 2);
+    // STRICT_NO_ECHO: value is on the wire because args.changes set it.
+    assert.equal(payload.preview.body.value, "new");
+});
+
+// ---------- Test 20 — update_stream_rule STRICT_NO_ECHO: only changed fields + type ----------
+
+test("update_stream_rule STRICT_NO_ECHO emits ONLY changed fields + type echo", async () => {
+    _setCaptureRequest(streamsMultiCapture([
+        {
+            method: "GET",
+            pathPattern: "/api/streams/s1",
+            response: () => ({ id: "s1", title: "App", is_editable: true }),
+        },
+        {
+            method: "GET",
+            pathPattern: "/api/streams/s1/rules/r1",
+            response: () => ({
+                id: "r1",
+                type: 1,  // EXACT wire-int
+                field: "src",
+                value: "host-1",
+                inverted: false,
+                description: null,
+            }),
+        },
+    ]));
+    const res = await handleUpdateStreamRule({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                streamId: "s1",
+                ruleId: "r1",
+                changes: { value: "host-2" },
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    // STRICT_NO_ECHO: exactly two keys on the wire — type (echo from current,
+    // Pitfall S8) + value (the only changed field). field, inverted,
+    // description are ABSENT.
+    const keys = Object.keys(payload.preview.body).sort();
+    assert.deepEqual(keys, ["type", "value"]);
+    assert.equal(payload.preview.body.type, 1);
+    assert.equal(payload.preview.body.value, "host-2");
+});
+
+// ---------- Test 21 — update_stream_rule apply path PUTs the strict-no-echo body ----------
+
+test("update_stream_rule apply path PUTs strict-no-echo body with type-from-current", async () => {
+    const captured = [];
+    _setCaptureRequest(streamsMultiCapture([
+        {
+            method: "GET",
+            pathPattern: "/api/streams/s1",
+            response: () => ({ id: "s1", title: "App", is_editable: true }),
+        },
+        {
+            method: "GET",
+            pathPattern: "/api/streams/s1/rules/r1",
+            response: () => ({
+                id: "r1",
+                type: 6,  // CONTAINS
+                field: "msg",
+                value: "old",
+            }),
+        },
+        {
+            method: "PUT",
+            pathPattern: "/api/streams/s1/rules/r1",
+            response: (req) => {
+                captured.push(req);
+                return { streamrule_id: "r1" };
+            },
+        },
+    ]));
+    const res = await handleUpdateStreamRule({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                streamId: "s1",
+                ruleId: "r1",
+                changes: { field: "newfield" },
+                dryRun: false,
+            },
+        },
+    });
+    assert.equal(captured.length, 1);
+    assert.equal(captured[0].method, "PUT");
+    assert.equal(captured[0].path, "/api/streams/s1/rules/r1");
+    // Pitfall S8 type echo (CONTAINS = 6) + STRICT_NO_ECHO field change.
+    assert.deepEqual(Object.keys(captured[0].body).sort(), ["field", "type"]);
+    assert.equal(captured[0].body.type, 6);
+    assert.equal(captured[0].body.field, "newfield");
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.applied, true);
+    assert.equal(payload.result.id, "r1");
+});
+
+// ---------- Test 22 — update_stream_rule writable:false short-circuits BEFORE any GET ----------
+
+test("update_stream_rule refuses on writable:false connection BEFORE any GET fires", async () => {
+    _setConnectionsForTests({
+        readonly: { baseUrl: "x", apiToken: "x", writable: false },
+    });
+    let getFired = false;
+    _setCaptureRequest(() => {
+        getFired = true;
+        return { id: "s1", is_editable: true };
+    });
+    const res = await handleUpdateStreamRule({
+        params: {
+            arguments: {
+                connectionName: "readonly",
+                streamId: "s1",
+                ruleId: "r1",
+                changes: { value: "new" },
+            },
+        },
+    });
+    assert.equal(res.isError, true);
+    assert.equal(res.reason, "connection_read_only");
+    assert.equal(getFired, false);
+});
+
+// ---------- Test 23 — test_stream_match happy path: literal outer key `message` ----------
+
+test("test_stream_match happy path: dry-run preview emits body with literal outer key `message`", async () => {
+    _setCaptureRequest(() => ({}));  // no upstream GETs needed for D-07 wrapper
+    const res = await handleTestStreamMatch({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                streamId: "s1",
+                message: { source: "host1", level: 6 },
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.dryRun, true);
+    assert.equal(payload.tool, "test_stream_match");
+    assert.equal(payload.preview.method, "POST");
+    assert.equal(payload.preview.path, "/api/streams/s1/testMatch");
+    // Literal outer key "message" — case-sensitive. StreamResource.java:561-564
+    // consumes Map<String, Map<String, Object>> with the outer key checked
+    // against the constant "message" — NOT the agent's field-map content.
+    assert.deepEqual(Object.keys(payload.preview.body), ["message"]);
+    assert.deepEqual(payload.preview.body.message, { source: "host1", level: 6 });
+});
+
+// ---------- Test 24 — test_stream_match REQUIRES streamId per D-08 ----------
+
+test("TestStreamMatchSchema rejects missing streamId (D-08 streamId required)", () => {
+    assert.throws(
+        () => TestStreamMatchSchema.parse({ message: { source: "host1" } }),
+        /streamId|required/i,
+    );
+});
+
+// ---------- Test 25 — test_stream_match apply path forwards response verbatim ----------
+
+test("test_stream_match apply path POSTs to testMatch and forwards response verbatim", async () => {
+    const captured = [];
+    _setCaptureRequest((req) => {
+        captured.push(req);
+        return { matches: true, rules: { r1: true, r2: false } };
+    });
+    const res = await handleTestStreamMatch({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                streamId: "s1",
+                message: { source: "host1", level: 6 },
+                dryRun: false,
+            },
+        },
+    });
+    assert.equal(captured.length, 1);
+    assert.equal(captured[0].method, "POST");
+    assert.equal(captured[0].path, "/api/streams/s1/testMatch");
+    assert.deepEqual(Object.keys(captured[0].body), ["message"]);
+    assert.deepEqual(captured[0].body.message, { source: "host1", level: 6 });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.applied, true);
+    // Response forwarded verbatim — no enrichment, no projection. The standard
+    // toIdBody fallback maps raw → { id: raw?.id, body: raw } so the full
+    // upstream payload sits under result.body.
+    assert.equal(payload.result.body.matches, true);
+    assert.deepEqual(payload.result.body.rules, { r1: true, r2: false });
+});
+
+// ---------- Test 26 — test_stream_match summarize line mentions stream id + field count ----------
+
+test("test_stream_match summarize line includes stream id and sample-message field count", async () => {
+    _setCaptureRequest(() => ({}));
+    const res = await handleTestStreamMatch({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                streamId: "s1",
+                message: { source: "host1", level: 6 },
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.match(payload.summary, /s1/);
+    assert.match(payload.summary, /2\s*field/);
+});
+
