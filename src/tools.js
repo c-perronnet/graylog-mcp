@@ -686,4 +686,52 @@ export const toolDefinitions = [
             required: ["inputId"],
         },
     },
+    // ----- Phase 1 inputs CRUD (INPUT-04, INPUT-05, INPUT-06) -----
+    {
+        name: "create_input",
+        description: "Create a Graylog input. Strict zod schemas ship for the common types: GELF UDP / TCP / HTTP, Beats2, Syslog UDP / TCP, Raw UDP / TCP. All other Graylog input types (AWS, CEF, Kafka, etc.) accept a generic validated configuration object. Encrypted fields in the dry-run preview show as <redacted>; the real secret is sent only on apply. NOTE: postApplyEstimate.id is __SERVER_ASSIGNED__ — DO NOT reuse it; use the real id from the apply response.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                connectionName: { type: "string", description: "Optional per-call connection override" },
+                dryRun: { type: "boolean", description: "Default true. Set to false to apply." },
+                idempotencyKey: { type: "string", description: "Optional agent-supplied idempotency key" },
+                type: { type: "string", description: "Input type FQCN (use list_input_types to discover)" },
+                title: { type: "string", description: "Human-readable input title" },
+                global: { type: "boolean", description: "Run on every node (default false)" },
+                node: { type: "string", description: "Node ID for non-global inputs" },
+                configuration: { type: "object", description: "Input-type-specific configuration map (validated per type FQCN)" },
+            },
+            required: ["type", "title", "configuration"],
+        },
+    },
+    {
+        name: "update_input",
+        description: "Partial-update one Graylog input. The wire body's `configuration` object is built STRICTLY from your `changes.configuration` entries — unchanged fields are NEVER echoed (Graylog preserves them server-side). Encrypted fields (TLS cert password, AWS credentials) are NEVER echoed unless you explicitly pass a new value. Schema is { inputId, changes: { title?, global?, node?, configuration? } }. Pass `changes: { configuration: {} }` to no-op the configuration block (emits empty object).",
+        inputSchema: {
+            type: "object",
+            properties: {
+                connectionName: { type: "string", description: "Optional per-call connection override" },
+                dryRun: { type: "boolean", description: "Default true. Set to false to apply." },
+                idempotencyKey: { type: "string", description: "Optional agent-supplied idempotency key" },
+                inputId: { type: "string", description: "The Graylog input ID to update" },
+                changes: { type: "object", description: "Partial-update subset: { title?, global?, node?, configuration? }" },
+            },
+            required: ["inputId", "changes"],
+        },
+    },
+    {
+        name: "delete_input",
+        description: "Delete a Graylog input. Graylog cascades extractor removal server-side; the dry-run preview enumerates the affected extractors in cascades.extractors[] BEFORE message-handling impact lands. Use list_extractors first to inspect each cascade target if needed.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                connectionName: { type: "string", description: "Optional per-call connection override" },
+                dryRun: { type: "boolean", description: "Default true. Set to false to apply." },
+                idempotencyKey: { type: "string", description: "Optional agent-supplied idempotency key" },
+                inputId: { type: "string", description: "The Graylog input ID to delete" },
+            },
+            required: ["inputId"],
+        },
+    },
 ];

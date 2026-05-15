@@ -40,6 +40,7 @@ import { makeClient } from "../../graylog/client.js";
  * @typedef {{ method: string, path: string, body?: unknown,
  *   postApplyEstimate?: object,
  *   existingMatches?: Array<unknown>,
+ *   cascades?: object,
  *   normalize?: (raw: unknown) => { id: unknown, body: unknown } }} RequestDescriptor
  */
 
@@ -107,9 +108,17 @@ export function defineMutatingHandler(spec) {
         // (current input fetch + cached type catalogue lookup for is_encrypted
         // detection). Awaiting a synchronous return is a no-op, so existing callers
         // see no behavioural change.
+        //
+        // Thread `_connectionName` + `_conn` through build args so handlers that
+        // need a Graylog client inside build (e.g. create_input → findExistingMatches +
+        // type catalogue; update_input → current-state GET + catalogue; delete_input
+        // → extractor pre-flight) can use the already-resolved connection without a
+        // duplicate resolveConnection call. Leading-underscore keys flag them as
+        // framework-internal — same convention as `_testConnection` / `_connectionName`
+        // in defineListHandler (Plan 01 SUMMARY §"_connectionName + _conn pass-through").
         let req;
         try {
-            req = await build(args);
+            req = await build({ ...args, _connectionName: connectionName, _conn: conn });
         } catch (err) {
             return wrapGraylogError(err, name);
         }
@@ -137,6 +146,10 @@ export function defineMutatingHandler(spec) {
                         // FOUND-11: populated by build() when it does a list-pre-check
                         // via findExistingMatches (Phase 1+); always an array.
                         existingMatches: req.existingMatches ?? [],
+                        // Plan 01-02 / D-05: build() may populate cascades to surface
+                        // server-side side-effects (e.g. delete_input cascade-deletes
+                        // extractors). Opt-in only — absent when build() didn't set it.
+                        ...(req.cascades ? { cascades: req.cascades } : {}),
                         applyHint: "Re-call with dryRun: false to apply",
                     }),
                 }],
