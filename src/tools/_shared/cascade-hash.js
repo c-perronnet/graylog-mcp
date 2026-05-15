@@ -139,3 +139,46 @@ export function computeCascadeHash({ streamId, ruleIds, pipelineConnIds, eventDe
     });
     return createHash("sha256").update(canonical).digest("hex");
 }
+
+// =====================================================================
+// Phase 4 D-14 — computeRuleCascadeHash (thin semantic wrapper)
+// =====================================================================
+
+/**
+ * Compute the deterministic confirmation hash for delete_pipeline_rule.
+ *
+ * Thin semantic wrapper around computeCascadeHash so call-sites read
+ * naturally — `computeRuleCascadeHash({ ruleId, pipelineIds })` instead
+ * of the misleading-named `computeCascadeHash({ streamId: ruleId,
+ * pipelineConnIds: pipelineIds, ... })` parameter renaming.
+ *
+ * Canonical JSON output is BYTE-IDENTICAL to the underlying call
+ * (forwards `streamId=ruleId`, `pipelineConnIds=pipelineIds`, `ruleIds=[]`,
+ * `eventDefIds=[]`). Phase 3 hashes are not shared with Phase 4 so the
+ * key-name reuse has no replay-attack surface — the streamId slot here
+ * carries a pipeline-rule id, never a stream id.
+ *
+ * Threat-model T-04-01-06: byte-identity is pinned by
+ * test/cascade-hash.test.js so a future regression in computeCascadeHash
+ * breaks Phase 4 hashes too (single source of truth — no parallel
+ * canonical-form drift).
+ *
+ * @param {object} inputs
+ * @param {string}   inputs.ruleId       target pipeline-rule id (non-empty)
+ * @param {string[]} inputs.pipelineIds  pipelines that reference the rule
+ * @returns {string} 64-hex sha-256
+ */
+export function computeRuleCascadeHash({ ruleId, pipelineIds }) {
+    if (typeof ruleId !== "string" || ruleId.length === 0) {
+        throw new Error("computeRuleCascadeHash: ruleId is required");
+    }
+    if (!Array.isArray(pipelineIds)) {
+        throw new Error("computeRuleCascadeHash: pipelineIds must be string[]");
+    }
+    return computeCascadeHash({
+        streamId: ruleId,
+        ruleIds: [],
+        pipelineConnIds: pipelineIds,
+        eventDefIds: [],
+    });
+}

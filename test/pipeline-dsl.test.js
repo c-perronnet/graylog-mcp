@@ -47,8 +47,18 @@ test("staticBuiltins is a frozen Array", () => {
     assert.equal(Object.isFrozen(staticBuiltins), true);
 });
 
-test("staticBuiltins.length === 130", () => {
-    assert.equal(staticBuiltins.length, 130);
+test("staticBuiltins.length matches the 133 unique NAME constants in Graylog 7.2.0-SNAPSHOT source", () => {
+    // Plan 04-01 originally specified 130 based on RESEARCH §"Summary by Category"
+    // sanity-check note. Source-of-truth verification against
+    // `source-code/.../pipelineprocessor/functions/**/*.java`
+    // (grep "public static final String NAME") found 133 unique NAME values
+    // across 135 files (the extra 2 files are base-class shells without NAME
+    // constants — StringUtilsFunction.java, BaseEncodingSingleArgStringFunction.java).
+    // Diffing my transcription against the live `sort -u` of source NAMEs
+    // returns ZERO mismatches in either direction — 133 is the empirical
+    // ground truth. Plan acceptance criterion adjusted from 130 → 133 as a
+    // Rule 1 bug fix (plan inventory was off-by-three).
+    assert.equal(staticBuiltins.length, 133);
 });
 
 test("every staticBuiltins entry has the 5-key {name, signature, oneLineDescription, category, sourceRef} shape", () => {
