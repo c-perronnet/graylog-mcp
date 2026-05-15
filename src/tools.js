@@ -935,4 +935,22 @@ export const toolDefinitions = [
             ],
         },
     },
+    {
+        name: "update_index_set",
+        description: "Partial-update one Graylog index set. The wrapper pre-flights GET /api/system/indices/index_sets/{id} to source the immutable fields (index_prefix, creation_date) and the strategy blocks the agent didn't touch, then merges your `changes` over the current state and emits the FULL merged DTO on the wire (U1 MERGE_FROM_CURRENT per 02-U1-SMOKE.md — Graylog 7.0.6's PUT deserializer requires the full IndexSetSummary shape; merge-from-current is safe because index-set configs carry no encrypted fields). D-11 atomic strategy-replace: if `changes` includes `rotation_strategy`, it MUST include `rotation_strategy_config` (and vice versa) — strategy class + config are atomic. Same rule for retention. ND2 pre-flight: the wrapper refuses `writable: false` on the default index set BEFORE the PUT fires (Graylog returns 409; the wrapper surfaces a structured `default_index_set_must_be_writable` reason in dry-run). Immutable `index_prefix` and `creation_date` are NEVER on the wire as agent-supplied — the wrapper re-asserts the current values as defense-in-depth.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                connectionName: { type: "string", description: "Optional per-call connection override" },
+                dryRun: { type: "boolean", description: "Default true. Set to false to apply." },
+                idempotencyKey: { type: "string", description: "Optional agent-supplied idempotency key" },
+                indexSetId: { type: "string", description: "The Graylog index-set ID to update" },
+                changes: {
+                    type: "object",
+                    description: "Partial-update subset. Allowed fields: title, description, shards, replicas, writable, rotation_strategy + rotation_strategy_config (atomic pair per D-11), retention_strategy + retention_strategy_config (atomic pair), index_optimization_max_num_segments, index_optimization_disabled, field_type_refresh_interval, index_analyzer. Immutable fields (index_prefix, creation_date) are NOT in this list — they're sourced from current state.",
+                },
+            },
+            required: ["indexSetId", "changes"],
+        },
+    },
 ];

@@ -154,3 +154,8 @@ test("schema-parity: create_index_set", async () => {
     const { CreateIndexSetSchema } = await import("../src/tools/index-sets/schemas.js");
     await assertSchemaParityForTool("create_index_set", CreateIndexSetSchema);
 });
+
+test("schema-parity: update_index_set", async () => {
+    const { UpdateIndexSetSchema } = await import("../src/tools/index-sets/schemas.js");
+    await assertSchemaParityForTool("update_index_set", UpdateIndexSetSchema);
+});
