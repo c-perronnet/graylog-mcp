@@ -1386,32 +1386,32 @@ export const handleListPipelineFunctions = defineListHandler({
 
 **If this table is empty:** Several assumptions are tagged LOW or MEDIUM. The MEDIUM ones (A2, A3) are explicitly recoverable via fallback strategies documented in Pattern 4 and Pitfall 7. None are blocking.
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **D-16 partial-update outcome.**
    - What we know: Phase 3 defaulted to STRICT_NO_ECHO when smoke was unreachable; Phase 2 chose MERGE_FROM_CURRENT for index-sets after a successful smoke.
    - What's unclear: whether `PUT /api/system/pipelines/pipeline/{id}` with `{title: "new"}` only (no `source` field) returns 200 or 400 on 7.0.6.
-   - Recommendation: Plan 01 ships a `04-U1-SMOKE.md` artifact mirroring `03-U1-SMOKE.md`. If smoke is unreachable, default to STRICT_NO_ECHO for both `update_pipeline` and `update_pipeline_rule` (Phase 3 precedent).
+   - **RESOLVED:** Plan 01 ships `04-U1-SMOKE.md` artifact. If smoke is unreachable, default to STRICT_NO_ECHO for both `update_pipeline` and `update_pipeline_rule` (Phase 3 precedent).
 
 2. **D-04 `validate.js` strictness level for arg-count.**
    - What we know: every `ParameterDescriptor` has an `optional()` flag in the Java source; the live function-catalogue surfaces it via `params[].optional`.
    - What's unclear: should `validate.js` error on missing required args, warn, or skip until parse pre-flight catches it?
-   - Recommendation: WARN level only (surface as `parseResult.warnings: [...]`) — let the server be the authoritative gate. Avoids false positives when the catalogue is stale or signature inference is imprecise.
+   - **RESOLVED:** WARN level only (surface as `parseResult.warnings: [...]`) — let the server be the authoritative gate. Avoids false positives when the catalogue is stale or signature inference is imprecise. Plan 01 implements paren-balance + function-name only.
 
 3. **`list_pipeline_functions` signature representation when live + static disagree (Discretion-04).**
    - What we know: live entries carry structured `params: [{name, type, optional, ...}]`; static entries carry a TypeScript-ish signature string.
    - What's unclear: do we render the merged entry's signature from the live structure, or fall through to the static string when the static description is preferred?
-   - Recommendation: render from live `params` when available (line up with live source-of-truth); fall back to static when live is absent. The `validate.js` arg-count uses `merged.params.length` when present.
+   - **RESOLVED:** render from live `params` when available (line up with live source-of-truth); fall back to static when live is absent. The `validate.js` arg-count uses `merged.params.length` when present. Plan 01 function-catalogue.js implements.
 
 4. **Whether to ship a `computeRuleCascadeHash` semantic wrapper around `computeCascadeHash`.**
    - What we know: Phase 3's `computeCascadeHash({streamId, ruleIds, pipelineConnIds, eventDefIds})` works for Phase 4 if we misuse `streamId` as `ruleId` and `pipelineConnIds` as `pipelineIds`.
    - What's unclear: is the readability win worth the +5 LOC wrapper, or do we accept the parameter-name mismatch?
-   - Recommendation: ship the wrapper. Plan 01 adds `computeRuleCascadeHash({ruleId, pipelineIds})` to `_shared/cascade-hash.js`. Documentation, code review, and future delete_event_definition / delete_dashboard cascade ergonomics all benefit.
+   - **RESOLVED:** ship the wrapper. Plan 01 adds `computeRuleCascadeHash({ruleId, pipelineIds})` to `_shared/cascade-hash.js`. Documentation, code review, and future delete_event_definition / delete_dashboard cascade ergonomics all benefit.
 
 5. **Cache invalidation policy for `function-catalogue.js`.**
    - What we know: D-03 says "process-lifetime cache".
    - What's unclear: is a long-running MCP server vulnerable to function-set drift after a Graylog plugin reload?
-   - Recommendation: ship process-lifetime as specified; flag a future `refresh_pipeline_function_catalogue` admin tool if drift becomes operationally visible. CONTEXT.md Deferred Ideas already lists this.
+   - **RESOLVED:** ship process-lifetime as specified; flag a future `refresh_pipeline_function_catalogue` admin tool if drift becomes operationally visible. CONTEXT.md Deferred Ideas already lists this. Plan 01 implements.
 
 ## Sources
 
