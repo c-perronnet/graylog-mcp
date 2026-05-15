@@ -279,6 +279,37 @@ export const toolDefinitions = [
         },
     },
     {
+        name: "update_stream_rule",
+        description: "Update one rule on a Graylog stream. Partial-update via `changes` envelope (field, value, inverted, description). `type` is IMMUTABLE — to change a rule's type, delete + recreate (Pitfall S8: Graylog's CreateStreamRuleRequest.type is a non-nullable Java int that must be present on every PUT; the wrapper echoes it from the pre-flight GET unconditionally). STRICT_NO_ECHO wire-build (per 03-U1-SMOKE.md): only the fields you set in `changes` are sent on the wire, plus the immutable type echoed from current. Pre-flights GET /api/streams/{streamId} for the D-09 parent-mutable check; refuses with reason `stream_immutable` if current.is_editable === false BEFORE the rule GET fires.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                connectionName: { type: "string", description: "Optional per-call connection override" },
+                dryRun: { type: "boolean", description: "Default true. Set to false to apply." },
+                idempotencyKey: { type: "string", description: "Optional agent-supplied idempotency key" },
+                streamId: { type: "string", description: "Parent stream ID (from list_streams)" },
+                ruleId: { type: "string", description: "Rule ID to update (from list_stream_rules)" },
+                changes: { type: "object", description: "Partial-update subset: { field?, value?, inverted?, description? }. `type` is rejected — rule type is immutable." },
+            },
+            required: ["streamId", "ruleId", "changes"],
+        },
+    },
+    {
+        name: "test_stream_match",
+        description: "Test whether a sample message matches the rules on a Graylog stream. SERVER-SIDE evaluation (D-07) — Graylog's authoritative rule-evaluation pipeline is invoked; no JS re-implementation. The response forwards Graylog's per-rule outcome verbatim: { matches: boolean, rules: { <ruleId>: boolean } }. REQUIRES an existing streamId (D-08) — pre-create config testing is out of scope; for new configs use create_stream(dryRun:true) → create for real → test_stream_match against the real id. The wire body wraps the agent's sample message in `{ \"message\": { ... } }` — the literal outer key `message` is required by Graylog's resource method signature (StreamResource.java:561-564).",
+        inputSchema: {
+            type: "object",
+            properties: {
+                connectionName: { type: "string", description: "Optional per-call connection override" },
+                dryRun: { type: "boolean", description: "Default true. Set to false to apply." },
+                idempotencyKey: { type: "string", description: "Optional agent-supplied idempotency key" },
+                streamId: { type: "string", description: "Stream ID to test against (from list_streams)" },
+                message: { type: "object", description: "Sample message as a field-map (e.g. { source: \"host1\", level: 6, message: \"text\" }). The wrapper wraps this in the literal outer key `message` on the wire." },
+            },
+            required: ["streamId", "message"],
+        },
+    },
+    {
         name: "list_field_values",
         description: "List distinct values of a field with message counts. Useful for discovering available sources, environments, logger names, etc. Results are sorted by count descending.",
         inputSchema: {
