@@ -1,0 +1,11 @@
+exports[`snapshot: assertAllToolsRegistered missing-handler error message 1`] = `
+{
+  "errorMessage": "Dispatch assertion failed — tools in tools.js without registered handlers: ghost_x, ghost_y"
+}
+`;
+
+exports[`snapshot: dispatch unknown tool error message 1`] = `
+{
+  "errorMessage": "Tool not found: snapshot_ghost"
+}
+`;

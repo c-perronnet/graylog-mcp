@@ -1,0 +1,64 @@
+exports[`snapshot: defineListHandler default projection [id, title, description] 1`] = `
+{
+  "tool": "list_streams",
+  "connection": "fixture_conn",
+  "count": 2,
+  "limit": 25,
+  "fields": [
+    "id",
+    "title",
+    "description"
+  ],
+  "items": [
+    {
+      "id": "S1",
+      "title": "Stream 1",
+      "description": "first"
+    },
+    {
+      "id": "S2",
+      "title": "Stream 2",
+      "description": "second"
+    }
+  ]
+}
+`;
+
+exports[`snapshot: defineListHandler fields: 'all' returns unprojected items 1`] = `
+{
+  "tool": "list_streams",
+  "connection": "fixture_conn",
+  "count": 1,
+  "limit": 25,
+  "fields": "all",
+  "items": [
+    {
+      "id": "S1",
+      "title": "Stream 1",
+      "description": "first",
+      "extra": "a"
+    }
+  ]
+}
+`;
+
+exports[`snapshot: defineListHandler limit clamped to MAX_LIMIT 1`] = `
+{
+  "tool": "list_streams",
+  "connection": "fixture_conn",
+  "count": 1,
+  "limit": 200,
+  "fields": [
+    "id",
+    "title",
+    "description"
+  ],
+  "items": [
+    {
+      "id": "S1",
+      "title": "T",
+      "description": "d"
+    }
+  ]
+}
+`;

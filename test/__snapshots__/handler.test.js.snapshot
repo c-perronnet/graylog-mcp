@@ -1,0 +1,44 @@
+exports[`snapshot: defineMutatingHandler dry-run happy path 1`] = `
+{
+  "dryRun": true,
+  "tool": "create_stream",
+  "connection": "fixture_conn",
+  "idempotencyKey": "c2563630c56b18bf5dfdb3bda76bea97",
+  "summary": "POST /api/streams",
+  "preview": {
+    "method": "POST",
+    "path": "/api/streams",
+    "body": {
+      "title": "Snapshot fixture stream"
+    }
+  },
+  "postApplyEstimate": {
+    "id": "__SERVER_ASSIGNED__"
+  },
+  "existingMatches": [],
+  "applyHint": "Re-call with dryRun: false to apply"
+}
+`;
+
+exports[`snapshot: defineMutatingHandler idempotency-key is deterministic 1`] = `
+{
+  "idempotencyKey": "bd1c6d32dec969f5ce696412646a7e81",
+  "matched": true
+}
+`;
+
+exports[`snapshot: defineMutatingHandler writable=false short-circuit 1`] = `
+{
+  "isError": true,
+  "reason": "connection_read_only",
+  "contentText": "Connection \\"readonly_fixture\\" is marked read-only (writable: false). Refusing create_stream."
+}
+`;
+
+exports[`snapshot: defineMutatingHandler zod-validation-failure 1`] = `
+{
+  "isError": true,
+  "contentType": "text",
+  "text": "title: String must contain at least 1 character(s)"
+}
+`;

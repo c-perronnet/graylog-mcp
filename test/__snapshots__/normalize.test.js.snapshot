@@ -1,0 +1,23 @@
+exports[`snapshot: toIdBody across 3 Graylog create-response shapes 1`] = `
+{
+  "stream_response": {
+    "id": "S1",
+    "body": {
+      "stream_id": "S1"
+    }
+  },
+  "input_response": {
+    "id": "I1",
+    "body": {
+      "id": "I1",
+      "title": "input1"
+    }
+  },
+  "extractor_response": {
+    "id": "E1",
+    "body": {
+      "extractor_id": "E1"
+    }
+  }
+}
+`;
