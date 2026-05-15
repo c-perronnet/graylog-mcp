@@ -29,7 +29,7 @@ Out of scope: dashboards (Phase 6); blueprints (Phase 6); end-to-end E2E test of
 
 ### Notification types (ROADMAP SC3)
 
-- **D-05:** `create_event_notification` uses a `z.discriminatedUnion("type", [...])` covering the 4 named types in REQUIREMENTS.md: `email-notification-v1`, `http-notification-v2`, `slack-notification-v1`, `pagerduty-notification-v1`. Plus 2 broader common types from Graylog's actual catalogue (researcher verifies): `script-notification-v1`, `teams-notification-v1`. Total: 6 strict variants.
+- **D-05:** (UPDATED 2026-05-15 after research source-walk) `create_event_notification` uses a `z.discriminatedUnion("type", [...])` covering 6 source-verified variants: `email-notification-v1`, `http-notification-v1`, `http-notification-v2`, `slack-notification-v1`, `pagerduty-notification-v2`, `teams-notification-v2`. Original draft incorrectly named `script-notification-v1` (does not exist on 7.0.6) and `pagerduty-notification-v1` (correct is `-v2`); researcher corrected.
 - **D-06:** Discriminator string is the literal Graylog notification-type identifier (with `-v1` / `-v2` suffix). Closed enum; invalid types reject at zod parse before any HTTP call.
 
 ### Enable/disable (ROADMAP SC4)
