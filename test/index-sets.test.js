@@ -13,6 +13,15 @@ import {
     setActiveConnection,
 } from "../src/config.js";
 import { GraylogNotFoundError } from "../src/graylog/errors.js";
+// Plan 02-02 Task 1 — strategies module + CreateIndexSetSchema imports.
+import { CreateIndexSetSchema } from "../src/tools/index-sets/schemas.js";
+import {
+    ROTATION_FQCN,
+    RETENTION_FQCN,
+    buildRotationBlock,
+    buildRetentionBlock,
+    aliasToConfigOrError,
+} from "../src/tools/index-sets/strategies.js";
 
 // Plan 02-01 Task 4 — list_index_sets (INDEX-01) + get_index_set (INDEX-02).
 // Two read tools that round out the index-sets domain along with the
@@ -213,4 +222,204 @@ test("get_index_set zod rejects missing indexSetId", async () => {
     });
     assert.equal(res.isError, true);
     assert.match(res.content[0].text, /indexSetId/);
+});
+
+// =====================================================================
+// Plan 02-02 Task 1 — strategies.js + 6 strict configs + CreateIndexSetSchema
+// =====================================================================
+
+const TIME_BASED_FQCN = "org.graylog2.indexer.rotation.strategies.TimeBasedRotationStrategy";
+const TIME_BASED_CONFIG_FQCN = "org.graylog2.indexer.rotation.strategies.TimeBasedRotationStrategyConfig";
+const SIZE_BASED_FQCN = "org.graylog2.indexer.rotation.strategies.SizeBasedRotationStrategy";
+const SIZE_BASED_CONFIG_FQCN = "org.graylog2.indexer.rotation.strategies.SizeBasedRotationStrategyConfig";
+const MESSAGE_COUNT_FQCN = "org.graylog2.indexer.rotation.strategies.MessageCountRotationStrategy";
+const MESSAGE_COUNT_CONFIG_FQCN = "org.graylog2.indexer.rotation.strategies.MessageCountRotationStrategyConfig";
+const DELETE_FQCN = "org.graylog2.indexer.retention.strategies.DeletionRetentionStrategy";
+const DELETE_CONFIG_FQCN = "org.graylog2.indexer.retention.strategies.DeletionRetentionStrategyConfig";
+const CLOSE_FQCN = "org.graylog2.indexer.retention.strategies.ClosingRetentionStrategy";
+const CLOSE_CONFIG_FQCN = "org.graylog2.indexer.retention.strategies.ClosingRetentionStrategyConfig";
+
+// Helper: build a fully-valid CreateIndexSetSchema payload so individual tests
+// only mutate the field under test. Defaults: message-count rotation + delete
+// retention (smallest config shapes for easy override).
+function validCreatePayload(overrides = {}) {
+    return {
+        title: "App errors",
+        index_prefix: "app_errors",
+        rotation_strategy: "message-count",
+        rotation_strategy_config: { max_docs_per_index: 1000000 },
+        retention_strategy: "delete",
+        retention_strategy_config: { max_number_of_indices: 30 },
+        ...overrides,
+    };
+}
+
+// -------- Test 1: CreateIndexSetSchema rejects missing rotation_strategy (D-10) --------
+
+test("create_index_set rejects missing rotation_strategy (D-10)", () => {
+    const payload = validCreatePayload();
+    delete payload.rotation_strategy;
+    const result = CreateIndexSetSchema.safeParse(payload);
+    assert.equal(result.success, false);
+    // The issue should mention rotation_strategy somewhere.
+    const issues = result.error.issues.map((i) => i.path.join(".")).join(",");
+    assert.match(issues, /rotation_strategy/);
+});
+
+// -------- Test 2: CreateIndexSetSchema rejects missing retention_strategy_config (D-10) --------
+
+test("create_index_set rejects missing retention_strategy_config (D-10)", () => {
+    const payload = validCreatePayload();
+    delete payload.retention_strategy_config;
+    const result = CreateIndexSetSchema.safeParse(payload);
+    assert.equal(result.success, false);
+    const issues = result.error.issues.map((i) => i.path.join(".")).join(",");
+    assert.match(issues, /retention_strategy_config/);
+});
+
+// -------- Test 3: aliasToConfigOrError rejects "archive" with structured reason --------
+
+test("create_index_set aliasToConfigOrError rejects archive retention with reason archive_not_supported", () => {
+    const result = aliasToConfigOrError("retention", "archive", { max_number_of_indices: 30 });
+    assert.equal(result.isError, true);
+    assert.equal(result.reason, "archive_not_supported");
+    assert.match(result.message, /archive/i);
+});
+
+// -------- Test 4: CreateIndexSetSchema rejects unknown rotation alias --------
+
+test("create_index_set rejects unknown rotation_strategy alias (closed z.enum)", () => {
+    const payload = validCreatePayload({ rotation_strategy: "bogus-strategy" });
+    const result = CreateIndexSetSchema.safeParse(payload);
+    assert.equal(result.success, false);
+    const issues = result.error.issues.map((i) => i.path.join(".")).join(",");
+    assert.match(issues, /rotation_strategy/);
+});
+
+// -------- Test 5: time-based config without rotation_period rejected (variant narrow) --------
+
+test("create_index_set rejects time-based config without rotation_period (superRefine narrow)", () => {
+    const payload = validCreatePayload({
+        rotation_strategy: "time-based",
+        rotation_strategy_config: {}, // missing rotation_period
+    });
+    const result = CreateIndexSetSchema.safeParse(payload);
+    assert.equal(result.success, false);
+    const issue = result.error.issues.find((i) => i.path.join(".") === "rotation_strategy_config.rotation_period");
+    assert.ok(issue, `expected an issue at rotation_strategy_config.rotation_period; got: ${JSON.stringify(result.error.issues)}`);
+});
+
+// -------- Test 6: time-based config with non-ISO-8601 rotation_period rejected --------
+
+test("create_index_set rejects time-based config with rotation_period not ISO-8601", () => {
+    const payload = validCreatePayload({
+        rotation_strategy: "time-based",
+        rotation_strategy_config: { rotation_period: "one day" },
+    });
+    const result = CreateIndexSetSchema.safeParse(payload);
+    assert.equal(result.success, false);
+    const issue = result.error.issues.find((i) => i.path.join(".") === "rotation_strategy_config.rotation_period");
+    assert.ok(issue, "expected ISO-8601 validation failure on rotation_period");
+});
+
+// -------- Test 7: size-based config without max_size rejected --------
+
+test("create_index_set rejects size-based config without max_size", () => {
+    const payload = validCreatePayload({
+        rotation_strategy: "size-based",
+        rotation_strategy_config: {},
+    });
+    const result = CreateIndexSetSchema.safeParse(payload);
+    assert.equal(result.success, false);
+    const issue = result.error.issues.find((i) => i.path.join(".") === "rotation_strategy_config.max_size");
+    assert.ok(issue, "expected an issue at rotation_strategy_config.max_size");
+});
+
+// -------- Test 8: size-based config with max_size:0 rejected (z.int().positive()) --------
+
+test("create_index_set rejects size-based config with max_size:0", () => {
+    const payload = validCreatePayload({
+        rotation_strategy: "size-based",
+        rotation_strategy_config: { max_size: 0 },
+    });
+    const result = CreateIndexSetSchema.safeParse(payload);
+    assert.equal(result.success, false);
+    const issue = result.error.issues.find((i) => i.path.join(".") === "rotation_strategy_config.max_size");
+    assert.ok(issue, "expected an issue at rotation_strategy_config.max_size");
+});
+
+// -------- Test 9: message-count + close with valid configs accepted --------
+
+test("create_index_set accepts message-count rotation + close retention with valid configs", () => {
+    const payload = validCreatePayload({
+        rotation_strategy: "message-count",
+        rotation_strategy_config: { max_docs_per_index: 5000000 },
+        retention_strategy: "close",
+        retention_strategy_config: { max_number_of_indices: 60 },
+    });
+    const result = CreateIndexSetSchema.safeParse(payload);
+    assert.equal(result.success, true, JSON.stringify(result.error?.issues));
+});
+
+// -------- Test 10: buildRotationBlock time-based returns the exact 2-key wire block --------
+
+test("strategies.js buildRotationBlock(time-based, {rotation_period:P1D}) returns the exact 2-key wire block", () => {
+    const block = buildRotationBlock("time-based", { rotation_period: "P1D" });
+    assert.deepEqual(block, {
+        rotation_strategy_class: TIME_BASED_FQCN,
+        rotation_strategy: {
+            type: TIME_BASED_CONFIG_FQCN,
+            rotation_period: "P1D",
+        },
+    });
+});
+
+// -------- Test 11: buildRetentionBlock mirror for delete + close --------
+
+test("strategies.js buildRetentionBlock returns the exact wire block for delete + close", () => {
+    const deleteBlock = buildRetentionBlock("delete", { max_number_of_indices: 30 });
+    assert.deepEqual(deleteBlock, {
+        retention_strategy_class: DELETE_FQCN,
+        retention_strategy: {
+            type: DELETE_CONFIG_FQCN,
+            max_number_of_indices: 30,
+        },
+    });
+    const closeBlock = buildRetentionBlock("close", { max_number_of_indices: 60 });
+    assert.deepEqual(closeBlock, {
+        retention_strategy_class: CLOSE_FQCN,
+        retention_strategy: {
+            type: CLOSE_CONFIG_FQCN,
+            max_number_of_indices: 60,
+        },
+    });
+});
+
+// -------- Test 12: buildRotationBlock throws for unknown alias --------
+
+test("strategies.js buildRotationBlock throws for unknown alias", () => {
+    assert.throws(
+        () => buildRotationBlock("nonexistent", {}),
+        /nonexistent|unknown|alias/i,
+    );
+});
+
+// -------- Module sanity: ROTATION_FQCN / RETENTION_FQCN maps shape --------
+
+test("strategies.js ROTATION_FQCN exposes the 3 rotation aliases with cls + configType pairs", () => {
+    assert.equal(ROTATION_FQCN["time-based"].cls, TIME_BASED_FQCN);
+    assert.equal(ROTATION_FQCN["time-based"].configType, TIME_BASED_CONFIG_FQCN);
+    assert.equal(ROTATION_FQCN["size-based"].cls, SIZE_BASED_FQCN);
+    assert.equal(ROTATION_FQCN["size-based"].configType, SIZE_BASED_CONFIG_FQCN);
+    assert.equal(ROTATION_FQCN["message-count"].cls, MESSAGE_COUNT_FQCN);
+    assert.equal(ROTATION_FQCN["message-count"].configType, MESSAGE_COUNT_CONFIG_FQCN);
+});
+
+test("strategies.js RETENTION_FQCN exposes the 2 retention aliases (delete + close)", () => {
+    assert.equal(RETENTION_FQCN["delete"].cls, DELETE_FQCN);
+    assert.equal(RETENTION_FQCN["delete"].configType, DELETE_CONFIG_FQCN);
+    assert.equal(RETENTION_FQCN["close"].cls, CLOSE_FQCN);
+    assert.equal(RETENTION_FQCN["close"].configType, CLOSE_CONFIG_FQCN);
+    // archive intentionally absent — aliasToConfigOrError handles rejection.
+    assert.equal(RETENTION_FQCN["archive"], undefined);
 });
