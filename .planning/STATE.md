@@ -2,8 +2,8 @@
 gsd_state_version: 1.0
 milestone: v2.3
 milestone_name: milestone
-status: Ready to execute
-last_updated: "2026-05-15T23:19:47.241Z"
+status: Executing Phase 05
+last_updated: "2026-05-15T23:19:58.877Z"
 progress:
   total_phases: 8
   completed_phases: 5
@@ -27,8 +27,8 @@ progress:
 
 ## Current Position
 
-Phase: 5
-Plan: Not started
+Phase: 05 (events-notifications) — EXECUTING
+Plan: 1 of 5
 
 - **Phase**: 4 — Pipelines, pipeline rules & connections
 - **Plan**: 5 of 6 complete (Plan 04-04 wave-3 ships the 3 final pipeline tools: delete_pipeline_rule (PIPE-10) with D-14 cascade-hash + drift refusal via computeRuleCascadeHash (Plan 04-01) + Strategy A paginated walk over /api/system/pipelines/rule/paginated reading the server-computed used_in_pipelines join (Pitfall 7 safety cap: 200 pages × 50/page = 10000 rules max); simulate_pipeline_rule (PIPE-12, M3 acceptance gate — ROADMAP SC2) with Pitfall 1 critical JSON.stringify(args.message) on the wire body (forgetting this 400s with "Cannot deserialize value of type java.lang.String from Object value"); list_pipeline_functions (PIPE-11, ROADMAP SC3) as a thin defineListHandler over Plan 04-01's getMergedCatalogue (Pitfall 5 live-only function names accepted via merged catalogue). M3 acceptance gate proven: rule setting `alert:true` when `level >= 4` shows post-rule field change in /simulate response. D-14 acceptance gate proven: drift between dry-run + apply returns isError reason:cascade_changed_since_preview; DELETE NEVER fires. Two frozen 64-hex hash literals pinned for Plan 06 snapshot drift detection: empty-cascade = 9541cfc2cf6b92acde474f487f3e824942c1e0df4ae4308a60fa645afe1155b1; two-pipeline-cascade = 66267019f60955ff99686f3dbf343f40580996e22d5ead79045743f1d075e3a1.
