@@ -883,4 +883,56 @@ export const toolDefinitions = [
             },
         },
     },
+    // ====================================================================
+    // Phase 2 — Index sets create + update (Plan 02-02; INDEX-03, INDEX-04)
+    // ====================================================================
+    {
+        name: "create_index_set",
+        description: "Create a Graylog index set (storage configuration for messages). Rotation + retention strategies are REQUIRED (D-10 — destruction policies must never be defaulted). Friendly aliases (D-08): rotation_strategy ∈ ['time-based', 'size-based', 'message-count']; retention_strategy ∈ ['delete', 'close']. NOTE: 'archive' retention is reserved for a future milestone (requires Graylog Enterprise plugin) — passing it returns a structured error with reason 'archive_not_supported'. Per-alias config shapes (D-09): time-based → { rotation_period: 'P1D' (ISO-8601), max_rotation_period?, rotate_empty_index_set? }; size-based → { max_size: <bytes> }; message-count → { max_docs_per_index: <int> }; delete/close → { max_number_of_indices: <int> }. postApplyEstimate.id is __SERVER_ASSIGNED__ — DO NOT reuse it; use the real id from the apply response. Pre-flights a list call to surface existingMatches[] when an index set with the same title exists (M5 idempotency).",
+        inputSchema: {
+            type: "object",
+            properties: {
+                connectionName: { type: "string", description: "Optional per-call connection override" },
+                dryRun: { type: "boolean", description: "Default true. Set to false to apply." },
+                idempotencyKey: { type: "string", description: "Optional agent-supplied idempotency key" },
+                title: { type: "string", description: "Human-readable index-set title (also matched by M5 idempotency pre-flight)" },
+                description: { type: "string", description: "Optional free-form description (default empty string)" },
+                index_prefix: { type: "string", description: "Elasticsearch index prefix — lowercase alphanumerics + _ + - (e.g. 'app_errors')" },
+                shards: { type: "number", description: "Elasticsearch shards per index (default 4)" },
+                replicas: { type: "number", description: "Elasticsearch replicas per shard (default 0; single-node default)" },
+                rotation_strategy: {
+                    type: "string",
+                    enum: ["time-based", "size-based", "message-count"],
+                    description: "Required (D-10). Friendly alias (D-08); wrapper translates to Graylog FQCN at wire-build time.",
+                },
+                rotation_strategy_config: {
+                    type: "object",
+                    description: "Required (D-10). Per-alias shape: time-based requires rotation_period (ISO-8601); size-based requires max_size (bytes); message-count requires max_docs_per_index.",
+                },
+                retention_strategy: {
+                    type: "string",
+                    enum: ["delete", "close", "archive"],
+                    description: "Required (D-10). 'archive' returns a structured error with reason archive_not_supported.",
+                },
+                retention_strategy_config: {
+                    type: "object",
+                    description: "Required (D-10). delete/close shape: { max_number_of_indices: <int> }.",
+                },
+                index_analyzer: { type: "string", description: "Elasticsearch analyzer (default 'standard')" },
+                index_optimization_max_num_segments: { type: "number", description: "Force-merge target segment count (default 1)" },
+                index_optimization_disabled: { type: "boolean", description: "Disable force-merge after rotation (default false)" },
+                field_type_refresh_interval: { type: "number", description: "Field-type refresh interval in ms (default 5000)" },
+                writable: { type: "boolean", description: "Whether the index set is writable (default true; setting false means new messages won't route here)" },
+                use_legacy_rotation: { type: "boolean", description: "Use the legacy rotation engine (default true; Graylog 7+ data-tiering is out of scope for this milestone)" },
+            },
+            required: [
+                "title",
+                "index_prefix",
+                "rotation_strategy",
+                "rotation_strategy_config",
+                "retention_strategy",
+                "retention_strategy_config",
+            ],
+        },
+    },
 ];

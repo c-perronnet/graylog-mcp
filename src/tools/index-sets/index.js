@@ -11,8 +11,10 @@
 import { register } from "../../dispatch.js";
 import { handleListIndexSets } from "./list-index-sets.js";
 import { handleGetIndexSet } from "./get-index-set.js";
+import { handleCreateIndexSet } from "./create-index-set.js";
 import { handleAwaitSystemJob } from "../_shared/system-job.js";
 
 register("list_index_sets", handleListIndexSets);
 register("get_index_set", handleGetIndexSet);
+register("create_index_set", handleCreateIndexSet);
 register("await_system_job", handleAwaitSystemJob);

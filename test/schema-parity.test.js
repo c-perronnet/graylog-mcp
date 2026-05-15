@@ -140,3 +140,17 @@ test("schema-parity: await_system_job", async () => {
     const { AwaitSystemJobSchema } = await import("../src/tools/_shared/system-job.js");
     await assertSchemaParityForTool("await_system_job", AwaitSystemJobSchema);
 });
+
+// ---------------------------------------------------------------------------
+// Plan 02-02 enrichment — 2 new mutating tools (create + update index_set)
+//
+// CreateIndexSetSchema uses .superRefine() (per-alias variant narrow), and
+// UpdateIndexSetSchema uses .superRefine() at the `changes` level. The
+// existing getShape helper handles ZodEffects via _def.schema.shape, so both
+// schemas are parity-checkable.
+// ---------------------------------------------------------------------------
+
+test("schema-parity: create_index_set", async () => {
+    const { CreateIndexSetSchema } = await import("../src/tools/index-sets/schemas.js");
+    await assertSchemaParityForTool("create_index_set", CreateIndexSetSchema);
+});
