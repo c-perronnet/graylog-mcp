@@ -56,7 +56,7 @@ import { makeClient } from "../../graylog/client.js";
  * @returns {(request: { params?: { arguments?: object } }) => Promise<object>}
  */
 export function defineMutatingHandler(spec) {
-    const { name, schema, build, apply, summarize } = spec;
+    const { name, schema, build, apply, summarize, requireConfirm } = spec;
 
     return async function handler(request) {
         const rawArgs = request?.params?.arguments ?? {};
@@ -146,6 +146,12 @@ export function defineMutatingHandler(spec) {
                         // FOUND-11: populated by build() when it does a list-pre-check
                         // via findExistingMatches (Phase 1+); always an array.
                         existingMatches: req.existingMatches ?? [],
+                        // Plan 02-01 / D-01 (Phase 2): build() may populate
+                        // _confirmationToken when a destructive operation needs
+                        // an apply-time confirmation hash (e.g. delete_index_set
+                        // with deleteIndices:true). Opt-in only — absent when
+                        // build() didn't set it.
+                        ...(req._confirmationToken ? { confirmationToken: req._confirmationToken } : {}),
                         // Plan 01-02 / D-05: build() may populate cascades to surface
                         // server-side side-effects (e.g. delete_input cascade-deletes
                         // extractors). Opt-in only — absent when build() didn't set it.
@@ -154,6 +160,34 @@ export function defineMutatingHandler(spec) {
                     }),
                 }],
             };
+        }
+
+        // 6b. Plan 02-01 (Option A): wrapper-level confirmation gate.
+        //     When a destructive tool (e.g. delete_index_set with
+        //     deleteIndices:true) declares a requireConfirm callback that
+        //     returns a non-null token, the wrapper checks args.confirm ===
+        //     token BEFORE apply(). Mismatched OR missing confirm → structured
+        //     error; apply() never runs.
+        //     Per D-16: this gate fires AFTER the writable gate (step 3) so a
+        //     read-only connection refuses the call before any confirmation
+        //     check — defense in depth.
+        //     Per D-03: if requireConfirm returns null/undefined the gate is a
+        //     no-op (e.g. delete_index_set with deleteIndices:false issues no
+        //     token and the requireConfirm callback returns null).
+        if (typeof requireConfirm === "function") {
+            const expectedToken = requireConfirm({ args, req });
+            if (expectedToken !== null && expectedToken !== undefined) {
+                if (args.confirm !== expectedToken) {
+                    return {
+                        isError: true,
+                        reason: "confirmation_mismatch",
+                        content: [{
+                            type: "text",
+                            text: `[${name}] confirmation_mismatch: agent must echo the dry-run confirmationToken in args.confirm to apply this destructive operation.`,
+                        }],
+                    };
+                }
+            }
         }
 
         // 7. Apply

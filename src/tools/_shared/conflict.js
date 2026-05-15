@@ -30,6 +30,7 @@ export async function findExistingMatches(client, opts = {}) {
         : (response?.inputs
             ?? response?.streams
             ?? response?.extractors
+            ?? response?.index_sets
             ?? response?.items
             ?? []);
     return items.filter(opts.matchFn).map((item) => ({
