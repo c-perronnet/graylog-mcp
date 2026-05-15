@@ -194,6 +194,35 @@ export const toolDefinitions = [
             required: ["streamId", "changes"],
         },
     },
+    // ----- Phase 3 Plan 02 stream lifecycle (STREAM-06) -----
+    {
+        name: "start_stream",
+        description: "Resume a paused Graylog stream (set desired state to RUNNING). Maps to POST /api/streams/{streamId}/resume — no request body required. Pre-flights GET /api/streams/{streamId}; refuses with reason `stream_immutable` if current.is_editable === false BEFORE the POST fires. NOTE: This sets the DESIRED state; actual `disabled` flag may briefly remain true until Graylog's stream registry converges. Use list_streams to verify state.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                connectionName: { type: "string", description: "Optional per-call connection override" },
+                dryRun: { type: "boolean", description: "Default true. Set to false to apply." },
+                idempotencyKey: { type: "string", description: "Optional agent-supplied idempotency key" },
+                streamId: { type: "string", description: "Stream ID (from list_streams)" },
+            },
+            required: ["streamId"],
+        },
+    },
+    {
+        name: "pause_stream",
+        description: "Pause a running Graylog stream (set desired state to STOPPED). Maps to POST /api/streams/{streamId}/pause — no request body required. Pre-flights GET /api/streams/{streamId}; refuses with reason `stream_immutable` if current.is_editable === false BEFORE the POST fires. NOTE: This sets the DESIRED state; actual `disabled` flag may briefly remain false until Graylog's stream registry converges. Use list_streams to verify state.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                connectionName: { type: "string", description: "Optional per-call connection override" },
+                dryRun: { type: "boolean", description: "Default true. Set to false to apply." },
+                idempotencyKey: { type: "string", description: "Optional agent-supplied idempotency key" },
+                streamId: { type: "string", description: "Stream ID (from list_streams)" },
+            },
+            required: ["streamId"],
+        },
+    },
     {
         name: "list_field_values",
         description: "List distinct values of a field with message counts. Useful for discovering available sources, environments, logger names, etc. Results are sorted by count descending.",

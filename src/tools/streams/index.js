@@ -16,12 +16,16 @@ import { register } from "../../dispatch.js";
 import { handleListStreams } from "./list-streams.js";
 import { handleGetStream } from "./get-stream.js";
 import { handleListStreamRules } from "./list-stream-rules.js";
-// Plan 03-02 mutating tools — STREAM-03, STREAM-04.
+// Plan 03-02 mutating tools — STREAM-03, STREAM-04, STREAM-06.
 import { handleCreateStream } from "./create-stream.js";
 import { handleUpdateStream } from "./update-stream.js";
+import { handleStartStream } from "./start-stream.js";
+import { handlePauseStream } from "./pause-stream.js";
 
 register("list_streams", handleListStreams);
 register("get_stream", handleGetStream);
 register("list_stream_rules", handleListStreamRules);
 register("create_stream", handleCreateStream);
 register("update_stream", handleUpdateStream);
+register("start_stream", handleStartStream);
+register("pause_stream", handlePauseStream);
