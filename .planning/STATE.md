@@ -2,8 +2,8 @@
 gsd_state_version: 1.0
 milestone: v2.3
 milestone_name: milestone
-status: Ready to execute
-last_updated: "2026-05-15T21:53:47.159Z"
+status: Phase complete — ready for verification
+last_updated: "2026-05-15T22:08:54.082Z"
 progress:
   total_phases: 8
   completed_phases: 4
@@ -14,7 +14,7 @@ progress:
 
 # Project Memory: Graylog MCP — Full Admin Surface
 
-**Last updated:** 2026-05-15 (Plan 04-05 complete)
+**Last updated:** 2026-05-16 (Plan 04-04 complete — 5 of 6 Phase 4 plans done; Plan 04-06 final close remaining)
 
 ## Project Reference
 
@@ -28,12 +28,12 @@ progress:
 ## Current Position
 
 Phase: 04 (pipelines-pipeline-rules-connections) — EXECUTING
-Plan: 6 of 6 (Plan 04-05 complete; Plan 04-04 still queued in independent wave 3; Plan 04-06 final close)
+Plan: 5 of 6 complete (Plan 04-04 just shipped; Plan 04-06 final close remaining)
 
 - **Phase**: 4 — Pipelines, pipeline rules & connections
-- **Plan**: 4 of 6 complete (04-05 shipped wave-2 ahead of wave-3 04-04: connect_pipelines_to_stream + disconnect_pipelines_from_stream — PIPE-13/14 with GET-merge-POST and GET-subtract-POST client-side set arithmetic wrapping Graylog's REPLACE-the-full-set POST /api/system/pipelines/connections/to_stream endpoint. Pitfall 2 acceptance gate proven for BOTH handlers — attaching ["new"] to a stream with current=[a,b] produces wire body.pipeline_ids=["a","b","new"] (NOT ["new"] which would silently disconnect a and b); detaching [b,c] from current=[a,b,c] produces ["a"] (NOT [] which would silently disconnect a). 404 on GET pre-flight treated as empty current set (Assumption A7 verified). 5xx propagates via wrapGraylogError; POST NEVER fires. D-07 writable gate short-circuits BEFORE the GET. existingMatches surfaces idempotency: already_connected for connect, not_currently_connected for disconnect. Alphabetical wire sort for deterministic snapshots. Pre-mutation snapshot order in existingMatches (check has() BEFORE add()/delete()) preserves idempotency-reporting correctness. 1 Rule 3 deviation: brittle absolute count test from 04-03 retargeted 63→65; comment updated to document wave structure. src/graylog/errors.js NOT modified (duck-typed 404 detection via err?.isGraylogError && err.status === 404). No new npm deps.
-- **Status**: 642 tests / 18 suites green (+24 net-new over Plan 04-03 baseline of 618 — 21 pipelines tests covering connect HAPPY union + Pitfall 2 acceptance gate + 404 + idempotency + partial-idempotency + deterministic sort + 5xx + writable + paths + apply round-trip; disconnect HAPPY subtract + Pitfall 2 mirror + detach-all + no-op detect + 404 with POST consistency + 404 dry-run idempotency + deterministic sort + 5xx + writable + apply round-trip + 2 schema-layer tests; 2 schema-parity tests; plus retarget of count test). All Phase 0 + Phase 1 + Phase 2 + Phase 3 + Phase 04-01/02/03 contracts preserved. 2 new tools registered (PIPE-13, PIPE-14); tool count 63 → 65. Plan 04-04 (independent wave 3) will land 3 more tools → 68 final at phase close. assertAllToolsRegistered passes.
-- **Progress bar**: `[█████████░] 93%` (25 of 27 milestone plans complete: 6 Phase 0 + 5 Phase 1 + 4 Phase 2 + 5 Phase 3 + 4 Phase 4 + 1 Phase 2 polish; remaining: 2 Phase 4 plans (04-04 + 04-06) + Phase 5-7 + Phase 2 polish residue per ROADMAP)
+- **Plan**: 5 of 6 complete (Plan 04-04 wave-3 ships the 3 final pipeline tools: delete_pipeline_rule (PIPE-10) with D-14 cascade-hash + drift refusal via computeRuleCascadeHash (Plan 04-01) + Strategy A paginated walk over /api/system/pipelines/rule/paginated reading the server-computed used_in_pipelines join (Pitfall 7 safety cap: 200 pages × 50/page = 10000 rules max); simulate_pipeline_rule (PIPE-12, M3 acceptance gate — ROADMAP SC2) with Pitfall 1 critical JSON.stringify(args.message) on the wire body (forgetting this 400s with "Cannot deserialize value of type java.lang.String from Object value"); list_pipeline_functions (PIPE-11, ROADMAP SC3) as a thin defineListHandler over Plan 04-01's getMergedCatalogue (Pitfall 5 live-only function names accepted via merged catalogue). M3 acceptance gate proven: rule setting `alert:true` when `level >= 4` shows post-rule field change in /simulate response. D-14 acceptance gate proven: drift between dry-run + apply returns isError reason:cascade_changed_since_preview; DELETE NEVER fires. Two frozen 64-hex hash literals pinned for Plan 06 snapshot drift detection: empty-cascade = 9541cfc2cf6b92acde474f487f3e824942c1e0df4ae4308a60fa645afe1155b1; two-pipeline-cascade = 66267019f60955ff99686f3dbf343f40580996e22d5ead79045743f1d075e3a1.
+- **Status**: 687 tests / 18 suites green (+45 net-new over Plan 04-05 baseline of 642 — 15 delete_pipeline_rule tests covering schema, HAPPY paths, Strategy A multi-page + early-exit + safety cap, apply HAPPY/DRIFT/CONFIRMATION MISMATCH, writable:false short-circuit, URL paths, fallback used_in_pipelines location, cascade_preflight_failed, plus 2 frozen-hash literal pins; 11 simulate_pipeline_rule tests including M3 acceptance gate + Pitfall 1 JSON-string body proof + Discretion-03 structured/raw mutual exclusion + C4 gate carried forward + D-07 writable short-circuit + paths + D-09 dryRun-uniform; 9 list_pipeline_functions tests including HAPPY merged catalogue + Pitfall 5 live-only + D-03 live-wins + cache fetch-once + cache isolation + category filter + deprecated_only filter + narrow projection + URL; 3 schema-parity tests + dispatch wiring test; tool count test retargeted 65→68). All Phase 0/1/2/3 + Phase 04-01/02/03/05 contracts preserved. 3 new tools registered (PIPE-10, PIPE-11, PIPE-12); tool count 65 → 68. PIPE-01..14 ALL shipped (Phase 4 minus Plan 04-06 snapshot fixtures + VALIDATION flip). assertAllToolsRegistered passes. src/graylog/errors.js NOT modified. No new npm deps.
+- **Progress bar**: `[█████████░] 93%` (26 of 27 milestone plans complete: 6 Phase 0 + 5 Phase 1 + 4 Phase 2 + 5 Phase 3 + 5 Phase 4 + 1 Phase 2 polish; remaining: Plan 04-06 final close + Phase 5-7 + Phase 2 polish residue per ROADMAP)
 
 ## Performance Metrics
 
@@ -66,6 +66,7 @@ Plan: 6 of 6 (Plan 04-05 complete; Plan 04-04 still queued in independent wave 3
 | Phase 04 P02 | ~10 min | 2 tasks | 11 files |
 | Phase 04-pipelines-pipeline-rules-connections P03 | 11min | 2 tasks | 8 files |
 | Phase 04 P05 | ~6 min | 1 tasks | 7 files |
+| Phase 04-pipelines-pipeline-rules-connections P04 | 11 min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
