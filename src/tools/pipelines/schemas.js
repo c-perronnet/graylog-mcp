@@ -271,3 +271,37 @@ export const UpdatePipelineRuleSchema = mutatingBase.extend({
     ruleId: z.string().min(1),
     changes: UpdatePipelineRuleChangesShape,
 });
+
+// ---------------------------------------------------------------------------
+// Plan 04-05 — Pipeline-stream connection schemas (PIPE-13/14).
+//
+// CRITICAL — Pitfall 2 (RESEARCH lines 1112-1120): POST
+// /api/system/pipelines/connections/to_stream is REPLACE-the-full-set
+// semantics (PipelineConnectionsResource.java:81-100 — connectionsService.save
+// is full replacement, NOT merge). To implement "attach pipelines" (PIPE-13)
+// and "detach pipelines" (PIPE-14) at the agent boundary, the WRAPPER does
+// the merge/subtract client-side. Schema-layer enforcement: pipelineIds is
+// REQUIRED and non-empty (`.min(1)`) for BOTH — the agent must commit to
+// at least one pipeline ID to either attach or detach.
+//
+// Both share the same wire endpoint shape (PipelineConnections{stream_id,
+// pipeline_ids}) but the handler-side build() differs:
+//   - PIPE-13: GET-merge-POST (union with current set, sorted)
+//   - PIPE-14: GET-subtract-POST (difference from current set, sorted)
+// ---------------------------------------------------------------------------
+
+// PIPE-13 — connect_pipelines_to_stream. ATTACH pipelines to a stream;
+// Graylog endpoint is REPLACE-the-full-set, the wrapper does GET-merge-POST
+// client-side to preserve previously-connected pipelines (Pitfall 2).
+export const ConnectPipelinesToStreamSchema = mutatingBase.extend({
+    streamId: z.string().min(1),
+    pipelineIds: z.array(z.string().min(1)).min(1, "pipelineIds must contain at least one pipeline ID"),
+});
+
+// PIPE-14 — disconnect_pipelines_from_stream. DETACH pipelines from a
+// stream; same wire endpoint as PIPE-13, wrapper does GET-subtract-POST to
+// preserve remaining connections (Pitfall 2 mirror).
+export const DisconnectPipelinesFromStreamSchema = mutatingBase.extend({
+    streamId: z.string().min(1),
+    pipelineIds: z.array(z.string().min(1)).min(1, "pipelineIds must contain at least one pipeline ID"),
+});

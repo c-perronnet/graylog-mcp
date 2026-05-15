@@ -393,16 +393,19 @@ test("dispatch resolves list_pipelines/get_pipeline/delete_pipeline via the new 
     assert.ok(Array.isArray(payload.items));
 });
 
-test("assertAllToolsRegistered passes after Plan 04-03 Task 2 registers PIPE-06..PIPE-09 (count = 63)", async () => {
+test("assertAllToolsRegistered passes after Plan 04-05 registers PIPE-13/14 (count = 65)", async () => {
     const { dispatch, assertAllToolsRegistered } = await import("../src/dispatch.js");
     await import("../src/tools/_register.js");
     const { toolDefinitions } = await import("../src/tools.js");
     assertAllToolsRegistered(toolDefinitions);
     assert.equal(typeof dispatch, "function");
-    // Plan 04-02 left 59 (PIPE-01..PIPE-05); Plan 04-03 Task 2 finishes the
-    // pipeline-rule CRUD quartet → 63. If the count drifts, this test fails
-    // loudly and we know to update the plan.
-    assert.equal(toolDefinitions.length, 63, `Expected 63 tools after Plan 04-03; got ${toolDefinitions.length}`);
+    // Plan 04-02 left 59 (PIPE-01..PIPE-05); Plan 04-03 Task 2 finished the
+    // pipeline-rule CRUD quartet → 63; Plan 04-05 adds connect/disconnect
+    // pipelines↔streams (PIPE-13/14) → 65. Plan 04-04 (independent wave 3)
+    // will add the remaining 3 tools (delete_pipeline_rule +
+    // list_pipeline_functions + simulate_pipeline_rule) → 68 final. If the
+    // count drifts, this test fails loudly and we know to update.
+    assert.equal(toolDefinitions.length, 65, `Expected 65 tools after Plan 04-05; got ${toolDefinitions.length}`);
 });
 
 // =====================================================================

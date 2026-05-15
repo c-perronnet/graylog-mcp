@@ -1327,4 +1327,45 @@ export const toolDefinitions = [
             required: ["ruleId", "changes"],
         },
     },
+    // ====================================================================
+    // Phase 4 Plan 05 — pipeline↔stream connection tools (PIPE-13/14).
+    //
+    // CRITICAL — Pitfall 2: Graylog's POST /api/system/pipelines/connections/to_stream
+    // is REPLACE-the-full-set semantics. Both wrappers do GET-merge-POST
+    // (connect, union) / GET-subtract-POST (disconnect, difference) client-
+    // side to preserve previously-connected pipelines. Naive REPLACE would
+    // silently disconnect the rest of the set — the wrapper's correctness
+    // is the only line between agent intent ("attach pipeline X") and
+    // accidental "replace-all".
+    // ====================================================================
+    {
+        name: "connect_pipelines_to_stream",
+        description: "Attach pipelines to a stream. The wrapper preserves previously-connected pipelines (Pitfall 2 — Graylog's endpoint POST /api/system/pipelines/connections/to_stream is REPLACE-the-full-set; this wrapper does GET-merge-POST client-side). Pre-flights GET /api/system/pipelines/connections/{streamId} (404 treated as empty set); unions with args.pipelineIds; POSTs the merged set sorted alphabetically. Idempotent attaches surface in existingMatches with similarity_reason: 'already_connected'. Use list_pipelines + list_streams to discover ids. Schema: { streamId, pipelineIds[] } — both required, pipelineIds must contain at least one ID.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                connectionName: { type: "string", description: "Optional per-call connection override" },
+                dryRun: { type: "boolean", description: "Default true. Set to false to apply." },
+                idempotencyKey: { type: "string", description: "Optional agent-supplied idempotency key" },
+                streamId: { type: "string", description: "Stream ID to attach pipelines to (from list_streams)" },
+                pipelineIds: { type: "array", items: { type: "string" }, description: "Pipeline IDs to attach (from list_pipelines). At least one ID required. Already-connected IDs are no-ops and surface in existingMatches." },
+            },
+            required: ["streamId", "pipelineIds"],
+        },
+    },
+    {
+        name: "disconnect_pipelines_from_stream",
+        description: "Detach pipelines from a stream. The wrapper preserves remaining connections (Pitfall 2 mirror — Graylog's endpoint POST /api/system/pipelines/connections/to_stream is REPLACE-the-full-set; this wrapper does GET-subtract-POST client-side). Pre-flights GET /api/system/pipelines/connections/{streamId} (404 treated as empty set); subtracts args.pipelineIds; POSTs the reduced set sorted alphabetically. Not-currently-connected IDs surface in existingMatches with similarity_reason: 'not_currently_connected' (no-op). Schema: { streamId, pipelineIds[] } — both required, pipelineIds must contain at least one ID.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                connectionName: { type: "string", description: "Optional per-call connection override" },
+                dryRun: { type: "boolean", description: "Default true. Set to false to apply." },
+                idempotencyKey: { type: "string", description: "Optional agent-supplied idempotency key" },
+                streamId: { type: "string", description: "Stream ID to detach pipelines from (from list_streams)" },
+                pipelineIds: { type: "array", items: { type: "string" }, description: "Pipeline IDs to detach. At least one ID required. Already-not-connected IDs are no-ops and surface in existingMatches." },
+            },
+            required: ["streamId", "pipelineIds"],
+        },
+    },
 ];
