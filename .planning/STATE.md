@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v2.3
 milestone_name: milestone
 status: Ready to execute
-last_updated: "2026-05-15T06:49:29.534Z"
+last_updated: "2026-05-15T07:01:27.347Z"
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 6
-  completed_plans: 3
-  percent: 50
+  completed_plans: 4
+  percent: 67
 ---
 
 # Project Memory: Graylog MCP — Full Admin Surface
@@ -28,12 +28,12 @@ progress:
 ## Current Position
 
 Phase: 00 (foundation) — EXECUTING
-Plan: 4 of 6
+Plan: 5 of 6
 
 - **Phase**: 0 — Foundation
-- **Plan**: 4 of 6 — Wave 2 graylog-client extraction (00-03) shipped; next up is 00-04 (defineMutatingHandler factory)
-- **Status**: Phase 0 in progress; `npm test` green via `node --test`, full unified suite running (85 tests / 18 suites)
-- **Progress bar**: `[█████░░░░░] 50%` (3 of 6 Phase 0 plans complete)
+- **Plan**: 5 of 6 — Wave 3 handler primitives (00-04) shipped; next up is 00-05 (dispatch refactor)
+- **Status**: Phase 0 in progress; `npm test` green via `node --test`, full unified suite running (124 tests / 18 suites)
+- **Progress bar**: `[███████░░░] 67%` (4 of 6 Phase 0 plans complete)
 
 ## Performance Metrics
 
@@ -41,12 +41,13 @@ Plan: 4 of 6
 |--------|-------|
 | v1 requirements | 71 mapped / 71 total |
 | Phases | 0 complete / 8 total |
-| Plans complete | 3 |
+| Plans complete | 4 |
 | Net-new tools target | ~64 (58 CRUD primitives + 6 blueprints) |
 | Total MCP surface at milestone end | ~91 tools |
 | Phase 00-foundation P01 | 2min | 2 tasks | 13 files |
 | Phase 00-foundation P02 | ~15 min | 2 tasks | 12 files |
 | Phase 00-foundation P03 | ~3 min | 2 tasks | 6 files |
+| Phase 00-foundation P04 | ~7min | 2 tasks | 13 files |
 
 ## Accumulated Context
 
@@ -84,6 +85,13 @@ Drawn from `PROJECT.md` Key Decisions table — restated here for quick referenc
   - D-07 / Pitfall 4 client-layer defense-in-depth: when `conn.writable === false`, every non-GET request is refused BEFORE axios is reached, throwing `GraylogError(status: 0)` with a "read-only" message. Complements (does not replace) the wrapper-layer check in Plan 04.
   - `_setCaptureRequest` / `_clearCaptureRequest` are exported (not module-internal toggles) so tests can import them cleanly; the `_` prefix plus an explicit test-only comment block in `client.js` flags production-misuse risk. `afterEach(() => _clearCaptureRequest())` is the canonical reset pattern for any test file mutating the seam.
   - `GraylogError` constructor accepts a default empty options object (`({ status, method, path, body } = {})`) so callers that throw the base class without remembering to pass ctx still get a well-formed instance rather than a destructuring TypeError.
+
+- **Plan 00-04 (handler primitives + defineMutatingHandler / defineListHandler)**:
+  - `_testConnection` seam re-merged from pre-zod `rawArgs` inside both factory wrappers — `mutatingBase` / `listBase` deliberately omit `_testConnection` so zod's default `strip` mode drops it from agent payloads (threat-model T-00-04-05 — agent cannot bypass connection lookup at runtime). Inside the wrapper we read it from `request.params.arguments` before validation and merge it onto the parsed args before `resolveConnection` consumes them. Net effect: production safe (no agent path puts `_testConnection` on the wire), tests work (seam still reachable from `node:test`). Discovered during Task 2 GREEN as a 14-test cascade failure; fixed in the same GREEN commit.
+  - Added `_setConnectionsForTests` + `_clearConnectionsForTests` to `src/config.js` as an underscore-seam (test-only, project convention). `getConnections()` and `getActiveConnectionConfig()` branch on the override ONLY when set, preserving existing behaviour. Chose this over Node 22 `mock.module()` for the same reason Plan 03 did (experimental flag + flakiness).
+  - D-07 two-layer defense confirmed: `handler.js` short-circuits `writable === false` BEFORE `build`/`apply` with `reason: "connection_read_only"`; `client.js` (Plan 03) refuses non-GET BEFORE axios with `GraylogError(status: 0)`. Either layer alone catches; both layers together cover bypass paths (e.g. a future service-layer call going directly through `makeClient` without `defineMutatingHandler`).
+  - Tool-name-agnostic error wording in `resolveConnection` ("Use the active-connection setter first ..." rather than hardcoded `use_connection` / `set_active_connection`) — survives Plan 05's rename without churn.
+  - `wrapGraylogError` truncates response body to 200 chars in the error message — Graylog 4xx bodies (full validation trees) would otherwise blow out the MCP response and the agent's context window.
 
 ### Foundation Primitives To Be Built In Phase 0
 
@@ -133,11 +141,11 @@ None.
 
 ## Session Continuity
 
-**Last action**: Completed `00-03-PLAN.md` — built the single Graylog HTTP-client layer under `src/graylog/` (`client.js`, `auth.js`, `errors.js`, `normalize.js`) via strict TDD with RED + GREEN per task. `makeClient(conn).request` is the single axios call site; typed-error hierarchy (Validation/Permission/NotFound/Conflict/Unprocessable) maps 400/403/404/409/422; D-07 client-layer defense-in-depth refuses non-GET against `writable: false`. `npm test` exits 0 with 85 tests / 18 suites green (+21 net-new). Commits: `dc9f444` (Task 1 RED normalize), `7b97fb4` (Task 1 GREEN auth/errors/normalize), `d29bf29` (Task 2 RED client), `8cddb7e` (Task 2 GREEN client.js). FOUND-02 + FOUND-08 complete. `src/query.js` untouched.
+**Last action**: Completed `00-04-PLAN.md` — built the cross-cutting handler primitives under `src/tools/_shared/` (errors, schemas, idempotency, dry-run, conflict, connection, handler, list — 8 files) via strict TDD with RED + GREEN per task. `defineMutatingHandler` enforces dryRun=true default, zod validation, D-07 writable-flag short-circuit BEFORE build/apply, sha-256 idempotency-key auto-derivation, build/apply split with `__SERVER_ASSIGNED__` sentinel + `existingMatches: []` field in every preview. `defineListHandler` enforces narrow projection `[id, title, description]`, default `limit: 25`, `MAX_LIMIT: 200` clamp, `fields: "all"` opt-in. `src/config.js` gains `getConnectionWritable(name)` (D-07) + `_setConnectionsForTests` / `_clearConnectionsForTests` test seam (underscore convention). `example-config.json` documents the writable field. `npm test` exits 0 with 124 tests / 18 suites green (+39 net-new). Commits: `762e371` (Task 1 RED connection+idempotency), `f90ce72` (Task 1 GREEN 6 leaf utilities + config additive + example-config), `2c46814` (Task 2 RED handler+list), `2ec5c17` (Task 2 GREEN handler+list factories). FOUND-03, FOUND-04, FOUND-05, FOUND-09, FOUND-10, FOUND-11, FOUND-12 complete.
 
-**Stopped at**: Completed 00-03-PLAN.md
+**Stopped at**: Completed 00-04-PLAN.md
 
-**Next action**: Execute `00-04-PLAN.md` (defineMutatingHandler factory + `runOrPreview` + per-call `connectionName` + writable wrapper-layer check — consumes `GraylogError` / `mapGraylogError` from this plan).
+**Next action**: Execute `00-05-PLAN.md` (dispatch refactor — `Map<toolName, handler>` replacing the `if (name === ...)` chain in `src/index.js`; consumes `defineMutatingHandler` / `defineListHandler` from this plan).
 
 ---
 *State initialized: 2026-05-13*
