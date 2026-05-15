@@ -100,7 +100,7 @@
   - [x] 04-02-PLAN.md — Pipeline CRUD: list_pipelines (PIPE-01), get_pipeline (PIPE-02), create_pipeline (PIPE-03 with D-06 pipeline parse pre-flight), update_pipeline (PIPE-04 STRICT_NO_ECHO + parse pre-flight), delete_pipeline (PIPE-05 sync envelope, D-15 no mutable)
   - [x] 04-03-PLAN.md — Pipeline-rule CRUD: list_pipeline_rules (PIPE-06), get_pipeline_rule (PIPE-07), create_pipeline_rule (PIPE-08 — D-10 mutual exclusion + D-11 full recursive grammar + D-05 server parse pre-flight + D-04 client lint; C4 acceptance gate), update_pipeline_rule (PIPE-09 STRICT_NO_ECHO + conditional parse)
   - [ ] 04-04-PLAN.md — delete_pipeline_rule (PIPE-10, D-14 cascade-hash + drift refusal via computeRuleCascadeHash + Strategy A paginated /rule/paginated walk) + simulate_pipeline_rule (PIPE-12, M3 acceptance gate; Pitfall 1 JSON-string message body) + list_pipeline_functions (PIPE-11 merged static + live overlay)
-  - [ ] 04-05-PLAN.md — connect_pipelines_to_stream (PIPE-13, Pitfall 2 GET-merge-PUT) + disconnect_pipelines_from_stream (PIPE-14, GET-subtract-PUT)
+  - [x] 04-05-PLAN.md — connect_pipelines_to_stream (PIPE-13, Pitfall 2 GET-merge-PUT) + disconnect_pipelines_from_stream (PIPE-14, GET-subtract-PUT)
   - [ ] 04-06-PLAN.md — 14 snapshot fixtures (one per Phase 4 tool incl. C4/M3/Pitfall-2/D-14 acceptance gates) + 14 schema-parity assertions + auth-redaction inheritance + 04-VALIDATION.md flip + human-verify checkpoint
 
 ### Phase 5: Events & Notifications

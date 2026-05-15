@@ -3,18 +3,18 @@ gsd_state_version: 1.0
 milestone: v2.3
 milestone_name: milestone
 status: Ready to execute
-last_updated: "2026-05-15T21:39:52.092Z"
+last_updated: "2026-05-15T21:53:47.159Z"
 progress:
   total_phases: 8
   completed_phases: 4
   total_plans: 27
-  completed_plans: 24
-  percent: 89
+  completed_plans: 25
+  percent: 93
 ---
 
 # Project Memory: Graylog MCP — Full Admin Surface
 
-**Last updated:** 2026-05-15 (Plan 04-03 complete)
+**Last updated:** 2026-05-15 (Plan 04-05 complete)
 
 ## Project Reference
 
@@ -28,12 +28,12 @@ progress:
 ## Current Position
 
 Phase: 04 (pipelines-pipeline-rules-connections) — EXECUTING
-Plan: 4 of 6 (Plan 04-03 complete; Plan 04-04 next)
+Plan: 6 of 6 (Plan 04-05 complete; Plan 04-04 still queued in independent wave 3; Plan 04-06 final close)
 
 - **Phase**: 4 — Pipelines, pipeline rules & connections
-- **Plan**: 3 of 6 complete (04-03 shipped: pipeline-rule CRUD — 4 tools PIPE-06..PIPE-09 with D-05 server-authoritative rule-parse pre-flight (POST /api/system/pipelines/rule/parse) + D-04 client-side lint via validateRuleSource over the MERGED catalogue (Pitfall 5 — live-only function names accepted) + D-10 mutual exclusion at zod .refine layer (Boolean(structured) XOR Boolean(ruleSource)) + D-11 full DSL coverage via recursive ConditionSchema (8 variants via z.lazy) + 6-variant ActionSchema + Pitfall 6 camelCase→snake_case translation + D-16 STRICT_NO_ECHO partial-update for update_pipeline_rule with simulator_message Nullable String 3-state semantics preserved (omit/null/string) + D-17 __SERVER_ASSIGNED__ sentinel + D-15 generalisation (rules have no is_editable). preflightParseRule EXPORTED from create-pipeline-rule.js; update-pipeline-rule.js imports it (single source of truth for Pitfall 6 + rule_parse_failed). C4 acceptance gate proven across 4 distinct fail paths: client lint fail (toUpperCase), structured server-parse fail, raw DSL server-parse fail, update path server-parse fail. Zero deviations (plan executed verbatim with the export-from-create approach for preflightParseRule per the plan's <output> hand-off line). No new npm deps; src/graylog/errors.js NOT modified.
-- **Status**: 618 tests / 18 suites green (+48 net-new over Plan 04-02 baseline of 570 — 44 pipelines tests covering schema-layer recursion + D-10 mutual exclusion + list/get + create with structured+raw paths + C4 client-lint fail + C4 server-parse fail (both modes) + Pitfall 5 live-only function + Pitfall 6 + M5 cross-mode + idempotency + writable gate + update with STRICT_NO_ECHO + conditional parse pre-flight + simulator_message 3-state + D-15 no-mutable + 4 schema-parity tests for the new tools); all Phase 0 + Phase 1 + Phase 2 + Phase 3 + Phase 04-01 + Phase 04-02 contracts preserved. 4 new tools registered (PIPE-06..PIPE-09); tool count 59 → 63. assertAllToolsRegistered passes.
-- **Progress bar**: `[█████████░] 89%` (24 of 27 milestone plans complete: 6 Phase 0 + 5 Phase 1 + 4 Phase 2 + 5 Phase 3 + 3 Phase 4 + 1 Phase 2 polish; remaining: 3 Phase 4 plans + Phase 5-7 + Phase 2 polish residue per ROADMAP)
+- **Plan**: 4 of 6 complete (04-05 shipped wave-2 ahead of wave-3 04-04: connect_pipelines_to_stream + disconnect_pipelines_from_stream — PIPE-13/14 with GET-merge-POST and GET-subtract-POST client-side set arithmetic wrapping Graylog's REPLACE-the-full-set POST /api/system/pipelines/connections/to_stream endpoint. Pitfall 2 acceptance gate proven for BOTH handlers — attaching ["new"] to a stream with current=[a,b] produces wire body.pipeline_ids=["a","b","new"] (NOT ["new"] which would silently disconnect a and b); detaching [b,c] from current=[a,b,c] produces ["a"] (NOT [] which would silently disconnect a). 404 on GET pre-flight treated as empty current set (Assumption A7 verified). 5xx propagates via wrapGraylogError; POST NEVER fires. D-07 writable gate short-circuits BEFORE the GET. existingMatches surfaces idempotency: already_connected for connect, not_currently_connected for disconnect. Alphabetical wire sort for deterministic snapshots. Pre-mutation snapshot order in existingMatches (check has() BEFORE add()/delete()) preserves idempotency-reporting correctness. 1 Rule 3 deviation: brittle absolute count test from 04-03 retargeted 63→65; comment updated to document wave structure. src/graylog/errors.js NOT modified (duck-typed 404 detection via err?.isGraylogError && err.status === 404). No new npm deps.
+- **Status**: 642 tests / 18 suites green (+24 net-new over Plan 04-03 baseline of 618 — 21 pipelines tests covering connect HAPPY union + Pitfall 2 acceptance gate + 404 + idempotency + partial-idempotency + deterministic sort + 5xx + writable + paths + apply round-trip; disconnect HAPPY subtract + Pitfall 2 mirror + detach-all + no-op detect + 404 with POST consistency + 404 dry-run idempotency + deterministic sort + 5xx + writable + apply round-trip + 2 schema-layer tests; 2 schema-parity tests; plus retarget of count test). All Phase 0 + Phase 1 + Phase 2 + Phase 3 + Phase 04-01/02/03 contracts preserved. 2 new tools registered (PIPE-13, PIPE-14); tool count 63 → 65. Plan 04-04 (independent wave 3) will land 3 more tools → 68 final at phase close. assertAllToolsRegistered passes.
+- **Progress bar**: `[█████████░] 93%` (25 of 27 milestone plans complete: 6 Phase 0 + 5 Phase 1 + 4 Phase 2 + 5 Phase 3 + 4 Phase 4 + 1 Phase 2 polish; remaining: 2 Phase 4 plans (04-04 + 04-06) + Phase 5-7 + Phase 2 polish residue per ROADMAP)
 
 ## Performance Metrics
 
@@ -65,6 +65,7 @@ Plan: 4 of 6 (Plan 04-03 complete; Plan 04-04 next)
 | Phase 04-pipelines-pipeline-rules-connections P01 | ~25min | 1 tasks | 9 files |
 | Phase 04 P02 | ~10 min | 2 tasks | 11 files |
 | Phase 04-pipelines-pipeline-rules-connections P03 | 11min | 2 tasks | 8 files |
+| Phase 04 P05 | ~6 min | 1 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -323,6 +324,22 @@ Drawn from `PROJECT.md` Key Decisions table — restated here for quick referenc
   - **Zero deviations**: Plan executed verbatim. The plan's <action> sketches were lifted nearly verbatim with light editorial adjustments to honor the omit-vs-explicit-null contract for simulator_message in create (the plan's sketch always emitted `simulator_message: null` when undefined, which would have conflated omit with explicit-clear; my implementation skips the key when undefined). The export-from-create approach for preflightParseRule was chosen per the plan's <output> hand-off line that recommended single-source-of-truth.
   - **Commits (2 TDD tasks × RED + GREEN gates)**: `453d19f` (Task 1 RED — 21 net-new schema/list/get tests); `27698e2` (Task 1 GREEN — schemas.js extended + list-pipeline-rules.js + get-pipeline-rule.js + barrel + 2 tools.js entries; tool count 59 → 61); `1814ba3` (Task 2 RED — 27 net-new create/update tests; tool count test bumped to 63); `457f6a9` (Task 2 GREEN — create-pipeline-rule.js + update-pipeline-rule.js + barrel update + 2 tools.js entries; tool count 61 → 63).
   - **Plan 04-04 hand-off**: delete_pipeline_rule consumes Plan 04-01's computeRuleCascadeHash; simulate_pipeline_rule can import preflightParseRule from create-pipeline-rule.js for its parse-then-simulate sequence (the helper is already exported); list_pipeline_functions composes against function-catalogue.js getMergedCatalogue. Plan 04-05 (connect/disconnect) can compose emit.js + escape.escapeString for any literal in simulate payloads.
+
+- **Plan 04-05 (pipeline↔stream connections — PIPE-13/14; Pitfall 2 mitigation centerpiece)**:
+  - **2 net-new tools registered**: connect_pipelines_to_stream (PIPE-13) + disconnect_pipelines_from_stream (PIPE-14). Tool count 63 → 65. assertAllToolsRegistered passes. Plan executed in wave 2 ahead of Plan 04-04 (wave 3 — depends on 04-03; 04-05 only depends on 04-01); the 3 wave-3 tools (delete_pipeline_rule + simulate_pipeline_rule + list_pipeline_functions) will land independently → 68 final at phase close.
+  - **Pitfall 2 acceptance gate proven for BOTH handlers**: Graylog's `POST /api/system/pipelines/connections/to_stream` is REPLACE-the-full-set semantics (verified PipelineConnectionsResource.java:81-100 — connectionsService.save is full replacement, NOT merge). The wrappers do client-side set arithmetic: connect = GET-merge-POST (union); disconnect = GET-subtract-POST (difference). Tests pin the load-bearing invariant: for current=[a,b] and args=[new], body.pipeline_ids===["a","b","new"] (NOT just ["new"] which would silently disconnect a and b); for current=[a,b,c] and args=[b,c], body.pipeline_ids===["a"] (NOT [] which would silently disconnect a). 2 dedicated tests `connect_pipelines_to_stream PITFALL 2 ACCEPTANCE GATE` + `disconnect_pipelines_from_stream PITFALL 2 mirror` are the gate.
+  - **404-as-empty-set duck-typed**: GET /api/system/pipelines/connections/{streamId} returns 404 until first POST creates the record (Assumption A7 verified PipelineConnectionsResource.java:160-178). Wrapper catches via `err?.isGraylogError && err.status === 404` and treats `current = { pipeline_ids: [] }`. NO new typed-error import — src/graylog/errors.js NOT modified (honors success_criteria).
+  - **404 + POST consistency on disconnect**: even when GET returns 404 (no record yet), the POST still fires with `pipeline_ids: []`. Agents see the same wire shape regardless of whether the connection record existed. Tested explicitly.
+  - **D-07 writable gate short-circuits BEFORE the GET pre-flight fires for both handlers** (verified by tests asserting captured-request count === 0 on read-only connection).
+  - **Idempotency surfaces via existingMatches**: connect adds {id, similarity_reason:"already_connected"} for ids already in currentSet; disconnect adds {id, similarity_reason:"not_currently_connected"} for ids not in currentSet. CRITICAL — the snapshot order is BEFORE the mutation: `if (currentSet.has(id)) existingMatches.push(...); currentSet.add(id);` (for connect; .delete() for disconnect). Reversing the order would break idempotency reporting (every arg would appear "already_connected" after .add()).
+  - **Alphabetical wire sort** for deterministic snapshot fixtures (Plan 06): `[...mergedSet].sort()` / `[...reducedSet].sort()` on both `body.pipeline_ids` and `postApplyEstimate.pipeline_ids` so the dry-run preview ≡ apply body invariant survives.
+  - **Schema-layer enforcement**: `pipelineIds: z.array(z.string().min(1)).min(1)` for BOTH handlers — empty arrays rejected before build() runs; ensures the agent commits to at least one pipeline ID per call.
+  - **Tool descriptions cite Pitfall 2 explicitly**: agents reading the tools.js entry see "the wrapper preserves previously-connected pipelines (Pitfall 2 — Graylog's endpoint POST /api/system/pipelines/connections/to_stream is REPLACE-the-full-set; this wrapper does GET-merge-POST client-side)" as the discrimination sentence.
+  - **Test growth**: 618 → 642 (+24 net-new — 21 in test/pipelines.test.js covering HAPPY union/subtract + Pitfall 2 gates + 404 cases + idempotency + partial-idempotency + deterministic sort + 5xx + writable + paths + apply round-trips for both handlers + 2 schema-layer tests; 2 schema-parity tests; +1 from retargeted count test). Full `npm test` 642/642 pass; zero regressions.
+  - **1 Rule 3 deviation: brittle count assertion retargeted** — Plan 04-03 had left `assertAllToolsRegistered ... (count = 63)` as a hard literal. Plan 04-05 bumps to 65; the test was renamed + assertion bumped + comment updated to document the wave structure (04-04 wave-3 will bump again to 68 final). Mechanical fix; no functionality affected.
+  - **Commits (1 TDD task × RED + GREEN gates)**: `d7bc858` (RED — 23 net-new tests + 2 schema-parity tests; pipelines.test.js fails to load due to ERR_MODULE_NOT_FOUND on missing handler files); `f22b553` (GREEN — connect-pipelines-to-stream.js + disconnect-pipelines-from-stream.js + schemas extended + barrel +2 register lines + tools.js +2 entries + count-test retarget; 642/642 green).
+  - **Plan 04-04 hand-off**: still independent; Plan 04-04 ships delete_pipeline_rule + simulate_pipeline_rule + list_pipeline_functions in wave 3. No coupling with Plan 04-05's tools; the connection handlers leave no orphan state for 04-04 to clean up.
+  - **Plan 04-06 hand-off**: 4 new snapshot fixtures needed alongside the ~10 from Plans 02-04: (a) connect dry-run merged set; (b) connect dry-run already_connected idempotency; (c) disconnect dry-run reduced set; (d) disconnect dry-run not_currently_connected idempotency. Optional 5th fixture pinning the Pitfall 2 wire-body proof at snapshot level for future code-review visibility.
 
 ### Foundation Primitives To Be Built In Phase 0
 
