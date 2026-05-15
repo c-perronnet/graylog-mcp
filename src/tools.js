@@ -159,6 +159,41 @@ export const toolDefinitions = [
             required: ["streamId"],
         },
     },
+    // ----- Phase 3 Plan 02 streams CRUD (STREAM-03, STREAM-04) -----
+    {
+        name: "create_stream",
+        description: "Create a Graylog stream. Dry-run shows existingMatches when a similar title exists across 3 buckets (exact > case_insensitive > prefix; strictest bucket reported). REQUIRED: index_set_id — call list_index_sets first to discover available index sets (D-10, no defaulting). Inline rules: pass an array of StreamRule objects with one of 8 string discriminators (exact, regex, greater, less, present, contains, always_match, match_input); the wrapper translates each to Graylog's numeric wire format (1..8). postApplyEstimate.id is __SERVER_ASSIGNED__ — DO NOT reuse it; use the real stream_id from the apply response. Use create_stream_rule (Plan 04) to add rules after creation if you prefer.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                connectionName: { type: "string", description: "Optional per-call connection override" },
+                dryRun: { type: "boolean", description: "Default true. Set to false to apply." },
+                idempotencyKey: { type: "string", description: "Optional agent-supplied idempotency key" },
+                title: { type: "string", description: "Human-readable stream title" },
+                description: { type: "string", description: "Optional stream description" },
+                rules: { type: "array", description: "Optional inline StreamRule objects: { type: one of exact|regex|greater|less|present|contains|always_match|match_input, field?, value?, inverted?, description? }. type is translated to numeric on the wire." },
+                matching_type: { type: "string", enum: ["AND", "OR"], description: "How rules combine: AND (all rules must match) or OR (any rule). Default AND." },
+                remove_matches_from_default_stream: { type: "boolean", description: "If true, messages routed to this stream are removed from the default stream. Default false." },
+                index_set_id: { type: "string", description: "REQUIRED — the index set this stream writes to (D-10). Call list_index_sets first." },
+            },
+            required: ["title", "index_set_id"],
+        },
+    },
+    {
+        name: "update_stream",
+        description: "Partial-update a Graylog stream's mutable fields. STRICT_NO_ECHO wire-build: only the fields you pass in `changes` are sent on the wire — unchanged fields stay server-side (per 03-U1-SMOKE.md). Pre-flights GET /api/streams/{streamId} for the D-09 mutable check; refuses with reason `stream_immutable` if current.is_editable === false BEFORE the PUT fires. Schema: { streamId, changes: { title?, description?, matching_type?, remove_matches_from_default_stream?, index_set_id? } }. To edit rules attached to the stream, use update_stream_rule (Plan 04) instead.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                connectionName: { type: "string", description: "Optional per-call connection override" },
+                dryRun: { type: "boolean", description: "Default true. Set to false to apply." },
+                idempotencyKey: { type: "string", description: "Optional agent-supplied idempotency key" },
+                streamId: { type: "string", description: "Stream ID (from list_streams)" },
+                changes: { type: "object", description: "Partial-update subset: { title?, description?, matching_type?, remove_matches_from_default_stream?, index_set_id? }" },
+            },
+            required: ["streamId", "changes"],
+        },
+    },
     {
         name: "list_field_values",
         description: "List distinct values of a field with message counts. Useful for discovering available sources, environments, logger names, etc. Results are sorted by count descending.",
