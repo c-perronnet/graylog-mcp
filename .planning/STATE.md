@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v2.3
 milestone_name: milestone
 status: Ready to execute
-last_updated: "2026-05-15T07:01:27.347Z"
+last_updated: "2026-05-15T07:34:44.923Z"
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 6
-  completed_plans: 4
-  percent: 67
+  completed_plans: 5
+  percent: 83
 ---
 
 # Project Memory: Graylog MCP — Full Admin Surface
@@ -28,12 +28,12 @@ progress:
 ## Current Position
 
 Phase: 00 (foundation) — EXECUTING
-Plan: 5 of 6
+Plan: 6 of 6
 
 - **Phase**: 0 — Foundation
-- **Plan**: 5 of 6 — Wave 3 handler primitives (00-04) shipped; next up is 00-05 (dispatch refactor)
-- **Status**: Phase 0 in progress; `npm test` green via `node --test`, full unified suite running (124 tests / 18 suites)
-- **Progress bar**: `[███████░░░] 67%` (4 of 6 Phase 0 plans complete)
+- **Plan**: 6 of 6 — Wave 4 dispatch refactor + tool rename (00-05) shipped; next up is 00-06 (schema-parity + auth-redaction + writable-flag check)
+- **Status**: Phase 0 in progress; `npm test` green via `node --test`, full unified suite running (142 tests / 18 suites)
+- **Progress bar**: `[████████░░] 83%` (5 of 6 Phase 0 plans complete)
 
 ## Performance Metrics
 
@@ -41,13 +41,14 @@ Plan: 5 of 6
 |--------|-------|
 | v1 requirements | 71 mapped / 71 total |
 | Phases | 0 complete / 8 total |
-| Plans complete | 4 |
+| Plans complete | 5 |
 | Net-new tools target | ~64 (58 CRUD primitives + 6 blueprints) |
 | Total MCP surface at milestone end | ~91 tools |
 | Phase 00-foundation P01 | 2min | 2 tasks | 13 files |
 | Phase 00-foundation P02 | ~15 min | 2 tasks | 12 files |
 | Phase 00-foundation P03 | ~3 min | 2 tasks | 6 files |
 | Phase 00-foundation P04 | ~7min | 2 tasks | 13 files |
+| Phase 00-foundation P05 | ~26 min | 3 tasks | 13 files |
 
 ## Accumulated Context
 
@@ -92,6 +93,15 @@ Drawn from `PROJECT.md` Key Decisions table — restated here for quick referenc
   - D-07 two-layer defense confirmed: `handler.js` short-circuits `writable === false` BEFORE `build`/`apply` with `reason: "connection_read_only"`; `client.js` (Plan 03) refuses non-GET BEFORE axios with `GraylogError(status: 0)`. Either layer alone catches; both layers together cover bypass paths (e.g. a future service-layer call going directly through `makeClient` without `defineMutatingHandler`).
   - Tool-name-agnostic error wording in `resolveConnection` ("Use the active-connection setter first ..." rather than hardcoded `use_connection` / `set_active_connection`) — survives Plan 05's rename without churn.
   - `wrapGraylogError` truncates response body to 200 chars in the error message — Graylog 4xx bodies (full validation trees) would otherwise blow out the MCP response and the agent's context window.
+
+- **Plan 00-05 (dispatch Map refactor + tool rename)**:
+  - Extracted 17 v2.3 read-tool handlers from inline `src/index.js` bodies into `src/handlers.js` (Rule 3 blocker fix — top-level `await server.connect(transport)` in `src/index.js` hangs node:test imports). `src/index.js` re-imports handlers from there, both for the if-chain (Task 1) and via `src/tools/_register.js` (Task 2). Plan-anticipated via the circular-import contingency note; trigger turned out to be top-level await rather than TDZ.
+  - `dispatch()` declared `async` so `Tool not found: <name>` throws become rejecting promises. Contract is `Promise<MCPResponse>`; sync throws don't satisfy `await dispatch(...)` at the SDK call site or `assert.rejects(() => dispatch(...))` in tests. Caught by 3 failing dispatch unit tests on first pass; one-character fix (`function` → `async function`).
+  - Internal handler function names retain OLD camelCase per RESEARCH.md Q9 closing rationale. `useConnectionHandler` backs `set_active_connection`; `fetchGraylogMessagesHandler` backs `search_messages_graylog`. The dispatch Map decouples external names from internal symbols. Internal-name churn is a follow-up cleanup; Phase 0 keeps blast radius small.
+  - Hard rename, no aliases per D-03. CHANGELOG.md is the single migration-pointer document; v3.0.0 marker is staged (CHANGELOG-only); `package.json.version` stays at `2.3.0` until milestone end per D-04. `dispatch({ name: "fetch_graylog_messages" })` rejects with `Tool not found: fetch_graylog_messages` — exact pattern match with the legacy if-chain's error.
+  - Error-message text `Use 'use_connection' first` → `Use 'set_active_connection' first` (Rule 1 fix in `src/handlers.js`, `src/tools/cluster-errors.js`, `src/tools/template-mgmt.js`, plus 4 description texts in `src/tools.js`). The old text would mislead agents (Tool not found if followed). Single-line snapshot update captures the new text; every other regression-snapshot entry is byte-identical — plan-anticipated as "only the embedded tool-name strings ... differ from the baseline".
+  - Snapshot fixtures live under `test/regression/__snapshots__/` (not `test/__snapshots__/` as the plan predicted) because Plan 01's `setResolveSnapshotPath` uses `dirname(testFilePath)`. Co-located with the test file; functionally identical to the plan's target location.
+  - `src/index.js` shrunk from 904 lines (903-line dispatcher) to 32 lines (transport wiring + module-init `assertAllToolsRegistered`). Module-init assertion fails loudly if any tool in `tools.js` lacks a registered handler (Discretion-06).
 
 ### Foundation Primitives To Be Built In Phase 0
 
@@ -141,11 +151,11 @@ None.
 
 ## Session Continuity
 
-**Last action**: Completed `00-04-PLAN.md` — built the cross-cutting handler primitives under `src/tools/_shared/` (errors, schemas, idempotency, dry-run, conflict, connection, handler, list — 8 files) via strict TDD with RED + GREEN per task. `defineMutatingHandler` enforces dryRun=true default, zod validation, D-07 writable-flag short-circuit BEFORE build/apply, sha-256 idempotency-key auto-derivation, build/apply split with `__SERVER_ASSIGNED__` sentinel + `existingMatches: []` field in every preview. `defineListHandler` enforces narrow projection `[id, title, description]`, default `limit: 25`, `MAX_LIMIT: 200` clamp, `fields: "all"` opt-in. `src/config.js` gains `getConnectionWritable(name)` (D-07) + `_setConnectionsForTests` / `_clearConnectionsForTests` test seam (underscore convention). `example-config.json` documents the writable field. `npm test` exits 0 with 124 tests / 18 suites green (+39 net-new). Commits: `762e371` (Task 1 RED connection+idempotency), `f90ce72` (Task 1 GREEN 6 leaf utilities + config additive + example-config), `2c46814` (Task 2 RED handler+list), `2ec5c17` (Task 2 GREEN handler+list factories). FOUND-03, FOUND-04, FOUND-05, FOUND-09, FOUND-10, FOUND-11, FOUND-12 complete.
+**Last action**: Completed `00-05-PLAN.md` — replaced the 903-line `if (name === ...)` dispatcher in `src/index.js` with a Map-backed dispatch (`src/dispatch.js`, 4 exports), extracted 17 read-tool handlers to `src/handlers.js`, wired registration via the side-effect-import barrel `src/tools/_register.js`, and renamed 12 of 23 v2.3 tools per the D-03 `<verb>_<domain>_<noun>` map (no aliases). `src/index.js` shrunk from 904 → 32 lines; module-init `assertAllToolsRegistered` fails loudly at startup if any tool in `tools.js` lacks a registered handler (Discretion-06). Regression snapshots prove byte-identical behavior through the refactor; single-line diff after the rename (only the embedded tool-name string in one error message). CHANGELOG.md created with rename map + v3.0.0-unreleased entry. `npm test` exits 0 with 142 tests / 18 suites green (+18 net-new: 8 regression fixtures + 12 dispatch unit tests, minus 2 replaced stubs). Commits: `c3f847c` (Task 1 — handlers extract + baseline regression snapshot), `334b877` (Task 2 — dispatch Map + flip), `1394362` (Task 3 — rename + CHANGELOG + README). FOUND-01 and FOUND-13 complete.
 
-**Stopped at**: Completed 00-04-PLAN.md
+**Stopped at**: Completed 00-05-PLAN.md
 
-**Next action**: Execute `00-05-PLAN.md` (dispatch refactor — `Map<toolName, handler>` replacing the `if (name === ...)` chain in `src/index.js`; consumes `defineMutatingHandler` / `defineListHandler` from this plan).
+**Next action**: Execute `00-06-PLAN.md` (zod schema-parity check + auth-redaction snapshot lint + writable-flag enforcement coverage — the final Phase 0 plan, closing out the foundation milestone).
 
 ---
 *State initialized: 2026-05-13*

@@ -11,7 +11,7 @@ All requirements for the admin-surface milestone. Categories follow the 8-phase 
 
 Cross-cutting infrastructure that every domain phase depends on. Cannot be folded into Phase 1.
 
-- [ ] **FOUND-01**: Dispatch refactor — replace the `if (name === "...")` chain in `src/index.js` with a `Map<toolName, handler>` in `src/dispatch.js`; add a startup assertion that every tool in `src/tools.js` has a registered handler.
+- [x] **FOUND-01**: Dispatch refactor — replace the `if (name === "...")` chain in `src/index.js` with a `Map<toolName, handler>` in `src/dispatch.js`; add a startup assertion that every tool in `src/tools.js` has a registered handler.
 - [x] **FOUND-02**: Single Graylog HTTP client at `src/graylog/client.js` with auth, `X-Requested-By` header, and typed error mapping for 400/403/404/409/422 responses.
 - [x] **FOUND-03**: `defineMutatingHandler` factory that centralizes `dryRun: true` enforcement and the build/apply split for every mutating tool.
 - [x] **FOUND-04**: `runOrPreview` helper that returns a structured preview payload (HTTP method, path, body) with `__SERVER_ASSIGNED__` ID sentinels in dry-run mode.
@@ -23,7 +23,7 @@ Cross-cutting infrastructure that every domain phase depends on. Cannot be folde
 - [x] **FOUND-10**: Idempotency-key mechanism for create tools — auto-generated from `hash(connectionName, toolName, args)`, agent can override.
 - [x] **FOUND-11**: Create-conflict pre-check pattern — `existingMatches` field in every create tool's dry-run output.
 - [x] **FOUND-12**: List-projection helper with default narrow projection (`id, title, description`) and default `limit: 25` for every list tool.
-- [ ] **FOUND-13**: Tool-naming convention `<verb>_<domain>_<noun>` documented and enforced from Phase 0 onward.
+- [x] **FOUND-13**: Tool-naming convention `<verb>_<domain>_<noun>` documented and enforced from Phase 0 onward.
 
 ### Inputs & Extractors (INPUT)
 
@@ -203,7 +203,7 @@ Populated by the roadmapper on 2026-05-13. Every v1 requirement maps to exactly 
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| FOUND-01 | Phase 0 | Pending |
+| FOUND-01 | Phase 0 | Complete |
 | FOUND-02 | Phase 0 | Complete |
 | FOUND-03 | Phase 0 | Complete |
 | FOUND-04 | Phase 0 | Complete |
@@ -215,7 +215,7 @@ Populated by the roadmapper on 2026-05-13. Every v1 requirement maps to exactly 
 | FOUND-10 | Phase 0 | Complete |
 | FOUND-11 | Phase 0 | Complete |
 | FOUND-12 | Phase 0 | Complete |
-| FOUND-13 | Phase 0 | Pending |
+| FOUND-13 | Phase 0 | Complete |
 | INPUT-01 | Phase 1 | Pending |
 | INPUT-02 | Phase 1 | Pending |
 | INPUT-03 | Phase 1 | Pending |
