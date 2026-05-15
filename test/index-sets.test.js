@@ -921,3 +921,152 @@ test("update_index_set apply path returns full DTO + id", async () => {
     assert.equal(payload.result.id, "iset-1");
     assert.equal(payload.result.body.title, "Renamed app errors");
 });
+
+// =====================================================================
+// Plan 02-03 — Task 1: delete_index_set C1 hash + collectIndexNames helpers
+// =====================================================================
+//
+// computeC1Hash + collectIndexNames are the pure plumbing for delete_index_set's
+// C1 confirmation token. The hash inputs are the dry-run state — indexSetId
+// (target id), deleteIndices: true (locked literal; replay protection per D-02),
+// indexNames (sorted), messageCount. collectIndexNames walks the Graylog
+// AllIndices shape (closed.indices Set + reopened.indices Set + all.indices Map)
+// into a deduped array; the hash function sorts before hashing so input order
+// is irrelevant to the agent.
+//
+// The frozen-fixture hash in Test 1 is the first-run output for a known input
+// vector — if the canonicalization shape ever drifts (key order, locked-literal
+// swap, sort omission), the test fails loudly.
+
+import {
+    computeC1Hash,
+    collectIndexNames,
+} from "../src/tools/index-sets/c1-hash.js";
+
+// -------- Task 1 Test 1: computeC1Hash 64-hex output + frozen fixture --------
+
+test("computeC1Hash returns deterministic 64-hex sha-256 for the frozen fixture", () => {
+    const hash = computeC1Hash({
+        indexSetId: "iset-1",
+        deleteIndices: true,
+        indexNames: ["graylog_0", "graylog_1"],
+        messageCount: 100,
+    });
+    // Format: 64 lowercase hex chars (sha-256).
+    assert.equal(hash.length, 64);
+    assert.match(hash, /^[a-f0-9]{64}$/);
+    // Frozen fixture: this exact value MUST hold across CI runs. Drift means
+    // the canonicalization shape changed — a dry-run → apply binding break.
+    assert.equal(
+        hash,
+        "3371c65813c7a3acce20d96371b8df8ba6b1ae5d672309962fbf236b065ba6a0",
+        "frozen-fixture hash drift — canonicalization shape changed",
+    );
+});
+
+// -------- Task 1 Test 2: computeC1Hash determinism (same input → same hash) --------
+
+test("computeC1Hash is deterministic — repeated calls with identical input return identical hash", () => {
+    const inputs = {
+        indexSetId: "iset-2",
+        deleteIndices: true,
+        indexNames: ["alpha_0", "alpha_1", "alpha_2"],
+        messageCount: 5000,
+    };
+    const h1 = computeC1Hash(inputs);
+    const h2 = computeC1Hash(inputs);
+    assert.equal(h1, h2);
+});
+
+// -------- Task 1 Test 3: computeC1Hash sorts indexNames before hashing --------
+
+test("computeC1Hash sorts indexNames before hashing — order-independent hash", () => {
+    const h1 = computeC1Hash({
+        indexSetId: "iset-3",
+        deleteIndices: true,
+        indexNames: ["a", "b"],
+        messageCount: 7,
+    });
+    const h2 = computeC1Hash({
+        indexSetId: "iset-3",
+        deleteIndices: true,
+        indexNames: ["b", "a"],
+        messageCount: 7,
+    });
+    assert.equal(h1, h2, "input order MUST NOT affect the hash");
+});
+
+// -------- Task 1 Test 4: computeC1Hash messageCount sensitivity --------
+
+test("computeC1Hash is sensitive to messageCount — different counts produce different hashes", () => {
+    const base = {
+        indexSetId: "iset-4",
+        deleteIndices: true,
+        indexNames: ["x_0"],
+    };
+    const h0 = computeC1Hash({ ...base, messageCount: 0 });
+    const h1 = computeC1Hash({ ...base, messageCount: 1 });
+    assert.notEqual(h0, h1, "messageCount drift between dry-run and apply MUST break the hash");
+});
+
+// -------- Task 1 Test 5: computeC1Hash refuses deleteIndices !== true (D-02 replay protection) --------
+
+test("computeC1Hash throws when deleteIndices !== true (D-02 locked literal replay protection)", () => {
+    // false
+    assert.throws(
+        () => computeC1Hash({ indexSetId: "iset-5", deleteIndices: false, indexNames: [], messageCount: 0 }),
+        /deleteIndices/,
+    );
+    // undefined
+    assert.throws(
+        () => computeC1Hash({ indexSetId: "iset-5", indexNames: [], messageCount: 0 }),
+        /deleteIndices/,
+    );
+    // truthy non-literal (the string "true" — Graylog would happily delete but
+    // the hash function MUST refuse anything that isn't the JS literal true)
+    assert.throws(
+        () => computeC1Hash({ indexSetId: "iset-5", deleteIndices: "true", indexNames: [], messageCount: 0 }),
+        /deleteIndices/,
+    );
+});
+
+// -------- Task 1 Test 6: collectIndexNames walks all three sub-collections --------
+
+test("collectIndexNames extracts names from closed + reopened + all (deduped)", () => {
+    const allIndices = {
+        closed: { indices: ["a", "b"] },
+        reopened: { indices: ["c"] },
+        all: { indices: { d: {}, e: {} } },
+    };
+    const names = collectIndexNames(allIndices);
+    assert.deepEqual(names.sort(), ["a", "b", "c", "d", "e"]);
+});
+
+// -------- Task 1 Test 7: collectIndexNames handles empty/missing sub-collections --------
+
+test("collectIndexNames returns [] for empty/missing AllIndices shape", () => {
+    assert.deepEqual(collectIndexNames({}), []);
+    assert.deepEqual(collectIndexNames({ closed: {}, reopened: {}, all: {} }), []);
+    assert.deepEqual(
+        collectIndexNames({ closed: { indices: [] }, reopened: { indices: [] }, all: { indices: {} } }),
+        [],
+    );
+    // Tolerant of null/undefined for the top level too.
+    assert.deepEqual(collectIndexNames(undefined), []);
+    assert.deepEqual(collectIndexNames(null), []);
+});
+
+// -------- Task 1 Test 8: collectIndexNames deduplicates across sub-collections --------
+
+test("collectIndexNames deduplicates a name appearing in multiple sub-collections", () => {
+    // A single physical index may briefly straddle two states during a
+    // rotation cycle — Graylog returns it in both closed.indices and all.indices.
+    // The collector must dedupe.
+    const allIndices = {
+        closed: { indices: ["a"] },
+        reopened: { indices: ["a"] },
+        all: { indices: { a: {} } },
+    };
+    const names = collectIndexNames(allIndices);
+    assert.deepEqual(names, ["a"], "duplicates across sub-collections must collapse");
+});
