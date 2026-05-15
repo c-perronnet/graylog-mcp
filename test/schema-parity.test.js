@@ -378,3 +378,19 @@ test("schema-parity: disconnect_pipelines_from_stream", async () => {
     const { DisconnectPipelinesFromStreamSchema } = await import("../src/tools/pipelines/schemas.js");
     await assertSchemaParityForTool("disconnect_pipelines_from_stream", DisconnectPipelinesFromStreamSchema);
 });
+
+// ---------------------------------------------------------------------------
+// Plan 04-04 enrichment — 3 new pipeline tools (PIPE-10 delete_pipeline_rule,
+// PIPE-11 list_pipeline_functions, PIPE-12 simulate_pipeline_rule).
+//
+// DeletePipelineRuleSchema is plain mutatingBase.extend({ ruleId, confirm? });
+// no .refine wrap. SimulatePipelineRuleSchema uses .refine for D-10-style
+// XOR mutual exclusion (structured XOR ruleSource); getShape handles
+// ZodEffects via _def.schema.shape. ListPipelineFunctionsSchema extends
+// listBase plain (no refine wrap).
+// ---------------------------------------------------------------------------
+
+test("schema-parity: delete_pipeline_rule", async () => {
+    const { DeletePipelineRuleSchema } = await import("../src/tools/pipelines/schemas.js");
+    await assertSchemaParityForTool("delete_pipeline_rule", DeletePipelineRuleSchema);
+});

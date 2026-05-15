@@ -1368,4 +1368,24 @@ export const toolDefinitions = [
             required: ["streamId", "pipelineIds"],
         },
     },
+    // ====================================================================
+    // Phase 4 Plan 04 — delete_pipeline_rule (PIPE-10; D-14 cascade-hash +
+    // drift refusal centerpiece). Direct analog of Phase 3 delete_stream
+    // (3-endpoint cascade → 1-endpoint cascade); same machinery, leaner code.
+    // ====================================================================
+    {
+        name: "delete_pipeline_rule",
+        description: "Delete a pipeline rule. Dry-run paginates /api/system/pipelines/rule/paginated to discover referencing pipelines (Strategy A — server-computed used_in_pipelines join) and emits cascades.{pipelines} + a confirmationToken (64-hex sha-256 via computeRuleCascadeHash). Apply requires `confirm:<token>` echoed back; the wrapper re-fetches + recomputes the hash + refuses with reason `cascade_changed_since_preview` on ANY drift. Refuses with reason `cascade_preflight_failed` if the paginated GET errors. NO mutable check (rules have no is_editable on the wire). Apply envelope is SYNC `{deleted:true, ruleId}` (no async/job_id). Path uses the literal `rule` segment (Pitfall 3 rule variant); safety cap at 200 pages × 50/page (Pitfall 7 — 10000 rules max).",
+        inputSchema: {
+            type: "object",
+            properties: {
+                connectionName: { type: "string", description: "Optional per-call connection override" },
+                dryRun: { type: "boolean", description: "Default true. Set to false to apply." },
+                idempotencyKey: { type: "string", description: "Optional agent-supplied idempotency key" },
+                ruleId: { type: "string", description: "Pipeline-rule ID to delete (from list_pipeline_rules)" },
+                confirm: { type: "string", description: "On apply (dryRun:false): the 64-hex confirmationToken from the immediately-prior dry-run. Required when dryRun:false; refuses with reason `confirmation_mismatch` if absent or stale, `cascade_changed_since_preview` if drift detected." },
+            },
+            required: ["ruleId"],
+        },
+    },
 ];

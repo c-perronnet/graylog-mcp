@@ -393,7 +393,7 @@ test("dispatch resolves list_pipelines/get_pipeline/delete_pipeline via the new 
     assert.ok(Array.isArray(payload.items));
 });
 
-test("assertAllToolsRegistered passes after Plan 04-05 registers PIPE-13/14 (count = 65)", async () => {
+test("assertAllToolsRegistered passes after Plan 04-04 Task 1 adds delete_pipeline_rule (count = 66)", async () => {
     const { dispatch, assertAllToolsRegistered } = await import("../src/dispatch.js");
     await import("../src/tools/_register.js");
     const { toolDefinitions } = await import("../src/tools.js");
@@ -401,11 +401,10 @@ test("assertAllToolsRegistered passes after Plan 04-05 registers PIPE-13/14 (cou
     assert.equal(typeof dispatch, "function");
     // Plan 04-02 left 59 (PIPE-01..PIPE-05); Plan 04-03 Task 2 finished the
     // pipeline-rule CRUD quartet → 63; Plan 04-05 adds connect/disconnect
-    // pipelines↔streams (PIPE-13/14) → 65. Plan 04-04 (independent wave 3)
-    // will add the remaining 3 tools (delete_pipeline_rule +
-    // list_pipeline_functions + simulate_pipeline_rule) → 68 final. If the
-    // count drifts, this test fails loudly and we know to update.
-    assert.equal(toolDefinitions.length, 65, `Expected 65 tools after Plan 04-05; got ${toolDefinitions.length}`);
+    // pipelines↔streams (PIPE-13/14) → 65. Plan 04-04 Task 1 adds
+    // delete_pipeline_rule (PIPE-10) → 66. Task 2 will add the remaining
+    // 2 tools (simulate_pipeline_rule + list_pipeline_functions) → 68 final.
+    assert.equal(toolDefinitions.length, 66, `Expected 66 tools after Plan 04-04 Task 1; got ${toolDefinitions.length}`);
 });
 
 // =====================================================================
@@ -2620,28 +2619,40 @@ test("delete_pipeline_rule HAPPY (0 referencing pipelines): cascades.pipelines:[
     assert.equal(payload.postApplyEstimate.deleted, true);
 });
 
-test("delete_pipeline_rule FROZEN HASH (empty cascade) is the pinned 64-hex literal", async () => {
-    // Drift sentinel for Plan 06 snapshot fixtures. Re-compute and pin.
+test("delete_pipeline_rule FROZEN HASH (empty cascade for ruleId=r1) is the pinned 64-hex literal", async () => {
+    // Drift sentinel for Plan 06 snapshot fixtures. The literal pins the
+    // byte-identity of the keyed-buckets canonical JSON output:
+    //   sha256(JSON.stringify({
+    //     streamId: "r1",
+    //     cascades: { rules: [], pipeline_connections: [], event_definitions: [] }
+    //   }))
+    // If the canonical JSON form changes (key order, bucket names, etc.),
+    // this test fails and Plan 06 snapshot drift is detected early.
     const empty = computeRuleCascadeHash({ ruleId: "r1", pipelineIds: [] });
-    // The expected literal is the byte-identical output of computeCascadeHash
-    // with the keyed-buckets canonical (streamId=r1, ruleIds=[],
-    // pipelineConnIds=[], eventDefIds=[]).
     assert.match(empty, /^[0-9a-f]{64}$/);
-    // We pin the literal here once per Plan 06 — record observed value.
-    // The actual value is recorded in the SUMMARY; this test verifies
-    // byte-stability across runs.
-    const second = computeRuleCascadeHash({ ruleId: "r1", pipelineIds: [] });
-    assert.equal(empty, second, "computeRuleCascadeHash must be byte-stable");
-
-    // And specifically — pin the literal so snapshot drift is detected:
-    // Pre-computed: sha256(JSON.stringify({streamId:"r1",cascades:{rules:[],
-    //   pipeline_connections:[],event_definitions:[]}}))
+    // PINNED LITERAL — recorded in Plan 04-04 SUMMARY for snapshot anchor.
     assert.equal(
         empty,
-        "ec1d77ddd5b6a2bc7dbe85b0b8a1aac2fbbc7e2e84aa6d54e9d9a13a8dae4e0e".length === 64
-            ? empty   // placeholder check; actual literal pinned below
-            : empty,
+        "9541cfc2cf6b92acde474f487f3e824942c1e0df4ae4308a60fa645afe1155b1",
+        "Empty-cascade hash drifted — Plan 06 snapshot fixtures will break. Verify computeRuleCascadeHash canonical form.",
     );
+    // Byte-stability across calls.
+    assert.equal(empty, computeRuleCascadeHash({ ruleId: "r1", pipelineIds: [] }));
+});
+
+test("delete_pipeline_rule FROZEN HASH (two pipelines for ruleId=r1) is the pinned 64-hex literal", async () => {
+    // Second drift sentinel — non-empty cascade. Pinned literal records the
+    // exact hash for { ruleId: "r1", pipelineIds: ["p1", "p2"] } so future
+    // Plan 06 snapshot fixtures can compare byte-identity end-to-end.
+    const two = computeRuleCascadeHash({ ruleId: "r1", pipelineIds: ["p1", "p2"] });
+    assert.equal(
+        two,
+        "66267019f60955ff99686f3dbf343f40580996e22d5ead79045743f1d075e3a1",
+        "Two-pipeline cascade hash drifted — Plan 06 snapshot fixtures will break.",
+    );
+    // Order-insensitivity (the helper sorts internally).
+    const reverseOrder = computeRuleCascadeHash({ ruleId: "r1", pipelineIds: ["p2", "p1"] });
+    assert.equal(reverseOrder, two, "computeRuleCascadeHash must sort pipelineIds internally");
 });
 
 test("delete_pipeline_rule HAPPY (2 referencing pipelines): cascades.pipelines has 2 entries; hash != empty-cascade hash", async () => {
@@ -2803,12 +2814,22 @@ test("delete_pipeline_rule apply HAPPY (hash matches): DELETE fires; sync envelo
 });
 
 test("delete_pipeline_rule apply DRIFT (D-14 acceptance gate): re-fetch hash differs → cascade_changed_since_preview; DELETE NEVER fires", async () => {
-    let phase = "dryrun";
+    // Pre-compute the dry-run hash for the "old" cascade state ([p1] only).
+    // Then orchestrate so build() at apply-time sees the SAME state (matches
+    // requireConfirm gate), but apply()'s re-fetch sees DRIFTED state.
+    // This mirrors Phase 3 delete_stream's drift test methodology.
+    const dryRunToken = computeRuleCascadeHash({
+        ruleId: "r1",
+        pipelineIds: ["p1"],
+    });
+    let paginatedCalls = 0;
     const captured = [];
     _setCaptureRequest((req) => {
         captured.push(req);
         if (req.method === "GET" && req.path.startsWith("/api/system/pipelines/rule/paginated")) {
-            if (phase === "dryrun") {
+            paginatedCalls += 1;
+            if (paginatedCalls === 1) {
+                // build()'s call inside apply → matches dry-run state (hash matches → gate opens).
                 return paginatedRuleResponse({
                     page: 1,
                     perPage: 50,
@@ -2816,7 +2837,7 @@ test("delete_pipeline_rule apply DRIFT (D-14 acceptance gate): re-fetch hash dif
                     usedInPipelines: { r1: [{ id: "p1", title: "P1" }] },
                 });
             }
-            // Apply re-fetch: cascade DRIFTED — a new pipeline references the rule.
+            // apply()'s re-fetch → drifted state (new pipeline references the rule).
             return paginatedRuleResponse({
                 page: 1,
                 perPage: 50,
@@ -2829,16 +2850,9 @@ test("delete_pipeline_rule apply DRIFT (D-14 acceptance gate): re-fetch hash dif
         }
         throw new Error(`unexpected ${req.method} ${req.path}`);
     });
-    const dry = await handleDeletePipelineRule({
-        params: { arguments: { _testConnection: "fake", ruleId: "r1" } },
-    });
-    const dryPayload = JSON.parse(dry.content[0].text);
-    const token = dryPayload.confirmationToken;
-    // Now apply — phase switches; re-fetch returns a DIFFERENT pipeline set.
-    phase = "apply";
     const res = await handleDeletePipelineRule({
         params: {
-            arguments: { _testConnection: "fake", ruleId: "r1", dryRun: false, confirm: token },
+            arguments: { _testConnection: "fake", ruleId: "r1", dryRun: false, confirm: dryRunToken },
         },
     });
     assert.equal(res.isError, true);
@@ -2846,6 +2860,8 @@ test("delete_pipeline_rule apply DRIFT (D-14 acceptance gate): re-fetch hash dif
     // DELETE must NEVER have been called.
     const deletes = captured.filter((r) => r.method === "DELETE");
     assert.equal(deletes.length, 0);
+    // paginated GET fired twice (build() + apply re-fetch).
+    assert.equal(paginatedCalls, 2);
 });
 
 test("delete_pipeline_rule apply CONFIRMATION MISMATCH: wrong token → reason:confirmation_mismatch; apply gate refuses BEFORE re-fetch", async () => {
