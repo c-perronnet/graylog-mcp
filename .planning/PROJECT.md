@@ -134,4 +134,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-15 — Phase 0 (Foundation) complete: dispatch Map, defineMutatingHandler/defineListHandler primitives, Graylog HTTP client, node:test harness, and dry-run safety scaffolding all shipped and verified (13/13 FOUND requirements).*
+*Last updated: 2026-05-15 — Phase 1 (Inputs & Extractors) complete: 12 typed tools shipped through defineMutatingHandler/defineListHandler (list_input_types, list_inputs, get_input, create_input, update_input, delete_input, start_input, stop_input, list_extractors, create_extractor, update_extractor, delete_extractor). C3 encrypted-field zeroing mitigated end-to-end (verified byte-identically in snapshot fixture); 11/11 INPUT requirements complete; 235/235 tests green; full schema-parity coverage for all 12 new tools. Phase 0 (Foundation) closed earlier: 13/13 FOUND requirements.*
