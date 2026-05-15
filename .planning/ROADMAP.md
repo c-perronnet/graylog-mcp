@@ -77,11 +77,11 @@
   3. `test_stream_match` accepts a stream config + a sample message and returns per-rule match outcomes — letting the agent verify rule intent without round-tripping a real message through Graylog.
   4. `create_stream` dry-run output includes `existingMatches: [{ id, title, similarity_reason }]` when a stream with a similar title already exists (case-different, prefix match, or exact), eliminating the "list-before-create skipped under context pressure" duplication failure.
 **Plans**: 5 plans
-  - [x] 02-01-PLAN.md — Foundation amendments (handler.js _confirmationToken forward + requireConfirm gate; conflict.js index_sets envelope) + await_system_job (INDEX-08) + list_index_sets (INDEX-01) + get_index_set (INDEX-02) + U1 live-smoke decision artifact
-  - [x] 02-02-PLAN.md — create_index_set (INDEX-03) with D-10 + D-08 friendly aliases + D-09 6 strict configs + M5 idempotency; update_index_set (INDEX-04) with D-11 atomic strategy-replace + U1-resolved partial-update + ND2 pre-flight
-  - [x] 02-03-PLAN.md — delete_index_set (INDEX-05) C1 mitigation centerpiece — sha-256 confirmation hash, D-04 inverted default, D-05 stats hard-block, ND1 default refusal, D-15 async envelope
-  - [x] 02-04-PLAN.md — set_default_index_set (INDEX-06) D-13 can_be_default invariant + cycle_deflector (INDEX-07) ND3 writable pre-flight + UPDATED D-14 sync semantics + side_effects.observable_at
-  - [x] 02-05-PLAN.md — Snapshot fixtures (9 per RESEARCH §Snapshot Fixture Design) + schema-parity enrichment (8 tools) + auth-redaction confirmationToken allowlist + VALIDATION.md flip + human-verify checkpoint
+  - [ ] 03-01-PLAN.md — Foundation amendments (promote c1-hash.js to _shared/cascade-hash.js with keyed-buckets signature; verify findExistingMatches `streams` envelope) + read tools list_streams/get_stream/list_stream_rules (STREAM-01/02/07) + v2.3 list_streams displacement + U1-style live-smoke decision artifact for D-14
+  - [ ] 03-02-PLAN.md — create_stream (STREAM-03, CreateEntityRequest envelope + 3-bucket existingMatches per D-05/D-06 + numeric rule translation per D-11/S9) + update_stream (STREAM-04, D-14 partial-update + D-09 mutable) + start_stream + pause_stream (STREAM-06, D-12 lifecycle-as-mutation + D-09 mutable)
+  - [ ] 03-03-PLAN.md — delete_stream (STREAM-05) C2 mitigation centerpiece — 3-endpoint cascade pre-flight (rules + pipeline-connections + event-definitions paginated client-side-filtered per Pitfall S6) + sha-256 keyed-buckets hash (D-02) + apply-time re-fetch refusal (D-01..D-04) + D-09 mutable pre-flight
+  - [ ] 03-04-PLAN.md — create_stream_rule (STREAM-08, 8 variants per D-11 reconfirmed including match_input) + update_stream_rule (STREAM-09, D-14 partial-update + Pitfall S8 type-from-current) + delete_stream_rule (STREAM-10, leaf-delete per Discretion-04 with parent-mutable pre-flight) + test_stream_match (STREAM-11, server-side D-07/D-08)
+  - [ ] 03-05-PLAN.md — 11 snapshot fixtures per RESEARCH §Snapshot Fixture Design + schema-parity audit (all 12 net-new tools) + auth-redaction lint inheritance + VALIDATION.md flip + human-verify checkpoint
 
 ### Phase 4: Pipelines, Pipeline Rules & Connections
 **Goal**: An agent can author Graylog pipeline rules from structured intent or raw DSL, with both client-side validation and server-authoritative parse + simulate gating every apply.
