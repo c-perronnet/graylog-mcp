@@ -29,7 +29,7 @@
   4. The existing v2.3 read tools dispatch through the new Map unchanged (no behavior diffs against v7.2), and `list_admin_tools` naming convention `<verb>_<domain>_<noun>` is documented as enforced from this phase forward.
 **Plans**: 6 plans
   - [x] 00-01-PLAN.md — Project bootstrap + test scaffolding (FOUND-06 partial)
-  - [ ] 00-02-PLAN.md — Migrate 4 existing test-*.js scripts to node:test (FOUND-06 closure via D-05)
+  - [x] 00-02-PLAN.md — Migrate 4 existing test-*.js scripts to node:test (FOUND-06 closure via D-05)
   - [ ] 00-03-PLAN.md — Graylog HTTP client layer (FOUND-02, FOUND-08 + D-07 client-side)
   - [ ] 00-04-PLAN.md — Handler primitives defineMutatingHandler/defineListHandler (FOUND-03/04/05/09/10/11/12 + D-07 wrapper-side)
   - [ ] 00-05-PLAN.md — Dispatch refactor + tool naming hard rename (FOUND-01, FOUND-13)

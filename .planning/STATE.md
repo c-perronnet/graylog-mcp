@@ -3,18 +3,18 @@ gsd_state_version: 1.0
 milestone: v2.3
 milestone_name: milestone
 status: Ready to execute
-last_updated: "2026-05-13T17:18:49.344Z"
+last_updated: "2026-05-15T06:40:06.928Z"
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 6
-  completed_plans: 1
-  percent: 17
+  completed_plans: 2
+  percent: 33
 ---
 
 # Project Memory: Graylog MCP — Full Admin Surface
 
-**Last updated:** 2026-05-13
+**Last updated:** 2026-05-15
 
 ## Project Reference
 
@@ -28,12 +28,12 @@ progress:
 ## Current Position
 
 Phase: 00 (foundation) — EXECUTING
-Plan: 2 of 6
+Plan: 3 of 6
 
 - **Phase**: 0 — Foundation
-- **Plan**: 2 of 6 — Wave 1 (00-01 test-harness bootstrap) shipped; next up is 00-02 (test-existing migration + delete root scripts)
-- **Status**: Phase 0 in progress; `npm test` green via `node --test`, scaffold ready for Plans 02–06
-- **Progress bar**: `[██░░░░░░░░] 17%` (1 of 6 Phase 0 plans complete)
+- **Plan**: 3 of 6 — Wave 2 (00-02 test-existing migration) shipped; next up is 00-03 (graylog-client extraction)
+- **Status**: Phase 0 in progress; `npm test` green via `node --test`, full unified suite running (64 tests / 18 suites)
+- **Progress bar**: `[███░░░░░░░] 33%` (2 of 6 Phase 0 plans complete)
 
 ## Performance Metrics
 
@@ -41,10 +41,11 @@ Plan: 2 of 6
 |--------|-------|
 | v1 requirements | 71 mapped / 71 total |
 | Phases | 0 complete / 8 total |
-| Plans complete | 1 |
+| Plans complete | 2 |
 | Net-new tools target | ~64 (58 CRUD primitives + 6 blueprints) |
 | Total MCP surface at milestone end | ~91 tools |
 | Phase 00-foundation P01 | 2min | 2 tasks | 13 files |
+| Phase 00-foundation P02 | ~15 min | 2 tasks | 12 files |
 
 ## Accumulated Context
 
@@ -69,6 +70,12 @@ Drawn from `PROJECT.md` Key Decisions table — restated here for quick referenc
   - `setResolveSnapshotPath` redirects snapshots to `test/__snapshots__/` instead of node:test's default sibling-file location (honors D-06; keeps test tree readable).
   - `scripts.test` glob is single-quoted (`node --test 'test/**/*.test.js'`) so Node — not bash — performs the expansion. Without quoting bash matches only one path and breaks the runner. Treated as a Rule 1 bug fix on top of Task 1's value.
   - `@types/node` bumped to `^22.0.0` so devDep types align with the new engine floor (`>= 22.3.0`).
+
+- **Plan 00-02 (test-existing migration)**:
+  - Per-suite `mkdtempSync(join(tmpdir(), <prefix>))` + after-hook cleanup (not a single shared temp dir) for every describe block that calls `_withStorePathOverride` — node:test runs suites concurrently and the override is process-global, so sharing the path would race.
+  - Swallowed `try { ... } catch (error) { console.error(...) }` in `test-features.js` removed during migration — let node:test reporter fail red on broken assertions rather than log-and-zero-exit (RESEARCH.md Q8).
+  - Synced `package-lock.json` to Plan 01's `package.json` bumps (Rule 3 blocking fix). Plan 01 bumped `@types/node ^22` + `engines.node >= 22.3.0` without running `npm install`; axios was missing from `node_modules` and the migrated tests couldn't import production code. Committed as a separate `chore(00-02): sync package-lock.json` so the lockfile churn didn't muddy the test-migration commits.
+  - Deleted (not archived) the 4 root-level scripts — git history is the archive.
 
 ### Foundation Primitives To Be Built In Phase 0
 
@@ -118,11 +125,11 @@ None.
 
 ## Session Continuity
 
-**Last action**: Completed `00-01-PLAN.md` — bumped `engines.node` to `>= 22.3.0`, fixed `scripts.test`, created `test/snapshot-config.js` + 10 stub test files + `test/__snapshots__/.gitkeep`. `npm test` exits 0 with 10 passing scaffold lines. Commits: `2639926`, `10635a0`. FOUND-06 marked complete.
+**Last action**: Completed `00-02-PLAN.md` — migrated the 4 root `test-*.js` scripts into 7 node:test files under `test/existing/`, deleted the originals, and synced `package-lock.json` to Plan 01's `package.json` bumps so axios resolves. `npm test` exits 0 with 64 tests / 18 suites green. Commits: `688480f` (Task 1: clustering split into 4 files), `19133ed` (Task 2: features/aggregation-fixes/histogram-fixes + deletions), `acf12c4` (Rule 3 lockfile sync). FOUND-06 already complete.
 
-**Stopped at**: Completed 00-01-PLAN.md
+**Stopped at**: Completed 00-02-PLAN.md
 
-**Next action**: Execute `00-02-PLAN.md` (test-existing migration: move/clean up the 4 root `test-*.js` scripts into `test/existing/`, drop them from the repo, and continue Phase 0 Wave 2).
+**Next action**: Execute `00-03-PLAN.md` (graylog-client extraction — first src/ touch of Phase 0).
 
 ---
 *State initialized: 2026-05-13*
