@@ -1,5 +1,8 @@
 import { test, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
 import "./snapshot-config.js";
 import { handleListInputTypes } from "../src/tools/inputs/list-input-types.js";
 import { handleListInputs } from "../src/tools/inputs/list-inputs.js";
@@ -24,6 +27,15 @@ import {
 // production code under src/tools/inputs/redact.js exports the same string
 // under REDACTION_PLACEHOLDER. Keep the literal in sync with that module.
 const REDACTION_PLACEHOLDER = "<redacted>";
+
+// Plan 01-05: load the committed type-catalogue fixture (hand-written per
+// Java source for Graylog 7.0.6; safe default when the live instance at
+// <graylog-host> is unreachable). The fixture is the stable source-of-truth
+// across machines so snapshot fixtures stay byte-identical.
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const TYPE_CATALOGUE_FIXTURE = JSON.parse(
+    readFileSync(join(__dirname, "fixtures/type-catalogue-7.0.6.json"), "utf8"),
+);
 
 // Helper: a per-test capture function that pattern-matches on the request
 // and returns the response for whichever route matches. Throws on miss so
@@ -240,32 +252,19 @@ test("list_input_types uses the cache — repeated invocations hit it once", asy
 //     * 1 apply path
 //     * 1 writable=false short-circuit
 
+// Plan 01-05: GELF UDP / TCP catalogues are now slices of the committed
+// type-catalogue-7.0.6.json fixture so snapshot fixtures stay byte-identical
+// across machines. The fixture's GELF TCP entry carries tls_key_password
+// with is_encrypted: true — the C3 acceptance gate (Test 27) depends on this
+// flag flowing through the catalogue cache to the redaction logic.
 const GELF_TCP_CATALOGUE = {
-    "org.graylog2.inputs.gelf.tcp.GELFTCPInput": {
-        type: "org.graylog2.inputs.gelf.tcp.GELFTCPInput",
-        name: "GELF TCP",
-        description: "GELF over TCP (with optional TLS)",
-        is_exclusive: false,
-        requested_configuration: {
-            bind_address: { is_encrypted: false },
-            port: { is_encrypted: false },
-            tls_enable: { is_encrypted: false },
-            tls_key_password: { is_encrypted: true },
-        },
-    },
+    "org.graylog2.inputs.gelf.tcp.GELFTCPInput":
+        TYPE_CATALOGUE_FIXTURE["org.graylog2.inputs.gelf.tcp.GELFTCPInput"],
 };
 
 const GELF_UDP_CATALOGUE = {
-    "org.graylog2.inputs.gelf.udp.GELFUDPInput": {
-        type: "org.graylog2.inputs.gelf.udp.GELFUDPInput",
-        name: "GELF UDP",
-        description: "GELF over UDP",
-        is_exclusive: false,
-        requested_configuration: {
-            bind_address: { is_encrypted: false },
-            port: { is_encrypted: false },
-        },
-    },
+    "org.graylog2.inputs.gelf.udp.GELFUDPInput":
+        TYPE_CATALOGUE_FIXTURE["org.graylog2.inputs.gelf.udp.GELFUDPInput"],
 };
 
 const GELF_HTTP_CATALOGUE = {
@@ -285,7 +284,7 @@ const GELF_HTTP_CATALOGUE = {
 
 // -------- Test 19 (P2): create_input GELF UDP dry-run emits POST body --------
 
-test("create_input GELF UDP dry-run emits expected POST body", async () => {
+test("create_input GELF UDP dry-run emits expected POST body", async (t) => {
     _setCaptureRequest(multiCapture([
         { method: "GET", pathPattern: "/api/system/inputs/types/all", response: GELF_UDP_CATALOGUE },
         { method: "GET", pathPattern: "/api/system/inputs", response: { inputs: [] } },
@@ -310,11 +309,13 @@ test("create_input GELF UDP dry-run emits expected POST body", async () => {
     assert.equal(payload.preview.body.global, true);
     assert.equal(payload.preview.body.configuration.port, 12201);
     assert.equal(payload.postApplyEstimate.id, "__SERVER_ASSIGNED__");
+    // Snapshot 1 (Plan 01-05): create_input GELF UDP dry-run preview body — no encrypted fields, no redaction.
+    t.assert.snapshot(payload);
 });
 
 // -------- Test 20 (P2): create_input GELF TCP redacts tls_key_password (D-04) --------
 
-test("create_input GELF TCP dry-run redacts tls_key_password in preview (D-04)", async () => {
+test("create_input GELF TCP dry-run redacts tls_key_password in preview (D-04)", async (t) => {
     _setCaptureRequest(multiCapture([
         { method: "GET", pathPattern: "/api/system/inputs/types/all", response: GELF_TCP_CATALOGUE },
         { method: "GET", pathPattern: "/api/system/inputs", response: { inputs: [] } },
@@ -329,7 +330,7 @@ test("create_input GELF TCP dry-run redacts tls_key_password in preview (D-04)",
                     bind_address: "0.0.0.0",
                     port: 12201,
                     tls_enable: true,
-                    tls_key_password: "supersecret",
+                    tls_key_password: "secret",
                 },
                 _testConnection: "fake",
             },
@@ -343,9 +344,15 @@ test("create_input GELF TCP dry-run redacts tls_key_password in preview (D-04)",
     );
     const allText = JSON.stringify(payload);
     assert.ok(
-        !allText.includes("supersecret"),
+        !allText.includes(":\"secret\""),
         `literal secret leaked into payload: ${allText}`,
     );
+    // Snapshot 2 (Plan 01-05): D-04 redaction acceptance — tls_key_password
+    // must be REDACTION_PLACEHOLDER, literal "secret" must NOT appear in the
+    // snapshot. The literal "secret" is 6 chars — below the 32-char threshold
+    // of the auth-redaction lint, so even if it leaked the lint wouldn't catch
+    // it, but the redaction check above + this snapshot cement the contract.
+    t.assert.snapshot(payload);
 });
 
 // -------- Test 21 (P2): create_input GELF HTTP strict schema accepts (WARNING #9 fix) --------
@@ -503,7 +510,7 @@ test("create_input apply path returns server-assigned id", async () => {
 
 // -------- Test 27 (P2): update_input C3 ACCEPTANCE GATE — no-op preview emits ONLY changed field --------
 
-test("update_input partial dry-run with no-op changes emits ONLY changed field (C3 ACCEPTANCE GATE)", async () => {
+test("update_input partial dry-run with no-op changes emits ONLY changed field (C3 ACCEPTANCE GATE)", async (t) => {
     _setCaptureRequest(multiCapture([
         {
             method: "GET",
@@ -545,6 +552,12 @@ test("update_input partial dry-run with no-op changes emits ONLY changed field (
         `GET-response mask leaked: ${bodyText}`);
     assert.equal(Object.keys(payload.preview.body.configuration).length, 1,
         "configuration block must contain ONLY the agent-requested port key");
+    // Snapshot 3 (Plan 01-05): C3 ACCEPTANCE GATE — byte-identical proof that
+    // the no-op update_input dry-run preview body has NO `tls_key_password`
+    // key in preview.body.configuration. Any future change that re-introduces
+    // the encrypted field will require explicit --test-update-snapshots + a
+    // human reviewer's PR approval to update this snapshot (T-01-05-04).
+    t.assert.snapshot(payload);
 });
 
 // -------- Test 28 (P2): update_input D-03 — changes={configuration:{}} emits empty configuration --------
@@ -757,7 +770,7 @@ test("update_input zod rejects missing inputId", async () => {
 
 // -------- Test 34 (P2): delete_input dry-run enumerates affected extractors (D-05) --------
 
-test("delete_input dry-run enumerates affected extractors in cascades.extractors[] (D-05)", async () => {
+test("delete_input dry-run enumerates affected extractors in cascades.extractors[] (D-05)", async (t) => {
     _setCaptureRequest(multiCapture([
         {
             method: "GET",
@@ -786,6 +799,10 @@ test("delete_input dry-run enumerates affected extractors in cascades.extractors
     assert.equal(payload.cascades.extractors[0].title, "Extract ip");
     assert.equal(payload.cascades.extractors[0].extractor_type, "grok");
     assert.equal(payload.cascades.extractors[1].id, "ex2");
+    // Snapshot 4 (Plan 01-05): D-05 cascade enumeration — delete_input pre-flights
+    // GET /api/system/inputs/{id}/extractors and surfaces the affected extractors
+    // in cascades.extractors[] so the agent sees blast radius before applying.
+    t.assert.snapshot(payload);
 });
 
 // -------- Test 35 (P2): delete_input apply path issues DELETE --------

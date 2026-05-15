@@ -19,6 +19,9 @@
 
 import { test, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
 import "./snapshot-config.js";
 import { handleListExtractors } from "../src/tools/inputs/list-extractors.js";
 import { handleCreateExtractor } from "../src/tools/inputs/create-extractor.js";
@@ -50,6 +53,17 @@ function multiCapture(routes) {
         throw new Error(`No route matched ${req.method} ${req.path}`);
     };
 }
+
+// Plan 01-05: load the committed type-catalogue fixture for parity with
+// inputs.test.js (extractors don't directly consume it, but keeping the same
+// shape across both test files makes it easy to extend later if a future
+// extractor test needs the catalogue).
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const TYPE_CATALOGUE_FIXTURE = JSON.parse(
+    readFileSync(join(__dirname, "fixtures/type-catalogue-7.0.6.json"), "utf8"),
+);
+// Touch the fixture so an unused-symbol lint would catch a future stripping.
+void TYPE_CATALOGUE_FIXTURE;
 
 beforeEach(() => {
     _clearConnectionsForTests();
@@ -143,6 +157,9 @@ test("list_extractors with fields: 'all' returns full DTO", async () => {
 // Shared driver: a single helper that exercises one extractor_type / config
 // pair and asserts the preview shape contract. Unrolled callers below each
 // declare a top-level test so failures point at the type, not at iteration N.
+// Plan 01-05: returns the parsed payload so the grok caller can take a
+// byte-identical snapshot (fixture 5 — D-07 reconfirmation byte-identical
+// proof for the most common extractor primitive).
 async function assertCreateExtractorPreviewShape(type, config) {
     _setCaptureRequest(multiCapture([
         { method: "GET", pathPattern: /\/extractors$/, response: { extractors: [] } },
@@ -170,10 +187,16 @@ async function assertCreateExtractorPreviewShape(type, config) {
     assert.equal(payload.preview.body.extractor_type, type);
     assert.deepEqual(payload.preview.body.extractor_config, config);
     assert.equal(payload.postApplyEstimate.id, "__SERVER_ASSIGNED__");
+    return payload;
 }
 
-test("create_extractor grok — preview shape", async () => {
-    await assertCreateExtractorPreviewShape("grok", { grok_pattern: "%{IP:ip}" });
+test("create_extractor grok — preview shape", async (t) => {
+    const payload = await assertCreateExtractorPreviewShape("grok", { grok_pattern: "%{IP:ip}" });
+    // Snapshot 5 (Plan 01-05): D-07 reconfirmation acceptance — the grok
+    // primitive is the most common; this byte-identical fixture proves the
+    // create_extractor wire shape against extractor_id-not-id response quirk
+    // is locked. The other 7 primitives are pinned by per-type tests above.
+    t.assert.snapshot(payload);
 });
 
 test("create_extractor regex — preview shape", async () => {
