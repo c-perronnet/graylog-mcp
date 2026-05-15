@@ -78,7 +78,7 @@ The DSL subsystem is the hardest part of this milestone.
 - [ ] **PIPE-08**: `create_pipeline_rule` — accepts structured intent (when/then specs) AND raw DSL source; generates DSL via `src/pipeline-dsl/`; **every dry-run calls `POST /system/pipelines/rule/parse` for server-authoritative validation** (C4)
 - [ ] **PIPE-09**: `update_pipeline_rule` — same parse pre-flight
 - [ ] **PIPE-10**: `delete_pipeline_rule` — pre-delete check for pipelines that reference this rule
-- [ ] **PIPE-11**: `list_pipeline_functions` — exposes the cached Graylog built-in function catalogue; cached at connection-init
+- [x] **PIPE-11**: `list_pipeline_functions` — exposes the cached Graylog built-in function catalogue; cached at connection-init
 - [ ] **PIPE-12**: `simulate_pipeline_rule` — non-negotiable (M3); given a rule source and a sample message, returns the post-rule message; catches semantic bugs the parser misses
 - [ ] **PIPE-13**: `connect_pipelines_to_stream` — attach one or more pipelines to a stream; added 2026-05-15 per Phase 4 CONTEXT.md D-01 (roadmap dependency on Phase 3 stream IDs)
 - [ ] **PIPE-14**: `disconnect_pipelines_from_stream` — detach pipelines from a stream; added 2026-05-15 per Phase 4 CONTEXT.md D-01
@@ -258,7 +258,7 @@ Populated by the roadmapper on 2026-05-13. Every v1 requirement maps to exactly 
 | PIPE-08 | Phase 4 | Pending |
 | PIPE-09 | Phase 4 | Pending |
 | PIPE-10 | Phase 4 | Pending |
-| PIPE-11 | Phase 4 | Pending |
+| PIPE-11 | Phase 4 | Complete |
 | PIPE-12 | Phase 4 | Pending |
 | PIPE-13 | Phase 4 | Pending |
 | PIPE-14 | Phase 4 | Pending |
