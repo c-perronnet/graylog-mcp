@@ -1266,4 +1266,34 @@ export const toolDefinitions = [
             required: ["pipelineId"],
         },
     },
+    // ====================================================================
+    // Phase 4 Plan 03 — pipeline-rule CRUD (PIPE-06..PIPE-09). All paths use
+    // the literal `/api/system/pipelines/rule/{id}` segment (Pitfall 3 rule
+    // variant — bare /api/system/pipelines/{id} returns 404; the rule sub-
+    // resource is namespaced under /rule/ exactly).
+    // ====================================================================
+    {
+        name: "list_pipeline_rules",
+        description: "List Graylog pipeline rules (narrow projection [id, title, description, created_at, modified_at]). The `source` DSL text is excluded from the default fields — use get_pipeline_rule for the full rule body. Path uses the literal `rule` segment (Pitfall 3 rule variant); bare /api/system/pipelines/{id} returns 404.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                connectionName: { type: "string" },
+                fields: { type: "array", items: { type: "string" } },
+                limit: { type: "number" },
+            },
+        },
+    },
+    {
+        name: "get_pipeline_rule",
+        description: "Get the full RuleSource DTO for one Graylog pipeline rule (id, title, description, source DSL, rule_builder, simulator_message, created_at, modified_at). Use list_pipeline_rules first for narrow listing. Path uses the literal `rule` segment (Pitfall 3 rule variant).",
+        inputSchema: {
+            type: "object",
+            properties: {
+                connectionName: { type: "string" },
+                ruleId: { type: "string", description: "Pipeline-rule ID (from list_pipeline_rules)" },
+            },
+            required: ["ruleId"],
+        },
+    },
 ];

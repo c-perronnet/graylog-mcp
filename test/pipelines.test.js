@@ -387,16 +387,16 @@ test("dispatch resolves list_pipelines/get_pipeline/delete_pipeline via the new 
     assert.ok(Array.isArray(payload.items));
 });
 
-test("assertAllToolsRegistered passes after Plan 04-02 registers 5 new pipeline tools (count = 59)", async () => {
+test("assertAllToolsRegistered passes after Plan 04-03 Task 1 registers PIPE-06+PIPE-07 (count = 61)", async () => {
     const { dispatch, assertAllToolsRegistered } = await import("../src/dispatch.js");
     await import("../src/tools/_register.js");
     const { toolDefinitions } = await import("../src/tools.js");
     assertAllToolsRegistered(toolDefinitions);
     assert.equal(typeof dispatch, "function");
-    // Plan 04-01 left the tool count at 54 (no tools registered); Plan 04-02
-    // adds 5 (PIPE-01..PIPE-05) → 59 total. If the count drifts, this test
-    // fails loudly and we know to update the plan.
-    assert.equal(toolDefinitions.length, 59, `Expected 59 tools after Plan 04-02; got ${toolDefinitions.length}`);
+    // Plan 04-02 left 59 (PIPE-01..PIPE-05); Plan 04-03 Task 1 adds
+    // list_pipeline_rules + get_pipeline_rule → 61. Task 2 grows to 63 once
+    // create + update land; the test below at the end of Task 2 enforces 63.
+    assert.equal(toolDefinitions.length, 61, `Expected 61 tools after Plan 04-03 Task 1; got ${toolDefinitions.length}`);
 });
 
 // =====================================================================
@@ -907,8 +907,10 @@ test("update_pipeline has NO is_editable / mutable check (D-15 — pipelines hav
 
 import { handleListPipelineRules } from "../src/tools/pipelines/list-pipeline-rules.js";
 import { handleGetPipelineRule } from "../src/tools/pipelines/get-pipeline-rule.js";
-import { handleCreatePipelineRule } from "../src/tools/pipelines/create-pipeline-rule.js";
-import { handleUpdatePipelineRule } from "../src/tools/pipelines/update-pipeline-rule.js";
+// Task 2 imports — create/update_pipeline_rule handlers — landed in Plan 04-03
+// Task 2 GREEN gate (added alongside the corresponding tests, keeping the
+// Task 1 RED gate parseable when the Task 2 production modules don't yet
+// exist).
 import {
     ListPipelineRulesSchema,
     GetPipelineRuleSchema,
@@ -918,7 +920,6 @@ import {
     ConditionSchema,
     ActionSchema,
 } from "../src/tools/pipelines/schemas.js";
-import { _clearFunctionCatalogueForTests } from "../src/pipeline-dsl/function-catalogue.js";
 
 // =====================================================================
 // Fixtures — RuleSource DTO and structured-intent helpers
