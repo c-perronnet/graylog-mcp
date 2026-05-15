@@ -19,7 +19,10 @@ import { handleListEventDefinitions } from "./list-event-definitions.js";
 import { handleGetEventDefinition } from "./get-event-definition.js";
 // Plan 05-02 Task 2 — EVENT-03 create (M1 + C5 mitigation centerpiece).
 import { handleCreateEventDefinition } from "./create-event-definition.js";
+// Plan 05-02 Task 3 — EVENT-04 update (D-02 mirror of D-01 + STRICT_NO_ECHO + C5 on changes.config).
+import { handleUpdateEventDefinition } from "./update-event-definition.js";
 
 register("list_event_definitions", handleListEventDefinitions);
 register("get_event_definition", handleGetEventDefinition);
 register("create_event_definition", handleCreateEventDefinition);
+register("update_event_definition", handleUpdateEventDefinition);

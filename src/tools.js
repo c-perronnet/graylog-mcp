@@ -770,6 +770,24 @@ export const toolDefinitions = [
         },
     },
     {
+        name: "update_event_definition",
+        description: "Update an event definition on the active Graylog connection. STRICT_NO_ECHO partial-update: wire body emits ONLY fields present in args.changes (no round-trip from a GET — scheduler READ_ONLY contamination is structurally impossible per Pitfall 5). body.id is always set to args.definitionId so the PUT body agrees with the URL segment (Pitfall 8). Defaults schedule:false (D-02 mirror of D-01 create — wire path UNCONDITIONALLY /api/events/definitions/{id}?schedule=false; partial updates NEVER silently re-enable scheduling). v6→v7 aggregation migration runs over args.changes.config when present and surfaces in dry-run via migration:{migrated, warnings} (C5; omitted otherwise). dryRun:true by default.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                connectionName: { type: "string", description: "Optional connection name; defaults to active" },
+                dryRun: { type: "boolean", description: "Preview without applying. Default: true" },
+                idempotencyKey: { type: "string", description: "Optional retry-window dedupe key" },
+                definitionId: { type: "string", description: "Event definition id from list_event_definitions" },
+                changes: {
+                    type: "object",
+                    description: "Partial EventDefinitionDto fields to update. Omitted fields are server-side no-ops. Allowed keys: title, description, priority, alert, config, field_spec, key_spec, notification_settings, notifications, storage, remediation_steps, event_procedure, event_summary_template. Touching `config` triggers v6→v7 migration. `scheduler` is NOT accepted (READ_ONLY per Pitfall 5).",
+                },
+            },
+            required: ["definitionId", "changes"],
+        },
+    },
+    {
         name: "cluster_log_messages",
         description: "Cluster similar log messages into Drain3-style templates. Fetches messages with the same args as search_messages_graylog, then groups them by structural similarity. Templates are persisted per connection and reused across calls.",
         inputSchema: {
