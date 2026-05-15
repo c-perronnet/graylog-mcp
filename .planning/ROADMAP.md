@@ -86,7 +86,7 @@
 ### Phase 4: Pipelines, Pipeline Rules & Connections
 **Goal**: An agent can author Graylog pipeline rules from structured intent or raw DSL, with both client-side validation and server-authoritative parse + simulate gating every apply.
 **Depends on**: Phase 0, Phase 3 (`connect_pipelines_to_stream` needs stream IDs)
-**Requirements**: PIPE-01, PIPE-02, PIPE-03, PIPE-04, PIPE-05, PIPE-06, PIPE-07, PIPE-08, PIPE-09, PIPE-10, PIPE-11, PIPE-12
+**Requirements**: PIPE-01, PIPE-02, PIPE-03, PIPE-04, PIPE-05, PIPE-06, PIPE-07, PIPE-08, PIPE-09, PIPE-10, PIPE-11, PIPE-12, PIPE-13, PIPE-14
 **Success Criteria** (what must be TRUE):
   1. `create_pipeline_rule` accepts either a structured `{when, then}` intent OR a raw DSL source string; in both modes the dry-run output includes the result of a `POST /system/pipelines/rule/parse` server pre-flight, refusing to apply on any ParseException.
   2. `simulate_pipeline_rule` takes a rule source plus a sample message and returns the post-rule message — catching semantic bugs (wrong function name, type-coercion errors, set_field overwrites) that the parser cannot detect.
@@ -95,12 +95,13 @@
 
 **Research notes**: This phase has a **mandatory pre-phase research pass** flagged by `research/SUMMARY.md` — the ~100 Java built-in function classes under `source-code/graylog2-server/.../plugin/pipelineprocessor/functions/` must be enumerated into `src/pipeline-dsl/builtins.js` (name, signature, one-line description) before implementation of PIPE-08 begins. Hand-curated; auto-regeneration is future work.
 
-**Plans**: 5 plans
-  - [x] 02-01-PLAN.md — Foundation amendments (handler.js _confirmationToken forward + requireConfirm gate; conflict.js index_sets envelope) + await_system_job (INDEX-08) + list_index_sets (INDEX-01) + get_index_set (INDEX-02) + U1 live-smoke decision artifact
-  - [x] 02-02-PLAN.md — create_index_set (INDEX-03) with D-10 + D-08 friendly aliases + D-09 6 strict configs + M5 idempotency; update_index_set (INDEX-04) with D-11 atomic strategy-replace + U1-resolved partial-update + ND2 pre-flight
-  - [x] 02-03-PLAN.md — delete_index_set (INDEX-05) C1 mitigation centerpiece — sha-256 confirmation hash, D-04 inverted default, D-05 stats hard-block, ND1 default refusal, D-15 async envelope
-  - [x] 02-04-PLAN.md — set_default_index_set (INDEX-06) D-13 can_be_default invariant + cycle_deflector (INDEX-07) ND3 writable pre-flight + UPDATED D-14 sync semantics + side_effects.observable_at
-  - [ ] 02-05-PLAN.md — Snapshot fixtures (9 per RESEARCH §Snapshot Fixture Design) + schema-parity enrichment (8 tools) + auth-redaction confirmationToken allowlist + VALIDATION.md flip + human-verify checkpoint
+**Plans**: 6 plans
+  - [ ] 04-01-PLAN.md — DSL infrastructure (builtins.js 130-row catalogue, escape.js, emit.js, validate.js, function-catalogue.js — D-02/D-03/D-04/D-12/D-13) + computeRuleCascadeHash thin wrapper (D-14 prep) + 04-U1-SMOKE.md decision artifact (D-16)
+  - [ ] 04-02-PLAN.md — Pipeline CRUD: list_pipelines (PIPE-01), get_pipeline (PIPE-02), create_pipeline (PIPE-03 with D-06 pipeline parse pre-flight), update_pipeline (PIPE-04 STRICT_NO_ECHO + parse pre-flight), delete_pipeline (PIPE-05 sync envelope, D-15 no mutable)
+  - [ ] 04-03-PLAN.md — Pipeline-rule CRUD: list_pipeline_rules (PIPE-06), get_pipeline_rule (PIPE-07), create_pipeline_rule (PIPE-08 — D-10 mutual exclusion + D-11 full recursive grammar + D-05 server parse pre-flight + D-04 client lint; C4 acceptance gate), update_pipeline_rule (PIPE-09 STRICT_NO_ECHO + conditional parse)
+  - [ ] 04-04-PLAN.md — delete_pipeline_rule (PIPE-10, D-14 cascade-hash + drift refusal via computeRuleCascadeHash + Strategy A paginated /rule/paginated walk) + simulate_pipeline_rule (PIPE-12, M3 acceptance gate; Pitfall 1 JSON-string message body) + list_pipeline_functions (PIPE-11 merged static + live overlay)
+  - [ ] 04-05-PLAN.md — connect_pipelines_to_stream (PIPE-13, Pitfall 2 GET-merge-PUT) + disconnect_pipelines_from_stream (PIPE-14, GET-subtract-PUT)
+  - [ ] 04-06-PLAN.md — 14 snapshot fixtures (one per Phase 4 tool incl. C4/M3/Pitfall-2/D-14 acceptance gates) + 14 schema-parity assertions + auth-redaction inheritance + 04-VALIDATION.md flip + human-verify checkpoint
 
 ### Phase 5: Events & Notifications
 **Goal**: An agent can upgrade Graylog's read-only event surface to full CRUD — defining alerts and notifications without accidentally firing them at create-time or saving v6-syntax aggregations that never trigger on v7.
