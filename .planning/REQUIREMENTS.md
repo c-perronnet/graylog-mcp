@@ -73,10 +73,10 @@ The DSL subsystem is the hardest part of this milestone.
 - [x] **PIPE-03**: `create_pipeline` — pipeline source (stage definitions referencing rule names)
 - [x] **PIPE-04**: `update_pipeline`
 - [x] **PIPE-05**: `delete_pipeline`
-- [ ] **PIPE-06**: `list_pipeline_rules`
-- [ ] **PIPE-07**: `get_pipeline_rule`
-- [ ] **PIPE-08**: `create_pipeline_rule` — accepts structured intent (when/then specs) AND raw DSL source; generates DSL via `src/pipeline-dsl/`; **every dry-run calls `POST /system/pipelines/rule/parse` for server-authoritative validation** (C4)
-- [ ] **PIPE-09**: `update_pipeline_rule` — same parse pre-flight
+- [x] **PIPE-06**: `list_pipeline_rules`
+- [x] **PIPE-07**: `get_pipeline_rule`
+- [x] **PIPE-08**: `create_pipeline_rule` — accepts structured intent (when/then specs) AND raw DSL source; generates DSL via `src/pipeline-dsl/`; **every dry-run calls `POST /system/pipelines/rule/parse` for server-authoritative validation** (C4)
+- [x] **PIPE-09**: `update_pipeline_rule` — same parse pre-flight
 - [ ] **PIPE-10**: `delete_pipeline_rule` — pre-delete check for pipelines that reference this rule
 - [x] **PIPE-11**: `list_pipeline_functions` — exposes the cached Graylog built-in function catalogue; cached at connection-init
 - [ ] **PIPE-12**: `simulate_pipeline_rule` — non-negotiable (M3); given a rule source and a sample message, returns the post-rule message; catches semantic bugs the parser misses
@@ -253,10 +253,10 @@ Populated by the roadmapper on 2026-05-13. Every v1 requirement maps to exactly 
 | PIPE-03 | Phase 4 | Complete |
 | PIPE-04 | Phase 4 | Complete |
 | PIPE-05 | Phase 4 | Complete |
-| PIPE-06 | Phase 4 | Pending |
-| PIPE-07 | Phase 4 | Pending |
-| PIPE-08 | Phase 4 | Pending |
-| PIPE-09 | Phase 4 | Pending |
+| PIPE-06 | Phase 4 | Complete |
+| PIPE-07 | Phase 4 | Complete |
+| PIPE-08 | Phase 4 | Complete |
+| PIPE-09 | Phase 4 | Complete |
 | PIPE-10 | Phase 4 | Pending |
 | PIPE-11 | Phase 4 | Complete |
 | PIPE-12 | Phase 4 | Pending |
