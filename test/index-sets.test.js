@@ -24,6 +24,9 @@ import {
 } from "../src/tools/index-sets/strategies.js";
 // Plan 02-02 Task 2 — create_index_set handler import.
 import { handleCreateIndexSet, _setClockForTests } from "../src/tools/index-sets/create-index-set.js";
+// Plan 02-02 Task 3 — update_index_set handler + schema imports.
+import { handleUpdateIndexSet } from "../src/tools/index-sets/update-index-set.js";
+import { UpdateIndexSetSchema } from "../src/tools/index-sets/schemas.js";
 
 // Plan 02-01 Task 4 — list_index_sets (INDEX-01) + get_index_set (INDEX-02).
 // Two read tools that round out the index-sets domain along with the
@@ -675,4 +678,246 @@ test("create_index_set defaults fill correctly when shards/replicas/index_analyz
     assert.equal(body.writable, true);
     assert.equal(body.use_legacy_rotation, true);
     assert.equal(body.description, "");
+});
+
+// =====================================================================
+// Plan 02-02 Task 3 — update_index_set handler (INDEX-04) per U1 MERGE_FROM_CURRENT
+// =====================================================================
+//
+// U1 decision (02-U1-SMOKE.md): UNREACHABLE_DEFAULT_MERGE → merge-from-current
+// path. Pre-flight GET fetches the full IndexSetResponse; build() merges
+// args.changes (minus immutable fields) over the top and emits the full
+// merged DTO on the wire. D-11 atomic strategy-replace is enforced at the
+// schema layer (UpdateIndexSetSchema superRefine); ND2 default-must-be-writable
+// pre-flight is enforced in update-index-set.js build() before the PUT fires.
+
+// Full current state for the pre-flight GET — every field the merge needs.
+const CURRENT_INDEX_SET = {
+    id: "iset-1",
+    title: "App errors",
+    description: "Stream-routed errors",
+    index_prefix: "app_errors",
+    shards: 4,
+    replicas: 0,
+    rotation_strategy_class: "org.graylog2.indexer.rotation.strategies.MessageCountRotationStrategy",
+    rotation_strategy: {
+        type: "org.graylog2.indexer.rotation.strategies.MessageCountRotationStrategyConfig",
+        max_docs_per_index: 1000000,
+    },
+    retention_strategy_class: "org.graylog2.indexer.retention.strategies.DeletionRetentionStrategy",
+    retention_strategy: {
+        type: "org.graylog2.indexer.retention.strategies.DeletionRetentionStrategyConfig",
+        max_number_of_indices: 30,
+    },
+    creation_date: "2026-01-01T00:00:00.000Z",
+    index_analyzer: "standard",
+    index_optimization_max_num_segments: 1,
+    index_optimization_disabled: false,
+    field_type_refresh_interval: 5000,
+    writable: true,
+    use_legacy_rotation: true,
+    default: false,
+    can_be_default: true,
+};
+
+// -------- Task 3 Test 1: UpdateIndexSetSchema rejects rotation_strategy without config (D-11) --------
+
+test("update_index_set zod rejects rotation_strategy without rotation_strategy_config (D-11)", () => {
+    const result = UpdateIndexSetSchema.safeParse({
+        indexSetId: "iset-1",
+        changes: { rotation_strategy: "size-based" },
+    });
+    assert.equal(result.success, false);
+    const issue = result.error.issues.find((i) => i.path.join(".") === "changes.rotation_strategy_config");
+    assert.ok(issue, `expected path changes.rotation_strategy_config; got ${JSON.stringify(result.error.issues)}`);
+    assert.match(issue.message, /rotation_strategy_config is required/);
+});
+
+// -------- Task 3 Test 2: UpdateIndexSetSchema rejects rotation_strategy_config without strategy (D-11) --------
+
+test("update_index_set zod rejects rotation_strategy_config without rotation_strategy (D-11)", () => {
+    const result = UpdateIndexSetSchema.safeParse({
+        indexSetId: "iset-1",
+        changes: { rotation_strategy_config: { max_size: 1073741824 } },
+    });
+    assert.equal(result.success, false);
+    const issue = result.error.issues.find((i) => i.path.join(".") === "changes.rotation_strategy");
+    assert.ok(issue, `expected path changes.rotation_strategy; got ${JSON.stringify(result.error.issues)}`);
+    assert.match(issue.message, /rotation_strategy is required/);
+});
+
+// -------- Task 3 Test 3: UpdateIndexSetSchema rejects retention_strategy without config (D-11) --------
+
+test("update_index_set zod rejects retention_strategy without retention_strategy_config (D-11)", () => {
+    const result = UpdateIndexSetSchema.safeParse({
+        indexSetId: "iset-1",
+        changes: { retention_strategy: "close" },
+    });
+    assert.equal(result.success, false);
+    const issue = result.error.issues.find((i) => i.path.join(".") === "changes.retention_strategy_config");
+    assert.ok(issue, "expected path changes.retention_strategy_config");
+});
+
+// -------- Task 3 Test 4: UpdateIndexSetSchema rejects empty changes object --------
+
+test("update_index_set zod rejects empty changes object", () => {
+    const result = UpdateIndexSetSchema.safeParse({
+        indexSetId: "iset-1",
+        changes: {},
+    });
+    assert.equal(result.success, false);
+    const issues = result.error.issues.map((i) => i.message).join(",");
+    assert.match(issues, /changes must be non-empty/);
+});
+
+// -------- Task 3 Test 5: title-only change — merge-from-current emits full merged DTO --------
+
+test("update_index_set title-only change emits the full merged DTO (U1 MERGE_FROM_CURRENT)", async () => {
+    _setCaptureRequest(multiCapture([
+        { method: "GET", pathPattern: "/api/system/indices/index_sets/iset-1", response: CURRENT_INDEX_SET },
+    ]));
+    const res = await handleUpdateIndexSet({
+        params: {
+            arguments: {
+                indexSetId: "iset-1",
+                changes: { title: "Renamed app errors" },
+                _testConnection: "fake",
+            },
+        },
+    });
+    assert.notEqual(res.isError, true, `expected success, got: ${res.content?.[0]?.text}`);
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.preview.method, "PUT");
+    assert.equal(payload.preview.path, "/api/system/indices/index_sets/iset-1");
+    const body = payload.preview.body;
+    // Agent's change applied:
+    assert.equal(body.title, "Renamed app errors");
+    // MERGE_FROM_CURRENT: full DTO shape — strategy blocks preserved from current.
+    assert.equal(body.description, CURRENT_INDEX_SET.description);
+    assert.equal(body.shards, CURRENT_INDEX_SET.shards);
+    assert.equal(body.replicas, CURRENT_INDEX_SET.replicas);
+    assert.equal(body.rotation_strategy_class, CURRENT_INDEX_SET.rotation_strategy_class);
+    assert.deepEqual(body.rotation_strategy, CURRENT_INDEX_SET.rotation_strategy);
+    assert.equal(body.retention_strategy_class, CURRENT_INDEX_SET.retention_strategy_class);
+    assert.deepEqual(body.retention_strategy, CURRENT_INDEX_SET.retention_strategy);
+    // Immutable fields preserved from current (never sourced from agent changes):
+    assert.equal(body.index_prefix, CURRENT_INDEX_SET.index_prefix);
+    assert.equal(body.creation_date, CURRENT_INDEX_SET.creation_date);
+});
+
+// -------- Task 3 Test 6: strategy-replace (D-11 atomic) emits new FQCNs + config --------
+
+test("update_index_set strategy-replace (D-11 atomic) emits new rotation FQCNs + config", async () => {
+    _setCaptureRequest(multiCapture([
+        { method: "GET", pathPattern: "/api/system/indices/index_sets/iset-1", response: CURRENT_INDEX_SET },
+    ]));
+    const res = await handleUpdateIndexSet({
+        params: {
+            arguments: {
+                indexSetId: "iset-1",
+                changes: {
+                    rotation_strategy: "size-based",
+                    rotation_strategy_config: { max_size: 1073741824 },
+                },
+                _testConnection: "fake",
+            },
+        },
+    });
+    assert.notEqual(res.isError, true);
+    const body = JSON.parse(res.content[0].text).preview.body;
+    assert.equal(
+        body.rotation_strategy_class,
+        "org.graylog2.indexer.rotation.strategies.SizeBasedRotationStrategy",
+    );
+    assert.equal(
+        body.rotation_strategy.type,
+        "org.graylog2.indexer.rotation.strategies.SizeBasedRotationStrategyConfig",
+    );
+    assert.equal(body.rotation_strategy.max_size, 1073741824);
+    // Retention block preserved from current.
+    assert.equal(body.retention_strategy_class, CURRENT_INDEX_SET.retention_strategy_class);
+});
+
+// -------- Task 3 Test 7: ND2 pre-flight blocks writable:false on the default index set --------
+
+test("update_index_set ND2 pre-flight blocks writable:false on the default index set", async () => {
+    let putCalls = 0;
+    _setCaptureRequest((req) => {
+        if (req.method === "PUT") {
+            putCalls += 1;
+            throw new Error("PUT should not fire when ND2 pre-flight refuses");
+        }
+        if (req.method === "GET" && req.path === "/api/system/indices/index_sets/iset-default") {
+            return { ...CURRENT_INDEX_SET, id: "iset-default", default: true };
+        }
+        throw new Error(`No route matched ${req.method} ${req.path}`);
+    });
+    const res = await handleUpdateIndexSet({
+        params: {
+            arguments: {
+                indexSetId: "iset-default",
+                changes: { writable: false },
+                _testConnection: "fake",
+                dryRun: false, // attempting apply
+            },
+        },
+    });
+    assert.equal(res.isError, true);
+    assert.match(res.content[0].text, /default_index_set_must_be_writable|writable/i);
+    assert.equal(putCalls, 0, "PUT must NOT fire when ND2 pre-flight refuses");
+});
+
+// -------- Task 3 Test 8: immutable fields stripped from agent changes --------
+
+test("update_index_set strips immutable index_prefix + creation_date from agent changes", async () => {
+    _setCaptureRequest(multiCapture([
+        { method: "GET", pathPattern: "/api/system/indices/index_sets/iset-1", response: CURRENT_INDEX_SET },
+    ]));
+    const res = await handleUpdateIndexSet({
+        params: {
+            arguments: {
+                indexSetId: "iset-1",
+                changes: {
+                    title: "Stripped immutable",
+                    // These would-be agent overrides MUST be ignored — the schema
+                    // doesn't expose them in `changes` (UpdateChangesShape omits
+                    // index_prefix + creation_date), so zod strips them by default.
+                    // Even if a future regression let them through, the wire-build
+                    // re-asserts current.index_prefix + current.creation_date.
+                    index_prefix: "attacker_prefix",
+                    creation_date: "2000-01-01T00:00:00.000Z",
+                },
+                _testConnection: "fake",
+            },
+        },
+    });
+    assert.notEqual(res.isError, true);
+    const body = JSON.parse(res.content[0].text).preview.body;
+    assert.equal(body.index_prefix, CURRENT_INDEX_SET.index_prefix, "index_prefix must be the current value, not the agent override");
+    assert.equal(body.creation_date, CURRENT_INDEX_SET.creation_date, "creation_date must be the current value, not the agent override");
+});
+
+// -------- Task 3 Test 9: apply path returns full DTO + id --------
+
+test("update_index_set apply path returns full DTO + id", async () => {
+    const UPDATED = { ...CURRENT_INDEX_SET, title: "Renamed app errors" };
+    _setCaptureRequest(multiCapture([
+        { method: "GET", pathPattern: "/api/system/indices/index_sets/iset-1", response: CURRENT_INDEX_SET },
+        { method: "PUT", pathPattern: "/api/system/indices/index_sets/iset-1", response: UPDATED },
+    ]));
+    const res = await handleUpdateIndexSet({
+        params: {
+            arguments: {
+                indexSetId: "iset-1",
+                changes: { title: "Renamed app errors" },
+                dryRun: false,
+                _testConnection: "fake",
+            },
+        },
+    });
+    assert.notEqual(res.isError, true, `expected success, got: ${res.content?.[0]?.text}`);
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.applied, true);
+    assert.equal(payload.result.id, "iset-1");
+    assert.equal(payload.result.body.title, "Renamed app errors");
 });
