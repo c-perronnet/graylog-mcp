@@ -7,6 +7,8 @@ import { handleGetInput } from "../src/tools/inputs/get-input.js";
 import { handleCreateInput } from "../src/tools/inputs/create-input.js";
 import { handleUpdateInput } from "../src/tools/inputs/update-input.js";
 import { handleDeleteInput } from "../src/tools/inputs/delete-input.js";
+import { handleStartInput } from "../src/tools/inputs/start-input.js";
+import { handleStopInput } from "../src/tools/inputs/stop-input.js";
 import {
     _setCaptureRequest,
     _clearCaptureRequest,
@@ -823,4 +825,125 @@ test("delete_input writable=false short-circuits", async () => {
     });
     assert.equal(res.isError, true);
     assert.equal(res.reason, "connection_read_only");
+});
+
+// =====================================================================
+// Plan 01-03 — INPUT-07: start_input + stop_input lifecycle tools
+// =====================================================================
+//
+// The unusual verb mapping is the load-bearing contract here:
+//   start_input  → PUT    /api/system/inputstates/{inputId}
+//   stop_input   → DELETE /api/system/inputstates/{inputId}
+// (RESEARCH.md Endpoint Catalogue rows 7-8; §Pitfall Lifecycle.)
+//
+// Both compose through defineMutatingHandler so dryRun + writable-gate +
+// idempotency are inherited from the Phase 0 contract — no special-cased
+// runtime path (D-08).
+
+// -------- Test 37 (P3): start_input dry-run shows PUT verb --------
+
+test("start_input dry-run preview shows PUT /api/system/inputstates/{id}", async () => {
+    const res = await handleStartInput({
+        params: { arguments: { inputId: "in1", _testConnection: "fake" } },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.preview.method, "PUT");
+    assert.equal(payload.preview.path, "/api/system/inputstates/in1");
+    assert.ok(payload.preview.body === undefined || payload.preview.body === null,
+        `start_input body must be undefined or null; got ${JSON.stringify(payload.preview.body)}`);
+    assert.equal(payload.postApplyEstimate.id, "in1");
+});
+
+// -------- Test 38 (P3): start_input apply path captures PUT verb --------
+
+test("start_input apply path captures the correct verb + path", async () => {
+    let captured = null;
+    _setCaptureRequest((req) => {
+        captured = req;
+        return { id: "in1" };
+    });
+    const res = await handleStartInput({
+        params: {
+            arguments: { inputId: "in1", dryRun: false, _testConnection: "fake" },
+        },
+    });
+    assert.equal(captured.method, "PUT");
+    assert.equal(captured.path, "/api/system/inputstates/in1");
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.applied, true);
+});
+
+// -------- Test 39 (P3): stop_input dry-run shows DELETE verb --------
+
+test("stop_input dry-run preview shows DELETE /api/system/inputstates/{id}", async () => {
+    const res = await handleStopInput({
+        params: { arguments: { inputId: "in1", _testConnection: "fake" } },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.preview.method, "DELETE");
+    assert.equal(payload.preview.path, "/api/system/inputstates/in1");
+    assert.ok(payload.preview.body === undefined || payload.preview.body === null,
+        `stop_input body must be undefined or null; got ${JSON.stringify(payload.preview.body)}`);
+    assert.equal(payload.postApplyEstimate.id, "in1");
+});
+
+// -------- Test 40 (P3): stop_input apply path captures DELETE verb --------
+
+test("stop_input apply path captures DELETE verb", async () => {
+    let captured = null;
+    _setCaptureRequest((req) => {
+        captured = req;
+        return { id: "in1" };
+    });
+    const res = await handleStopInput({
+        params: {
+            arguments: { inputId: "in1", dryRun: false, _testConnection: "fake" },
+        },
+    });
+    assert.equal(captured.method, "DELETE");
+    assert.equal(captured.path, "/api/system/inputstates/in1");
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.applied, true);
+});
+
+// -------- Test 41 (P3): start/stop both honor writable=false gate --------
+
+test("start_input honors writable=false gate", async () => {
+    _setConnectionsForTests({
+        readonly: { baseUrl: "x", apiToken: "x", writable: false },
+    });
+    const res = await handleStartInput({
+        params: { arguments: { inputId: "in1", connectionName: "readonly" } },
+    });
+    assert.equal(res.isError, true);
+    assert.equal(res.reason, "connection_read_only");
+});
+
+test("stop_input honors writable=false gate", async () => {
+    _setConnectionsForTests({
+        readonly: { baseUrl: "x", apiToken: "x", writable: false },
+    });
+    const res = await handleStopInput({
+        params: { arguments: { inputId: "in1", connectionName: "readonly" } },
+    });
+    assert.equal(res.isError, true);
+    assert.equal(res.reason, "connection_read_only");
+});
+
+// -------- Test 42 (P3): zod rejects missing inputId --------
+
+test("start_input zod rejects missing inputId", async () => {
+    const res = await handleStartInput({
+        params: { arguments: { _testConnection: "fake" } },
+    });
+    assert.equal(res.isError, true);
+    assert.match(res.content[0].text, /inputId/);
+});
+
+test("stop_input zod rejects missing inputId", async () => {
+    const res = await handleStopInput({
+        params: { arguments: { _testConnection: "fake" } },
+    });
+    assert.equal(res.isError, true);
+    assert.match(res.content[0].text, /inputId/);
 });
