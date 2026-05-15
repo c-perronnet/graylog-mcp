@@ -23,6 +23,14 @@ import {
     ListStreamsSchema,
     GetStreamSchema,
     ListStreamRulesSchema,
+    // Plan 03-02 additions — extending the Plan 01 subset.
+    StreamRuleSchema,
+    STREAM_RULE_TYPE_TO_NUMERIC,
+    SimilarityReasonEnum,
+    CreateStreamSchema,
+    UpdateStreamSchema,
+    StartStreamSchema,
+    PauseStreamSchema,
 } from "../src/tools/streams/schemas.js";
 import {
     _setCaptureRequest,
@@ -350,4 +358,171 @@ test("list_streams strict-superset back-compat: items contain id, title, descrip
     assert.equal(payload.items[0].mutable, true);
     assert.equal(payload.items[0].disabled, false);
     assert.equal(payload.items[0].index_set_id, "ix1");
+});
+
+// =====================================================================
+// Plan 03-02 Task 1 — schema-rejection/acceptance tests (Tests 1-21)
+// =====================================================================
+//
+// These exercise the 4 new mutating schemas + the 8-variant StreamRuleSchema
+// discriminated union + the frozen STREAM_RULE_TYPE_TO_NUMERIC map + the
+// SimilarityReasonEnum closed-set enum. Schema-layer rejections fire BEFORE
+// any handler invocation; handler-layer behavior (preview shape, wire-body
+// construction, D-09 pre-flight) is exercised by Tasks 2 + 3 tests below.
+
+// ---------- StreamRuleSchema 8-variant discriminated union ----------
+
+test("stream rule schema: exact variant succeeds with inverted defaulting to false", () => {
+    const parsed = StreamRuleSchema.parse({ type: "exact", field: "source", value: "host-1" });
+    assert.equal(parsed.type, "exact");
+    assert.equal(parsed.field, "source");
+    assert.equal(parsed.value, "host-1");
+    assert.equal(parsed.inverted, false);
+});
+
+test("stream rule schema: regex variant succeeds", () => {
+    const parsed = StreamRuleSchema.parse({ type: "regex", field: "msg", value: ".*ERROR.*" });
+    assert.equal(parsed.type, "regex");
+    assert.equal(parsed.value, ".*ERROR.*");
+});
+
+test("stream rule schema: greater variant accepts numeric value", () => {
+    const parsed = StreamRuleSchema.parse({ type: "greater", field: "level", value: 4 });
+    assert.equal(parsed.type, "greater");
+    assert.equal(parsed.value, 4);
+});
+
+test("stream rule schema: less variant accepts string-numeric value", () => {
+    const parsed = StreamRuleSchema.parse({ type: "less", field: "level", value: "9" });
+    assert.equal(parsed.type, "less");
+    assert.equal(parsed.value, "9");
+});
+
+test("stream rule schema: present variant has no value field requirement", () => {
+    const parsed = StreamRuleSchema.parse({ type: "present", field: "trace_id" });
+    assert.equal(parsed.type, "present");
+    assert.equal(parsed.field, "trace_id");
+});
+
+test("stream rule schema: contains variant succeeds", () => {
+    const parsed = StreamRuleSchema.parse({ type: "contains", field: "tag", value: "warn" });
+    assert.equal(parsed.type, "contains");
+    assert.equal(parsed.value, "warn");
+});
+
+test("stream rule schema: always_match variant needs no field and no value", () => {
+    const parsed = StreamRuleSchema.parse({ type: "always_match" });
+    assert.equal(parsed.type, "always_match");
+    assert.equal(parsed.field, undefined);
+    assert.equal(parsed.value, undefined);
+});
+
+test("stream rule schema: match_input variant accepts input id under value, no field", () => {
+    const parsed = StreamRuleSchema.parse({ type: "match_input", value: "5f9d3b1c0000000000000001" });
+    assert.equal(parsed.type, "match_input");
+    assert.equal(parsed.value, "5f9d3b1c0000000000000001");
+    assert.equal(parsed.field, undefined);
+});
+
+test("stream rule schema: unknown discriminator 'regexp' is rejected (D-11 closed set)", () => {
+    assert.throws(() => StreamRuleSchema.parse({ type: "regexp" }), /Invalid discriminator|invalid_union_discriminator|type/i);
+});
+
+test("stream rule schema: exact variant without `field` is rejected", () => {
+    assert.throws(() => StreamRuleSchema.parse({ type: "exact", value: "x" }), /field|required/i);
+});
+
+// ---------- STREAM_RULE_TYPE_TO_NUMERIC frozen alias-to-int map ----------
+
+test("STREAM_RULE_TYPE_TO_NUMERIC is Object.frozen (strict-mode assignment throws)", () => {
+    "use strict";
+    assert.throws(() => {
+        STREAM_RULE_TYPE_TO_NUMERIC.bogus = 99;
+    }, TypeError);
+});
+
+test("STREAM_RULE_TYPE_TO_NUMERIC has exactly the 8 D-11 entries with correct int values", () => {
+    const keys = Object.keys(STREAM_RULE_TYPE_TO_NUMERIC).sort();
+    assert.deepEqual(keys, [
+        "always_match", "contains", "exact", "greater", "less", "match_input", "present", "regex",
+    ]);
+    assert.equal(STREAM_RULE_TYPE_TO_NUMERIC.exact, 1);
+    assert.equal(STREAM_RULE_TYPE_TO_NUMERIC.regex, 2);
+    assert.equal(STREAM_RULE_TYPE_TO_NUMERIC.greater, 3);
+    assert.equal(STREAM_RULE_TYPE_TO_NUMERIC.less, 4);
+    assert.equal(STREAM_RULE_TYPE_TO_NUMERIC.present, 5);
+    assert.equal(STREAM_RULE_TYPE_TO_NUMERIC.contains, 6);
+    assert.equal(STREAM_RULE_TYPE_TO_NUMERIC.always_match, 7);
+    assert.equal(STREAM_RULE_TYPE_TO_NUMERIC.match_input, 8);
+    assert.equal(Object.keys(STREAM_RULE_TYPE_TO_NUMERIC).length, 8);
+});
+
+// ---------- CreateStreamSchema ----------
+
+test("CreateStreamSchema accepts minimal valid payload and fills defaults", () => {
+    const parsed = CreateStreamSchema.parse({ title: "X", index_set_id: "ix1" });
+    assert.equal(parsed.title, "X");
+    assert.equal(parsed.index_set_id, "ix1");
+    assert.deepEqual(parsed.rules, []);
+    assert.equal(parsed.matching_type, "AND");
+    assert.equal(parsed.remove_matches_from_default_stream, false);
+    // dryRun default from mutatingBase
+    assert.equal(parsed.dryRun, true);
+});
+
+test("CreateStreamSchema rejects missing index_set_id (D-10)", () => {
+    assert.throws(() => CreateStreamSchema.parse({ title: "X" }), /index_set_id/);
+});
+
+test("CreateStreamSchema rejects empty string index_set_id (D-10 min(1))", () => {
+    assert.throws(() => CreateStreamSchema.parse({ title: "X", index_set_id: "" }), /index_set_id/);
+});
+
+test("CreateStreamSchema rejects payload with malformed inline rule type", () => {
+    assert.throws(
+        () => CreateStreamSchema.parse({
+            title: "X",
+            index_set_id: "ix1",
+            rules: [{ type: "regexp" }],
+        }),
+        /Invalid discriminator|invalid_union_discriminator|type/i,
+    );
+});
+
+// ---------- UpdateStreamSchema ----------
+
+test("UpdateStreamSchema accepts streamId + non-empty changes", () => {
+    const parsed = UpdateStreamSchema.parse({ streamId: "s1", changes: { title: "new" } });
+    assert.equal(parsed.streamId, "s1");
+    assert.deepEqual(parsed.changes, { title: "new" });
+});
+
+test("UpdateStreamSchema accepts empty changes object (STRICT_NO_ECHO emits minimal body)", () => {
+    const parsed = UpdateStreamSchema.parse({ streamId: "s1", changes: {} });
+    assert.equal(parsed.streamId, "s1");
+    assert.deepEqual(parsed.changes, {});
+});
+
+// ---------- StartStreamSchema + PauseStreamSchema ----------
+
+test("StartStreamSchema accepts streamId; rejects missing streamId", () => {
+    const parsed = StartStreamSchema.parse({ streamId: "s1" });
+    assert.equal(parsed.streamId, "s1");
+    assert.throws(() => StartStreamSchema.parse({}), /streamId|required/i);
+});
+
+test("PauseStreamSchema accepts streamId; rejects missing streamId", () => {
+    const parsed = PauseStreamSchema.parse({ streamId: "s1" });
+    assert.equal(parsed.streamId, "s1");
+    assert.throws(() => PauseStreamSchema.parse({}), /streamId|required/i);
+});
+
+// ---------- SimilarityReasonEnum closed set ----------
+
+test("SimilarityReasonEnum accepts exact|case_insensitive|prefix; rejects anything else", () => {
+    assert.equal(SimilarityReasonEnum.parse("exact"), "exact");
+    assert.equal(SimilarityReasonEnum.parse("case_insensitive"), "case_insensitive");
+    assert.equal(SimilarityReasonEnum.parse("prefix"), "prefix");
+    assert.throws(() => SimilarityReasonEnum.parse("fuzzy"), /Invalid enum value|fuzzy/);
+    assert.throws(() => SimilarityReasonEnum.parse(""), /Invalid enum value/);
 });
