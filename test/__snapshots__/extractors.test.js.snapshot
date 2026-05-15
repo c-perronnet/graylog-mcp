@@ -1,0 +1,31 @@
+exports[`create_extractor grok — preview shape 1`] = `
+{
+  "dryRun": true,
+  "tool": "create_extractor",
+  "connection": "fake",
+  "idempotencyKey": "04da3601851718ea8e0b89c1f83bbaf6",
+  "summary": "Create grok extractor \\"Extract grok\\" on input in1",
+  "preview": {
+    "method": "POST",
+    "path": "/api/system/inputs/in1/extractors",
+    "body": {
+      "title": "Extract grok",
+      "cursor_strategy": "copy",
+      "source_field": "message",
+      "target_field": "field1",
+      "extractor_type": "grok",
+      "extractor_config": {
+        "grok_pattern": "%{IP:ip}"
+      },
+      "condition_type": "none",
+      "condition_value": "",
+      "order": 0
+    }
+  },
+  "postApplyEstimate": {
+    "id": "__SERVER_ASSIGNED__"
+  },
+  "existingMatches": [],
+  "applyHint": "Re-call with dryRun: false to apply"
+}
+`;

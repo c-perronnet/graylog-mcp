@@ -25,8 +25,18 @@ const DENY_PATTERNS = [
 ];
 
 /**
- * Context-aware allowlist: a 32+ char alphanumeric match is allowed iff the
- * surrounding text identifies it as an idempotencyKey field value.
+ * Context-aware allowlist:
+ *   1. A 32+ char alphanumeric match is allowed iff the surrounding text
+ *      identifies it as an idempotencyKey field value.
+ *   2. A password-literal-with-value match is allowed iff the value is the
+ *      project's redaction placeholder ("<redacted>") — that's the *mechanism*
+ *      we use to prevent leaks; flagging it would be self-defeating. The
+ *      placeholder is intentionally short (10 chars, below the 32-char
+ *      alphanumeric threshold) and contains angle brackets that disqualify it
+ *      as an apiToken-like string.
+ *   3. A password-literal-with-value match is also allowed iff the value is
+ *      Graylog's server-side mask placeholder ("<value hidden>") which surfaces
+ *      in GET responses for encrypted fields — also a non-leak, also short.
  */
 function isAllowedMatch(content, match, regex, matchIndex) {
     if (regex.source === /[A-Za-z0-9]{32,}/.source) {
@@ -34,6 +44,15 @@ function isAllowedMatch(content, match, regex, matchIndex) {
         // Match the JSON-stringified shape: `"idempotencyKey": "<32 hex>"`
         // (with optional whitespace and the colon/equals separator).
         if (/idempotencyKey['"]?\s*[:=]\s*['"]?$/.test(context)) return true;
+    }
+    if (
+        regex.source === /password['"]?\s*[:=]\s*['"][^'"]+['"]/i.source
+    ) {
+        // The literal '<redacted>' / '<value hidden>' placeholders are the
+        // intentional, project-defined safe values for encrypted-field surfaces.
+        // Allow them so the lint doesn't fight against its own mitigation.
+        if (/['"]<redacted>['"]/.test(match)) return true;
+        if (/['"]<value hidden>['"]/.test(match)) return true;
     }
     return false;
 }

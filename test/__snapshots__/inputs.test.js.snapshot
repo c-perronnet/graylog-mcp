@@ -1,0 +1,117 @@
+exports[`create_input GELF TCP dry-run redacts tls_key_password in preview (D-04) 1`] = `
+{
+  "dryRun": true,
+  "tool": "create_input",
+  "connection": "fake",
+  "idempotencyKey": "19fbc13f54cc642ce81d8129583f89e8",
+  "summary": "Create org.graylog2.inputs.gelf.tcp.GELFTCPInput input \\"test-gelf-tcp\\" (global=false)",
+  "preview": {
+    "method": "POST",
+    "path": "/api/system/inputs",
+    "body": {
+      "type": "org.graylog2.inputs.gelf.tcp.GELFTCPInput",
+      "title": "test-gelf-tcp",
+      "global": false,
+      "configuration": {
+        "bind_address": "0.0.0.0",
+        "port": 12201,
+        "tls_enable": true,
+        "tls_key_password": "<redacted>"
+      }
+    }
+  },
+  "postApplyEstimate": {
+    "id": "__SERVER_ASSIGNED__"
+  },
+  "existingMatches": [],
+  "applyHint": "Re-call with dryRun: false to apply"
+}
+`;
+
+exports[`create_input GELF UDP dry-run emits expected POST body 1`] = `
+{
+  "dryRun": true,
+  "tool": "create_input",
+  "connection": "fake",
+  "idempotencyKey": "3b04f17d0f6108ceeec4008eb806ff3f",
+  "summary": "Create org.graylog2.inputs.gelf.udp.GELFUDPInput input \\"test-gelf\\" (global=true)",
+  "preview": {
+    "method": "POST",
+    "path": "/api/system/inputs",
+    "body": {
+      "type": "org.graylog2.inputs.gelf.udp.GELFUDPInput",
+      "title": "test-gelf",
+      "global": true,
+      "configuration": {
+        "bind_address": "0.0.0.0",
+        "port": 12201
+      }
+    }
+  },
+  "postApplyEstimate": {
+    "id": "__SERVER_ASSIGNED__"
+  },
+  "existingMatches": [],
+  "applyHint": "Re-call with dryRun: false to apply"
+}
+`;
+
+exports[`delete_input dry-run enumerates affected extractors in cascades.extractors[] (D-05) 1`] = `
+{
+  "dryRun": true,
+  "tool": "delete_input",
+  "connection": "fake",
+  "idempotencyKey": "48486fcf02df79c03228fc58731929b2",
+  "summary": "Delete input in1",
+  "preview": {
+    "method": "DELETE",
+    "path": "/api/system/inputs/in1"
+  },
+  "postApplyEstimate": {
+    "id": "in1"
+  },
+  "existingMatches": [],
+  "cascades": {
+    "extractors": [
+      {
+        "id": "ex1",
+        "title": "Extract ip",
+        "extractor_type": "grok"
+      },
+      {
+        "id": "ex2",
+        "title": "Extract user",
+        "extractor_type": "regex"
+      }
+    ]
+  },
+  "applyHint": "Re-call with dryRun: false to apply"
+}
+`;
+
+exports[`update_input partial dry-run with no-op changes emits ONLY changed field (C3 ACCEPTANCE GATE) 1`] = `
+{
+  "dryRun": true,
+  "tool": "update_input",
+  "connection": "fake",
+  "idempotencyKey": "1995401866f18a5512e91c329eee28d5",
+  "summary": "Update input in1 (1 change(s))",
+  "preview": {
+    "method": "PUT",
+    "path": "/api/system/inputs/in1",
+    "body": {
+      "type": "org.graylog2.inputs.gelf.tcp.GELFTCPInput",
+      "title": "t1",
+      "global": true,
+      "configuration": {
+        "port": 12202
+      }
+    }
+  },
+  "postApplyEstimate": {
+    "id": "in1"
+  },
+  "existingMatches": [],
+  "applyHint": "Re-call with dryRun: false to apply"
+}
+`;
