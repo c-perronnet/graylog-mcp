@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v2.3
 milestone_name: milestone
 status: Ready to execute
-last_updated: "2026-05-15T10:49:54.839Z"
+last_updated: "2026-05-15T11:03:47.703Z"
 progress:
   total_phases: 8
   completed_phases: 1
   total_plans: 11
-  completed_plans: 9
-  percent: 82
+  completed_plans: 10
+  percent: 91
 ---
 
 # Project Memory: Graylog MCP — Full Admin Surface
@@ -28,12 +28,12 @@ progress:
 ## Current Position
 
 Phase: 01 (inputs-extractors) — EXECUTING
-Plan: 4 of 5
+Plan: 5 of 5
 
 - **Phase**: 1 — Inputs & Extractors
-- **Plan**: 3 of 5 complete (01-01 shipped: foundation amendments + read tools; 01-02 shipped: create_input + update_input C3 mitigation + delete_input cascade enumeration; 01-03 shipped: start_input + stop_input lifecycle tools)
-- **Status**: 203 tests / 18 suites green (+8 net-new over Plan 01-02 baseline of 195); all Phase 0 + Plan 01-01 + Plan 01-02 contracts preserved
-- **Progress bar**: `[████████░░] 82%` (9 of 11 milestone plans complete: 6 Phase 0 + 3 Phase 1)
+- **Plan**: 4 of 5 complete (01-01 shipped: foundation amendments + read tools; 01-02 shipped: create_input + update_input C3 mitigation + delete_input cascade enumeration; 01-03 shipped: start_input + stop_input lifecycle tools; 01-04 shipped: extractor CRUD — list_extractors + create_extractor [all 8 D-07 types] + update_extractor + delete_extractor)
+- **Status**: 223 tests / 18 suites green (+20 net-new over Plan 01-03 baseline of 203); all Phase 0 + Plans 01-01/02/03 contracts preserved; module-init contract holds (`assertAllToolsRegistered(toolDefinitions)` → "OK"); tool count 31 → 35 (12 of 12 Phase 1 net-new tools shipped — behavior-wise Phase 1 is complete, only Plan 05 snapshot/parity/validation work remains)
+- **Progress bar**: `[█████████░] 91%` (10 of 11 milestone plans complete: 6 Phase 0 + 4 Phase 1)
 
 ## Performance Metrics
 
@@ -53,6 +53,7 @@ Plan: 4 of 5
 | Phase 01-inputs-extractors P01 | ~6min | 2 tasks | 16 files |
 | Phase 01 P02 | ~8min | 2 tasks | 8 files |
 | Phase 01 P03 | ~2 min | 1 tasks | 6 files |
+| Phase 01-inputs-extractors P04 | ~6 min | 2 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -152,6 +153,18 @@ Drawn from `PROJECT.md` Key Decisions table — restated here for quick referenc
   - **Test growth**: 195 → 203 (+8 net-new). Focused run = 32/32 pass; full `npm test` = 203/203 pass; zero regressions. Commits: `968cdc4` (Task 1 RED, ERR_MODULE_NOT_FOUND), `4e40a2e` (Task 1 GREEN, all 8 pass + 195 baseline preserved).
   - **Plan 04 hand-off (extractors)**: per-tool-per-file convention proven across 5 inputs files (create / update / delete / start / stop); Plan 04 lands 4 more (list / create / update / delete extractor) under the same convention. Lifecycle-as-mutation pattern is reusable for any future runtime-flag tool (e.g. `enable_pipeline`, `pause_event_definition` in later phases) — defineMutatingHandler composition + `postApplyEstimate.id = args.<resourceId>` + `body: undefined` for empty-body verbs.
 
+- **Plan 01-04 (extractor CRUD + D-07 reconfirmation centerpiece)**:
+  - **D-07 reconfirmation centerpiece landed**: all 8 Graylog 7.0.6 primitive extractor types ship under STRICT zod schemas — `grok, regex, regex_replace, split_and_index, substring, copy_input, json, lookup_table`. The original 01-CONTEXT.md draft named 6 types and listed "key-value" as a separate primitive; RESEARCH.md A1 surfaced the 6-vs-8 ambiguity (Graylog's actual Extractor.Type enum has 8 entries, no key_value); the user reconfirmed D-07 with the 8-type enumeration during plan-phase 1. `ExtractorTypeEnum = z.enum([...8])` is a closed set — zod's strip mode rejects "key_value", "bogus_type", and any non-Graylog value at parse time before build() runs (T-01-04-01 mitigation). Test "create_extractor zod rejects unknown extractor_type — 'key_value' (D-07 reconfirmation: NOT a real Graylog primitive)" pins the contract.
+  - **"key-value → json" mapping documented in 3 places (BLOCKER #4 acceptance)**: (1) `src/tools.js` create_extractor description with the explicit "NO 'key_value' primitive — use extractor_type='json' with kv_separator + key_separator + flatten:true" note; (2) a multi-line comment above `ExtractorConfigJson` in `src/tools/inputs/schemas.js` carrying the same mapping; (3) the 01-04-SUMMARY.md §D-07 Reconfirmation Narrative as the executive-level reference. Test "create_extractor json with kv_separator (the 'key-value flattening' path is the json extractor — D-07 mapping)" exercises the kv config end-to-end.
+  - **superRefine variant dispatch keyed on extractor_type**: same pattern as Plan 02's CreateInputSchema (keyed on type FQCN). `CreateExtractorSchema` accepts a generic `z.record(z.unknown())` for `extractor_config`, then superRefine looks up the strict per-type variant in `EXTRACTOR_TYPE_TO_CONFIG` and re-paths its issues under `['extractor_config', ...issue.path]`. Adding a new strict variant (if Graylog 7.3 ships a 9th primitive) is a one-line registration in the map. Test "create_extractor zod rejects missing extractor_config for grok (grok_pattern required)" pins the per-type drilldown.
+  - **D-09 partial-update reuse for update_extractor**: same shape as `update_input` (D-03 partial-update). Pre-flight GET on the current extractor; merge envelope built from `args.changes` overriding `current.*`. `extractor_type` is immutable — enforced at BOTH the schema layer (`UpdateExtractorSchema.changes` does not contain extractor_type) AND the build layer (`extractor_type: current.extractor_type` unconditionally). Defense in depth — structural enforcement, not just runtime rejection. Note: merge-from-current (NOT strict no-echo) is acceptable for extractors because RESEARCH.md verified that NONE of the 8 primitive extractor_config types contain encrypted fields — the C3 pitfall is not reachable here.
+  - **D-09 leaf-delete for delete_extractor**: build returns a descriptor WITHOUT a `cascades` key. handler.js's preview emitter spreads cascades only when `req.cascades` is truthy (Plan 02 BLOCKER #1 amendment), so the no-cascade contract is provable by ABSENCE. Test "delete_extractor issues DELETE single-target with NO cascade enumeration (D-09)" asserts `payload.cascades === undefined`. Establishes the leaf-delete pattern reusable for any future delete tool whose target has no child resources (pipeline-rule delete, individual widget delete in Phase 6).
+  - **toIdBody hint ['extractor_id', 'id']**: Graylog's `POST /api/system/inputs/{inputId}/extractors` returns `{extractor_id: '...'}`, NOT `{id: '...'}` like POST /api/system/inputs. The explicit hint with extractor_id FIRST and id as a back-up handles either shape. RESEARCH.md §"Notes on response shape inconsistencies" row 10. Test "create_extractor apply path returns server-assigned id from extractor_id response field (toIdBody)" pins the contract.
+  - **Per-type tests unrolled from for-loop into 8 explicit declarations**: the original plan suggested a for-loop iterating EXTRACTOR_CASES. The loop variant landed 8 runtime tests but only 1 lexical `test(` declaration — below the plan's ≥18 grep gate. Unrolled into 8 explicit top-level `test()` calls, each calling a shared `assertCreateExtractorPreviewShape(type, config)` driver. Net lexical count: 22 `test(` matches. Failure messages now reference the type by name (`create_extractor regex_replace — preview shape FAIL`) instead of iteration index N. Tracked as Rule 1 deviation in the SUMMARY (lexical-grep tightening).
+  - **Test growth**: 203 → 223 (+20 net-new). Focused run = 20/20 pass; full `npm test` = 223/223 pass; zero regressions. Commits: `193e218` (Task 1 RED, ERR_MODULE_NOT_FOUND), `25a3b16` (Task 2 GREEN, all 20 pass + 203 baseline preserved).
+  - **Tool count milestone reached**: 35 tools registered (23 v2.3 + 12 Phase 1 = 3 read in Plan 01 + 3 mutating in Plan 02 + 2 lifecycle in Plan 03 + 4 extractor in Plan 04). Phase 1's full scope (INPUT-01..11 → 12 tools) is now complete behavior-wise. Module-init `assertAllToolsRegistered(toolDefinitions)` returns "OK".
+  - **Plan 05 hand-off**: 8 mutating-tool schemas exist and are exported from `src/tools/inputs/schemas.js` for the `assertSchemaParityForTool(toolName, zodSchema)` enrichment in `test/schema-parity.test.js`. The C3 + D-03 + D-04 + D-05 + D-07 + D-09 + lifecycle verb-mapping acceptance gates are all currently pinned by ad-hoc tests; Plan 05 lands them as byte-identical snapshot fixtures + flips `01-VALIDATION.md` to complete + closes Phase 1.
+
 ### Foundation Primitives To Be Built In Phase 0
 
 These are the cross-cutting concerns every later phase depends on. They live in `FOUND-01` through `FOUND-13`:
@@ -200,11 +213,11 @@ None.
 
 ## Session Continuity
 
-**Last action**: Completed `01-03-PLAN.md` — Phase 1's input lifecycle plan. Shipped `start_input` (INPUT-07a: PUT /api/system/inputstates/{inputId}) and `stop_input` (INPUT-07b: DELETE /api/system/inputstates/{inputId}). Both compose through `defineMutatingHandler` so dryRun: true defaults + writable-flag gate (wrapper + client defense-in-depth) + idempotency-key auto-derivation inherit uniformly — D-08 lifecycle-as-mutation contract honored end-to-end. Tool descriptions explicitly document (a) the counter-intuitive verb mapping (start=PUT, stop=DELETE — RESEARCH.md §Pitfall Lifecycle Maps to DELETE Verb) and (b) the eventually-consistent semantics ("sets the DESIRED state; actual state may briefly remain STARTING/STOPPING — poll get_input if you need to wait for RUNNING/STOPPED"). Both handlers set `postApplyEstimate.id = args.inputId` (NOT __SERVER_ASSIGNED__ — the agent supplied the ID up front; not create-shaped). Schemas `StartInputSchema` + `StopInputSchema` = `mutatingBase.extend({ inputId })` — only inputId required (no extraneous lifecycle state args). Test growth 195 → 203 (+8 net-new); focused run 32/32 inputs; full `npm test` 203/203 pass; zero regressions on Plan 01-02 baseline. Commits: `968cdc4` (Task 1 RED, ERR_MODULE_NOT_FOUND), `4e40a2e` (Task 1 GREEN, all 8 tests pass + 195 baseline preserved).
+**Last action**: Completed `01-04-PLAN.md` — Phase 1's extractor CRUD plan. Shipped `list_extractors` (INPUT-08: GET /api/system/inputs/{inputId}/extractors via defineListHandler), `create_extractor` (INPUT-09 — all 8 D-07 reconfirmed Graylog 7.0.6 primitive types under strict zod schemas: grok, regex, regex_replace, split_and_index, substring, copy_input, json, lookup_table; M5 per-input-scoped findExistingMatches keyed on title+extractor_type; C6 __SERVER_ASSIGNED__ sentinel; toIdBody hint ["extractor_id", "id"] handles Graylog's create-extractor response quirk), `update_extractor` (INPUT-10 — D-09 partial-update merge-from-current; extractor_type immutable enforced at both schema + build layers; merge pattern acceptable here because extractors carry no encrypted fields per RESEARCH.md), and `delete_extractor` (INPUT-11 — D-09 single-target leaf-delete; NO cascade key in build descriptor, no-cascade contract provable by absence). The D-07 "key-value → json" mapping (the original CONTEXT.md draft listed "key-value" as a 6th primitive; Graylog 7.0.6's actual enum has 8 entries with NO key_value) is documented in 3 places: schemas.js comment above ExtractorConfigJson, src/tools.js create_extractor description, and the 01-04-SUMMARY's §D-07 Reconfirmation Narrative. Test growth 203 → 223 (+20 net-new — 8 per-type preview-shape tests + M5 + C6 + zod rejections incl. 'key_value' + key-value→json mapping + apply path + 2 list + 2 update + 2 delete); focused run 20/20; full `npm test` 223/223 pass; zero regressions. Tool count 31 → 35 — Phase 1's 12 net-new tools (full INPUT-01..11 scope) shipped behavior-wise. Commits: `193e218` (Task 1 RED, ERR_MODULE_NOT_FOUND on list-extractors.js), `25a3b16` (Task 2 GREEN, all 20 pass + 203 baseline preserved). One auto-fixed Rule 1 deviation: per-type tests unrolled from for-loop into 8 explicit declarations to satisfy the plan's ≥18 lexical `test(` grep gate AND improve failure-message clarity.
 
-**Stopped at**: Completed 01-03-PLAN.md — input lifecycle landed; ready for Plan 04 (extractors CRUD: list_extractors + create_extractor + update_extractor + delete_extractor).
+**Stopped at**: Completed 01-04-PLAN.md — extractor CRUD landed; Phase 1 is 12-of-12 tools shipped behavior-wise; only Plan 05 snapshot/parity/validation work remains to close Phase 1.
 
-**Next action**: Execute `01-04-PLAN.md` (extractors CRUD — INPUT-08/09/10/11). Plan 04 inherits from Plans 01-02 + 01-03: (1) `_applyBody` sibling pattern + strict-no-echo wire-build available for `update_extractor` (D-09: reuses the `update_input` contract); (2) per-input-scoped `findExistingMatches({ listPath: '/api/system/inputs/{inputId}/extractors', matchFn: ... })` for `create_extractor` idempotency; (3) variant-map dispatch via superRefine (Plan 02 pattern) keyed on `extractor_type` — D-07 says all 8 Graylog 7.0.6 extractor types get strict schemas (grok, regex, regex_replace, json, split_and_index, substring, copy_input, lookup_table); (4) per-tool-per-file convention reinforced by Plans 01-02 + 01-03 — Plan 04 lands list-extractors.js / create-extractor.js / update-extractor.js / delete-extractor.js as separate files. The C3 + D-03 + D-04 + D-05 acceptance gates + lifecycle verb-mapping contract are currently pinned by Tests 20/27/28/29/31/34/37-44 (ad-hoc assertions); Plan 05 lands them as byte-identical snapshot fixtures + `assertSchemaParityForTool(...)` enrichment of `test/schema-parity.test.js` for create_input / update_input / delete_input / start_input / stop_input / *_extractor.
+**Next action**: Execute `01-05-PLAN.md` (Phase 1 closeout — snapshot fixtures + assertSchemaParityForTool enrichment + 01-VALIDATION.md flip). Plan 05 inherits from Plans 01-02 + 01-03 + 01-04: (1) 8 mutating-tool schemas exist and are exported from `src/tools/inputs/schemas.js` for the `assertSchemaParityForTool(toolName, zodSchema)` enrichment in `test/schema-parity.test.js` — CreateInputSchema, UpdateInputSchema, DeleteInputSchema, StartInputSchema, StopInputSchema, CreateExtractorSchema, UpdateExtractorSchema, DeleteExtractorSchema; (2) the C3 + D-03 + D-04 + D-05 + D-07 + D-09 + lifecycle verb-mapping acceptance gates are all currently pinned by ad-hoc tests (Tests 20/27/28/29/31/34/37-44 in inputs.test.js + 20 tests in extractors.test.js including the 8 per-type preview-shape tests and the explicit 'key-value→json' mapping test) — Plan 05 lands these as byte-identical snapshot fixtures under `test/__snapshots__/`; (3) 01-VALIDATION.md flip from "in-progress" to "complete" — Phase 1 status closure with all 11 INPUT-* requirements traced to their landing plan (INPUT-01..03 → 01-01, INPUT-04..06 → 01-02, INPUT-07 → 01-03, INPUT-08..11 → 01-04).
 
 ---
 *State initialized: 2026-05-13*
