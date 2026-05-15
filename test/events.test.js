@@ -662,3 +662,261 @@ test_p2("dispatch resolves list_event_definitions + get_event_definition after P
     assert.equal(payload.tool, "list_event_definitions");
     assert.equal(Array.isArray(payload.items), true);
 });
+
+// =====================================================================
+// Plan 05-02 Task 2 — create_event_definition (M1 + C5 acceptance gates)
+// =====================================================================
+//
+// Every test below routes through the captured-request seam so build()'s
+// findExistingMatches pre-flight (GET /api/events/definitions/paginated)
+// receives a controlled response. The M1 + C5 acceptance gates are pinned
+// here; Plan 05-05 will freeze the same JSON shapes as byte-stable
+// snapshots.
+
+// ---------- M1 ACCEPTANCE GATE — wire-path + summary proofs ----------
+
+test_p2("create_event_definition M1 wire-path proof: ?schedule=false UNCONDITIONALLY", async () => {
+    const { handleCreateEventDefinition } = await import("../src/tools/events/create-event-definition.js");
+    _setCaptureRequest_p2(eventsMultiCapture_p2([
+        { method: "GET", pathPattern: "/api/events/definitions/paginated", response: { elements: [], total: 0 } },
+    ]));
+    const res = await handleCreateEventDefinition({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                definition: { title: "Spike Alert", config: { type: "aggregation-v1" } },
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.preview.path, "/api/events/definitions?schedule=false");
+    assert.equal(payload.preview.method, "POST");
+});
+
+test_p2("create_event_definition M1 summary proof: postApplyEstimate.wouldStartScheduling === false", async () => {
+    const { handleCreateEventDefinition } = await import("../src/tools/events/create-event-definition.js");
+    _setCaptureRequest_p2(eventsMultiCapture_p2([
+        { method: "GET", pathPattern: "/api/events/definitions/paginated", response: { elements: [], total: 0 } },
+    ]));
+    const res = await handleCreateEventDefinition({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                definition: { title: "Spike Alert", config: { type: "aggregation-v1" } },
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.postApplyEstimate.wouldStartScheduling, false);
+    assert.equal(payload.postApplyEstimate.state, "DISABLED");
+    assert.equal(payload.postApplyEstimate.id, "__SERVER_ASSIGNED__");
+});
+
+test_p2("create_event_definition M1 STRUCTURAL: agent CANNOT inject schedule:true (zod strip drops it)", async () => {
+    const { handleCreateEventDefinition } = await import("../src/tools/events/create-event-definition.js");
+    _setCaptureRequest_p2(eventsMultiCapture_p2([
+        { method: "GET", pathPattern: "/api/events/definitions/paginated", response: { elements: [], total: 0 } },
+    ]));
+    const res = await handleCreateEventDefinition({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                definition: { title: "Spike Alert", config: { type: "aggregation-v1" } },
+                schedule: true,
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    // Wire path STILL has ?schedule=false (zod strip dropped the unknown key
+    // before it could influence the build() callback).
+    assert.equal(payload.preview.path, "/api/events/definitions?schedule=false");
+});
+
+// ---------- D-04 surface — schema rejects/strips `schedule` key ----------
+
+test_p2("CreateEventDefinitionSchema strips agent-injected `schedule` key (D-04 defense-in-depth)", async () => {
+    const { CreateEventDefinitionSchema } = await import("../src/tools/events/schemas.js");
+    const args = CreateEventDefinitionSchema.parse({
+        definition: { title: "x", config: {} },
+        schedule: true,
+    });
+    assert.equal(args.schedule, undefined);
+});
+
+// ---------- C5 ACCEPTANCE GATE — v6→v7 migration visible ----------
+
+test_p2("create_event_definition C5 GATE: v6 aggregation shape surfaces migration:{migrated:true, warnings}", async () => {
+    const { handleCreateEventDefinition } = await import("../src/tools/events/create-event-definition.js");
+    _setCaptureRequest_p2(eventsMultiCapture_p2([
+        { method: "GET", pathPattern: "/api/events/definitions/paginated", response: { elements: [], total: 0 } },
+    ]));
+    const res = await handleCreateEventDefinition({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                definition: {
+                    title: "V6 Style",
+                    config: {
+                        type: "aggregation-v1",
+                        conditions: {
+                            expression: { type: "function", function: "count", parameter: "source" },
+                        },
+                    },
+                },
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.migration.migrated, true);
+    assert.equal(payload.migration.warnings[0].migrated_from_v6_shape, true);
+    assert.equal(payload.migration.warnings[0].emitted, "count_source");
+    assert.deepEqual(
+        payload.migration.warnings[0].original,
+        { type: "function", function: "count", parameter: "source" },
+    );
+    // Wire body's entity.config.conditions.expression is the v7 number-ref.
+    assert.deepEqual(
+        payload.preview.body.entity.config.conditions.expression,
+        { type: "number-ref", ref: "count_source" },
+    );
+});
+
+test_p2("create_event_definition C5 NO-OP: v7 input passes through with NO migration key in dry-run", async () => {
+    const { handleCreateEventDefinition } = await import("../src/tools/events/create-event-definition.js");
+    _setCaptureRequest_p2(eventsMultiCapture_p2([
+        { method: "GET", pathPattern: "/api/events/definitions/paginated", response: { elements: [], total: 0 } },
+    ]));
+    const res = await handleCreateEventDefinition({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                definition: {
+                    title: "V7 Style",
+                    config: {
+                        type: "aggregation-v1",
+                        conditions: {
+                            expression: { type: "number-ref", ref: "count_source" },
+                        },
+                    },
+                },
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    // migration key omitted when migrated:false (keeps preview JSON lean).
+    assert.equal(Object.prototype.hasOwnProperty.call(payload, "migration"), false);
+});
+
+// ---------- Pitfall 3 — body wrap ----------
+
+test_p2("create_event_definition Pitfall 3: body wraps in {entity, share_request: null} (CreateEntityRequest)", async () => {
+    const { handleCreateEventDefinition } = await import("../src/tools/events/create-event-definition.js");
+    _setCaptureRequest_p2(eventsMultiCapture_p2([
+        { method: "GET", pathPattern: "/api/events/definitions/paginated", response: { elements: [], total: 0 } },
+    ]));
+    const res = await handleCreateEventDefinition({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                definition: { title: "Spike Alert", config: {} },
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.preview.body.entity.title, "Spike Alert");
+    assert.equal(payload.preview.body.share_request, null);
+});
+
+// ---------- Pitfall 8 — id stripped ----------
+
+test_p2("create_event_definition Pitfall 8: definition.id stripped before POST (server assigns)", async () => {
+    const { handleCreateEventDefinition } = await import("../src/tools/events/create-event-definition.js");
+    _setCaptureRequest_p2(eventsMultiCapture_p2([
+        { method: "GET", pathPattern: "/api/events/definitions/paginated", response: { elements: [], total: 0 } },
+    ]));
+    const res = await handleCreateEventDefinition({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                definition: { id: "ghost", title: "Test", config: {} },
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.preview.body.entity.id, undefined);
+});
+
+// ---------- FOUND-11 — existingMatches probe ----------
+
+test_p2("create_event_definition FOUND-11: existingMatches probe surfaces exact-title match via paginated elements", async () => {
+    const { handleCreateEventDefinition } = await import("../src/tools/events/create-event-definition.js");
+    _setCaptureRequest_p2(eventsMultiCapture_p2([
+        {
+            method: "GET",
+            pathPattern: "/api/events/definitions/paginated",
+            response: {
+                elements: [
+                    { id: "existing-1", title: "Spike Alert", priority: 2 },
+                    { id: "other-2", title: "Quota Alert", priority: 3 },
+                ],
+                total: 2,
+            },
+        },
+    ]));
+    const res = await handleCreateEventDefinition({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                definition: { title: "Spike Alert", config: {} },
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.existingMatches.length, 1);
+    assert.equal(payload.existingMatches[0].id, "existing-1");
+    assert.equal(payload.existingMatches[0].title, "Spike Alert");
+    assert.equal(payload.existingMatches[0].similarity_reason, "exact");
+});
+
+test_p2("create_event_definition existingMatches: empty array when no exact-title match in paginated elements", async () => {
+    const { handleCreateEventDefinition } = await import("../src/tools/events/create-event-definition.js");
+    _setCaptureRequest_p2(eventsMultiCapture_p2([
+        {
+            method: "GET",
+            pathPattern: "/api/events/definitions/paginated",
+            response: { elements: [{ id: "other", title: "Quota Alert" }], total: 1 },
+        },
+    ]));
+    const res = await handleCreateEventDefinition({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                definition: { title: "Spike Alert", config: {} },
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.deepEqual(payload.existingMatches, []);
+});
+
+// ---------- dispatch + tool count ----------
+
+test_p2("dispatch resolves create_event_definition after Plan 05-02 Task 2 registration", async () => {
+    const { dispatch } = await import("../src/dispatch.js");
+    await import("../src/tools/_register.js");
+    _setCaptureRequest_p2(eventsMultiCapture_p2([
+        { method: "GET", pathPattern: "/api/events/definitions/paginated", response: { elements: [], total: 0 } },
+    ]));
+    const res = await dispatch({
+        params: {
+            name: "create_event_definition",
+            arguments: {
+                _testConnection: "fake",
+                definition: { title: "DispTest", config: {} },
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.tool, "create_event_definition");
+    assert.equal(payload.dryRun, true);
+});
