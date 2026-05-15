@@ -159,3 +159,15 @@ test("schema-parity: update_index_set", async () => {
     const { UpdateIndexSetSchema } = await import("../src/tools/index-sets/schemas.js");
     await assertSchemaParityForTool("update_index_set", UpdateIndexSetSchema);
 });
+
+// ---------------------------------------------------------------------------
+// Plan 02-03 enrichment — delete_index_set (INDEX-05; C1 mitigation centerpiece)
+//
+// DeleteIndexSetSchema = mutatingBase.extend({ indexSetId, deleteIndices, confirm }).
+// No superRefine wrap so .shape is direct; getShape still works.
+// ---------------------------------------------------------------------------
+
+test("schema-parity: delete_index_set", async () => {
+    const { DeleteIndexSetSchema } = await import("../src/tools/index-sets/schemas.js");
+    await assertSchemaParityForTool("delete_index_set", DeleteIndexSetSchema);
+});

@@ -1070,3 +1070,386 @@ test("collectIndexNames deduplicates a name appearing in multiple sub-collection
     const names = collectIndexNames(allIndices);
     assert.deepEqual(names, ["a"], "duplicates across sub-collections must collapse");
 });
+
+// =====================================================================
+// Plan 02-03 — Task 2: delete_index_set handler (INDEX-05)
+// =====================================================================
+//
+// The C1 mitigation centerpiece. delete_index_set composes defineMutatingHandler
+// with the wrapper hooks shipped in Plan 02-01 (_confirmationToken forwarding +
+// requireConfirm apply-time gate). 12 tests covering every branch:
+//
+//   1-3:  DeleteIndexSetSchema parse contract (default false, optional confirm)
+//   4:    deleteIndices:false dry-run — token-free metadata-only delete (D-03)
+//   5:    deleteIndices:true dry-run against empty index set (hash + cascades)
+//   6:    deleteIndices:true dry-run against populated index set (different hash)
+//   7:    D-05 stats_unreachable hard-block on dry-run
+//   8:    ND1 default index set refusal
+//   9:    apply with mismatched confirm — wrapper requireConfirm gate refuses
+//   10:   apply with correct confirm — fires DELETE; envelope omits job_id
+//   11:   writable gate fires BEFORE confirmation gate (D-16)
+//   12:   ND1 still refuses default even when deleteIndices:false
+
+import { handleDeleteIndexSet } from "../src/tools/index-sets/delete-index-set.js";
+import { DeleteIndexSetSchema } from "../src/tools/index-sets/schemas.js";
+
+const NON_DEFAULT_INDEX_SET = {
+    id: "iset-1",
+    title: "App errors",
+    description: "Stream-routed errors",
+    default: false,           // ND1 does NOT fire
+    writable: true,
+    can_be_default: true,
+    index_prefix: "app_errors",
+};
+
+const DEFAULT_INDEX_SET = {
+    id: "iset-default",
+    title: "Default index set",
+    description: "Catch-all",
+    default: true,            // ND1 fires
+    writable: true,
+    can_be_default: true,
+    index_prefix: "graylog",
+};
+
+const EMPTY_INDEX_LIST = {
+    closed: { indices: [] },
+    reopened: { indices: [] },
+    all: { indices: {} },
+};
+
+const EMPTY_STATS = { documents: 0, indices: 0, size: 0 };
+
+// -------- Task 2 Test 1: DeleteIndexSetSchema parses minimal valid input --------
+
+test("DeleteIndexSetSchema parses { indexSetId, deleteIndices:false } successfully", () => {
+    const result = DeleteIndexSetSchema.safeParse({
+        indexSetId: "iset-1",
+        deleteIndices: false,
+    });
+    assert.equal(result.success, true);
+    assert.equal(result.data.indexSetId, "iset-1");
+    assert.equal(result.data.deleteIndices, false);
+});
+
+// -------- Task 2 Test 2: deleteIndices defaults to false (D-04 inverted default) --------
+
+test("DeleteIndexSetSchema defaults deleteIndices to false (D-04 inversion of Graylog @DefaultValue(true))", () => {
+    const result = DeleteIndexSetSchema.safeParse({ indexSetId: "iset-1" });
+    assert.equal(result.success, true);
+    assert.equal(result.data.deleteIndices, false, "MCP wrapper MUST invert Graylog's true-default to false");
+});
+
+// -------- Task 2 Test 3: schema accepts optional confirm string --------
+
+test("DeleteIndexSetSchema accepts an optional confirm string (D-01 echo-the-token)", () => {
+    const result = DeleteIndexSetSchema.safeParse({
+        indexSetId: "iset-1",
+        deleteIndices: true,
+        confirm: "deadbeef".repeat(8), // 64-hex shape
+    });
+    assert.equal(result.success, true);
+    assert.equal(result.data.confirm, "deadbeef".repeat(8));
+    // Absent confirm: still parses (the requireConfirm gate at apply time enforces the echo).
+    const result2 = DeleteIndexSetSchema.safeParse({ indexSetId: "iset-1", deleteIndices: true });
+    assert.equal(result2.success, true);
+    assert.equal(result2.data.confirm, undefined);
+});
+
+// -------- Task 2 Test 4: deleteIndices:false dry-run — token-free metadata-only path --------
+
+test("delete_index_set deleteIndices:false dry-run emits the metadata-only path with NO confirmation token (D-03)", async () => {
+    _setCaptureRequest(multiCapture([
+        { method: "GET", pathPattern: "/api/system/indices/index_sets/iset-1", response: NON_DEFAULT_INDEX_SET },
+    ]));
+    const res = await handleDeleteIndexSet({
+        params: {
+            arguments: {
+                indexSetId: "iset-1",
+                deleteIndices: false,
+                _testConnection: "fake",
+            },
+        },
+    });
+    assert.notEqual(res.isError, true, `expected success, got: ${res.content?.[0]?.text}`);
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.dryRun, true);
+    assert.equal(payload.preview.method, "DELETE");
+    assert.equal(
+        payload.preview.path,
+        "/api/system/indices/index_sets/iset-1?delete_indices=false",
+        "metadata-only delete: path ends ?delete_indices=false",
+    );
+    assert.equal(payload.preview.body, undefined);
+    // Token-free, cascade-free, async-envelope-free per D-03.
+    assert.equal(payload.confirmationToken, undefined, "no token for the safe metadata-only path");
+    assert.equal(payload.cascades, undefined, "no cascades for the safe metadata-only path");
+    assert.equal(payload.postApplyEstimate.deletedIndices, false);
+});
+
+// -------- Task 2 Test 5: deleteIndices:true dry-run against empty index set (hash + cascades) --------
+
+test("delete_index_set deleteIndices:true dry-run against an empty index set emits confirmation token + empty cascades + UPDATED D-15 no-job_id envelope", async () => {
+    _setCaptureRequest(multiCapture([
+        { method: "GET", pathPattern: "/api/system/indices/index_sets/iset-1", response: NON_DEFAULT_INDEX_SET },
+        { method: "GET", pathPattern: "/api/system/indexer/indices/iset-1/list", response: EMPTY_INDEX_LIST },
+        { method: "GET", pathPattern: "/api/system/indices/index_sets/iset-1/stats", response: EMPTY_STATS },
+    ]));
+    const res = await handleDeleteIndexSet({
+        params: {
+            arguments: {
+                indexSetId: "iset-1",
+                deleteIndices: true,
+                _testConnection: "fake",
+            },
+        },
+    });
+    assert.notEqual(res.isError, true, `expected success, got: ${res.content?.[0]?.text}`);
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.preview.method, "DELETE");
+    assert.equal(payload.preview.path, "/api/system/indices/index_sets/iset-1?delete_indices=true");
+    // confirmationToken is a 64-hex sha-256.
+    assert.equal(payload.confirmationToken.length, 64);
+    assert.match(payload.confirmationToken, /^[a-f0-9]{64}$/);
+    // Expected frozen value for { indexSetId: "iset-1", deleteIndices: true, indexNames: [], messageCount: 0 }.
+    assert.equal(
+        payload.confirmationToken,
+        "ed22c223ab80ce359fbb3d00b3ca46a76f99cbe07a658c1f3a3e644c5c337d1d",
+        "empty-index-set hash drift — canonicalization regression",
+    );
+    // Cascades: empty index list, zero count.
+    assert.deepEqual(payload.cascades.indices, []);
+    assert.equal(payload.cascades.messageCount, 0);
+    assert.equal(payload.cascades.indexCount, 0);
+    // UPDATED D-15 envelope shape: async:true, observable_at, indexSetId in message, NO job_id.
+    assert.equal(payload.postApplyEstimate.async, true);
+    assert.equal(payload.postApplyEstimate.job_id_observable_at, "/system/jobs");
+    assert.ok(
+        typeof payload.postApplyEstimate.message === "string"
+            && payload.postApplyEstimate.message.includes("iset-1"),
+        `message must include the indexSetId substring; got ${payload.postApplyEstimate.message}`,
+    );
+    assert.equal(
+        payload.postApplyEstimate.job_id,
+        undefined,
+        "UPDATED D-15: job_id MUST be absent (Graylog DELETE returns 204 with no body)",
+    );
+});
+
+// -------- Task 2 Test 6: deleteIndices:true against populated index set — different hash --------
+
+test("delete_index_set deleteIndices:true dry-run against a populated index set surfaces real cascades + a different hash", async () => {
+    const POPULATED_INDEX_LIST = {
+        closed: { indices: ["graylog_0"] },
+        reopened: { indices: ["graylog_1"] },
+        all: { indices: { graylog_2: { active: true } } },
+    };
+    const POPULATED_STATS = { documents: 12345, indices: 3, size: 99999 };
+    _setCaptureRequest(multiCapture([
+        { method: "GET", pathPattern: "/api/system/indices/index_sets/iset-1", response: NON_DEFAULT_INDEX_SET },
+        { method: "GET", pathPattern: "/api/system/indexer/indices/iset-1/list", response: POPULATED_INDEX_LIST },
+        { method: "GET", pathPattern: "/api/system/indices/index_sets/iset-1/stats", response: POPULATED_STATS },
+    ]));
+    const res = await handleDeleteIndexSet({
+        params: {
+            arguments: {
+                indexSetId: "iset-1",
+                deleteIndices: true,
+                _testConnection: "fake",
+            },
+        },
+    });
+    assert.notEqual(res.isError, true);
+    const payload = JSON.parse(res.content[0].text);
+    // Cascade names sorted, messageCount + indexCount accurate.
+    assert.deepEqual(payload.cascades.indices, ["graylog_0", "graylog_1", "graylog_2"]);
+    assert.equal(payload.cascades.messageCount, 12345);
+    assert.equal(payload.cascades.indexCount, 3);
+    // Different fixture from Test 5 → different hash (proves sensitivity to inputs).
+    assert.notEqual(
+        payload.confirmationToken,
+        "ed22c223ab80ce359fbb3d00b3ca46a76f99cbe07a658c1f3a3e644c5c337d1d",
+        "populated-index-set hash MUST differ from the empty-index-set hash",
+    );
+    // Expected frozen value for the populated fixture.
+    assert.equal(
+        payload.confirmationToken,
+        "d5f10faaada8fc8f558b1a53cc8777a83fd73fa9172aa65fb36728ff246583c0",
+        "populated-index-set hash drift — canonicalization regression",
+    );
+});
+
+// -------- Task 2 Test 7: D-05 stats_unreachable hard-blocks dry-run --------
+
+test("delete_index_set deleteIndices:true HARD-BLOCKS dry-run when /stats throws (D-05 stats_unreachable)", async () => {
+    _setCaptureRequest((req) => {
+        if (req.method === "GET" && req.path === "/api/system/indices/index_sets/iset-1") return NON_DEFAULT_INDEX_SET;
+        if (req.method === "GET" && req.path === "/api/system/indexer/indices/iset-1/list") return EMPTY_INDEX_LIST;
+        if (req.method === "GET" && req.path === "/api/system/indices/index_sets/iset-1/stats") {
+            // Simulate a 500 from Elasticsearch — the failure must HARD-BLOCK
+            // dry-run, NOT degrade-and-proceed (Plan-02-03 D-05 is a deliberate
+            // safety choice).
+            throw new GraylogNotFoundError("Stats unreachable", { status: 500, method: "GET", path: req.path });
+        }
+        throw new Error(`unexpected req: ${req.method} ${req.path}`);
+    });
+    const res = await handleDeleteIndexSet({
+        params: {
+            arguments: {
+                indexSetId: "iset-1",
+                deleteIndices: true,
+                _testConnection: "fake",
+            },
+        },
+    });
+    assert.equal(res.isError, true);
+    assert.match(res.content[0].text, /stats_unreachable/);
+    // NO confirmation token issued — the agent must not see a token from the
+    // wrapper before knowing the destruction blast radius.
+    const parsed = (() => { try { return JSON.parse(res.content[0].text); } catch { return null; } })();
+    if (parsed && parsed.confirmationToken !== undefined) {
+        assert.fail("stats_unreachable response MUST NOT carry a confirmationToken");
+    }
+});
+
+// -------- Task 2 Test 8: ND1 — default index set refused outright --------
+
+test("delete_index_set deleteIndices:true against the default index set is refused with reason default_index_set_undeletable (ND1)", async () => {
+    _setCaptureRequest(multiCapture([
+        { method: "GET", pathPattern: "/api/system/indices/index_sets/iset-default", response: DEFAULT_INDEX_SET },
+    ]));
+    const res = await handleDeleteIndexSet({
+        params: {
+            arguments: {
+                indexSetId: "iset-default",
+                deleteIndices: true,
+                _testConnection: "fake",
+            },
+        },
+    });
+    assert.equal(res.isError, true);
+    assert.match(res.content[0].text, /default_index_set_undeletable/);
+});
+
+// -------- Task 2 Test 9: apply with mismatched confirm — requireConfirm gate refuses --------
+
+test("delete_index_set apply with mismatched confirm returns isError reason confirmation_mismatch — DELETE never fires", async () => {
+    let deleteCallCount = 0;
+    _setCaptureRequest((req) => {
+        if (req.method === "DELETE") {
+            deleteCallCount += 1;
+            return null; // 204 no body
+        }
+        if (req.method === "GET" && req.path === "/api/system/indices/index_sets/iset-1") return NON_DEFAULT_INDEX_SET;
+        if (req.method === "GET" && req.path === "/api/system/indexer/indices/iset-1/list") return EMPTY_INDEX_LIST;
+        if (req.method === "GET" && req.path === "/api/system/indices/index_sets/iset-1/stats") return EMPTY_STATS;
+        throw new Error(`unexpected req: ${req.method} ${req.path}`);
+    });
+    const res = await handleDeleteIndexSet({
+        params: {
+            arguments: {
+                indexSetId: "iset-1",
+                deleteIndices: true,
+                confirm: "this-is-the-wrong-hash",
+                dryRun: false,
+                _testConnection: "fake",
+            },
+        },
+    });
+    assert.equal(res.isError, true);
+    assert.match(res.content[0].text, /confirmation_mismatch/);
+    assert.equal(res.reason, "confirmation_mismatch");
+    assert.equal(deleteCallCount, 0, "DELETE MUST NOT fire when the confirmation gate refuses");
+});
+
+// -------- Task 2 Test 10: apply with correct confirm — fires DELETE; envelope omits job_id --------
+
+test("delete_index_set apply with correct confirm fires DELETE and returns UPDATED D-15 envelope with NO job_id", async () => {
+    let deletePath = null;
+    _setCaptureRequest((req) => {
+        if (req.method === "DELETE" && req.path.startsWith("/api/system/indices/index_sets/iset-1")) {
+            deletePath = req.path;
+            return null; // Graylog DELETE returns 204 no body.
+        }
+        if (req.method === "GET" && req.path === "/api/system/indices/index_sets/iset-1") return NON_DEFAULT_INDEX_SET;
+        if (req.method === "GET" && req.path === "/api/system/indexer/indices/iset-1/list") return EMPTY_INDEX_LIST;
+        if (req.method === "GET" && req.path === "/api/system/indices/index_sets/iset-1/stats") return EMPTY_STATS;
+        throw new Error(`unexpected req: ${req.method} ${req.path}`);
+    });
+    const correctHash = "ed22c223ab80ce359fbb3d00b3ca46a76f99cbe07a658c1f3a3e644c5c337d1d";
+    const res = await handleDeleteIndexSet({
+        params: {
+            arguments: {
+                indexSetId: "iset-1",
+                deleteIndices: true,
+                confirm: correctHash,
+                dryRun: false,
+                _testConnection: "fake",
+            },
+        },
+    });
+    assert.notEqual(res.isError, true, `expected success, got: ${res.content?.[0]?.text}`);
+    assert.equal(deletePath, "/api/system/indices/index_sets/iset-1?delete_indices=true");
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.applied, true);
+    // UPDATED D-15 envelope: async, observable_at, message includes indexSetId, NO job_id.
+    const body = payload.result.body;
+    assert.equal(body.async, true);
+    assert.equal(body.job_id_observable_at, "/system/jobs");
+    assert.ok(
+        typeof body.message === "string" && body.message.includes("iset-1"),
+        `apply message must include indexSetId; got: ${body.message}`,
+    );
+    assert.equal(body.job_id, undefined, "UPDATED D-15: job_id MUST be absent from apply envelope");
+});
+
+// -------- Task 2 Test 11: writable gate fires BEFORE confirmation gate (D-16) --------
+
+test("delete_index_set writable gate fires BEFORE the confirmation gate — read-only connection refuses with NO pre-flight GETs (D-16)", async () => {
+    let captureCount = 0;
+    _setCaptureRequest((req) => {
+        captureCount += 1;
+        throw new Error(`captureFn must NOT be called when writable gate fires; got ${req.method} ${req.path}`);
+    });
+    _setConnectionsForTests({
+        readonly: { baseUrl: "x", apiToken: "x", writable: false },
+    });
+    const res = await handleDeleteIndexSet({
+        params: {
+            arguments: {
+                indexSetId: "iset-1",
+                deleteIndices: true,
+                confirm: "any-hash",
+                connectionName: "readonly",
+            },
+        },
+    });
+    assert.equal(res.isError, true);
+    assert.equal(res.reason, "connection_read_only");
+    assert.equal(captureCount, 0, "writable gate MUST short-circuit before any pre-flight GET fires");
+});
+
+// -------- Task 2 Test 12: ND1 still refuses default even with deleteIndices:false --------
+
+test("delete_index_set ND1 refuses the default index set even when deleteIndices:false", async () => {
+    // Graylog's BadRequestException("Default index set cannot be deleted!")
+    // fires regardless of the delete_indices query param value. The wrapper
+    // surfaces this in dry-run BEFORE the metadata-only path commits — the
+    // user might assume the metadata-only path is harmless, but the server
+    // still 400s, so the wrapper-side ND1 check fires first.
+    _setCaptureRequest(multiCapture([
+        { method: "GET", pathPattern: "/api/system/indices/index_sets/iset-default", response: DEFAULT_INDEX_SET },
+    ]));
+    const res = await handleDeleteIndexSet({
+        params: {
+            arguments: {
+                indexSetId: "iset-default",
+                deleteIndices: false,
+                _testConnection: "fake",
+            },
+        },
+    });
+    assert.equal(res.isError, true);
+    assert.match(res.content[0].text, /default_index_set_undeletable/);
+});
