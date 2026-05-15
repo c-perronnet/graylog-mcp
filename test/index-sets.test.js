@@ -22,6 +22,8 @@ import {
     buildRetentionBlock,
     aliasToConfigOrError,
 } from "../src/tools/index-sets/strategies.js";
+// Plan 02-02 Task 2 — create_index_set handler import.
+import { handleCreateIndexSet, _setClockForTests } from "../src/tools/index-sets/create-index-set.js";
 
 // Plan 02-01 Task 4 — list_index_sets (INDEX-01) + get_index_set (INDEX-02).
 // Two read tools that round out the index-sets domain along with the
@@ -422,4 +424,255 @@ test("strategies.js RETENTION_FQCN exposes the 2 retention aliases (delete + clo
     assert.equal(RETENTION_FQCN["close"].configType, CLOSE_CONFIG_FQCN);
     // archive intentionally absent — aliasToConfigOrError handles rejection.
     assert.equal(RETENTION_FQCN["archive"], undefined);
+});
+
+// =====================================================================
+// Plan 02-02 Task 2 — create_index_set handler (INDEX-03)
+// =====================================================================
+
+// Local multi-route capture: pattern-matches method + path, returns the
+// response, throws on miss. Same shape as inputs.test.js's multiCapture.
+function multiCapture(routes) {
+    return (req) => {
+        for (const r of routes) {
+            const matches = typeof r.pathPattern === "string"
+                ? req.path === r.pathPattern
+                : r.pathPattern.test(req.path);
+            if (req.method === r.method && matches) {
+                return typeof r.response === "function" ? r.response(req) : r.response;
+            }
+        }
+        throw new Error(`No route matched ${req.method} ${req.path}`);
+    };
+}
+
+const FIXED_CREATION_DATE = "2026-05-15T12:00:00.000Z";
+
+beforeEach(() => {
+    // Deterministic creation_date for the create_index_set tests.
+    _setClockForTests(() => FIXED_CREATION_DATE);
+});
+
+afterEach(() => {
+    _setClockForTests(null);
+});
+
+// -------- Task 2 Test 1: time-based+delete dry-run emits the exact wire shape --------
+
+test("create_index_set time-based+delete dry-run emits the exact wire shape (D-08 + D-17)", async () => {
+    _setCaptureRequest(multiCapture([
+        { method: "GET", pathPattern: "/api/system/indices/index_sets", response: { total: 0, index_sets: [], stats: {} } },
+    ]));
+    const res = await handleCreateIndexSet({
+        params: {
+            arguments: {
+                title: "App errors",
+                index_prefix: "app_errors",
+                rotation_strategy: "time-based",
+                rotation_strategy_config: { rotation_period: "P1D" },
+                retention_strategy: "delete",
+                retention_strategy_config: { max_number_of_indices: 30 },
+                _testConnection: "fake",
+            },
+        },
+    });
+    assert.notEqual(res.isError, true, `expected success, got: ${res.content?.[0]?.text}`);
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.dryRun, true);
+    assert.equal(payload.preview.method, "POST");
+    assert.equal(payload.preview.path, "/api/system/indices/index_sets");
+    const body = payload.preview.body;
+    assert.equal(body.title, "App errors");
+    assert.equal(body.index_prefix, "app_errors");
+    assert.equal(
+        body.rotation_strategy_class,
+        "org.graylog2.indexer.rotation.strategies.TimeBasedRotationStrategy",
+    );
+    assert.equal(
+        body.rotation_strategy.type,
+        "org.graylog2.indexer.rotation.strategies.TimeBasedRotationStrategyConfig",
+    );
+    assert.equal(body.rotation_strategy.rotation_period, "P1D");
+    assert.equal(
+        body.retention_strategy_class,
+        "org.graylog2.indexer.retention.strategies.DeletionRetentionStrategy",
+    );
+    assert.equal(
+        body.retention_strategy.type,
+        "org.graylog2.indexer.retention.strategies.DeletionRetentionStrategyConfig",
+    );
+    assert.equal(body.retention_strategy.max_number_of_indices, 30);
+    assert.equal(body.creation_date, FIXED_CREATION_DATE);
+    assert.equal(payload.postApplyEstimate.id, "__SERVER_ASSIGNED__");
+});
+
+// -------- Task 2 Test 2: size-based+close dry-run mirror (different FQCNs) --------
+
+test("create_index_set size-based+close dry-run emits the correct FQCNs", async () => {
+    _setCaptureRequest(multiCapture([
+        { method: "GET", pathPattern: "/api/system/indices/index_sets", response: { total: 0, index_sets: [], stats: {} } },
+    ]));
+    const res = await handleCreateIndexSet({
+        params: {
+            arguments: {
+                title: "Bulk archive",
+                index_prefix: "bulk_archive",
+                rotation_strategy: "size-based",
+                rotation_strategy_config: { max_size: 1073741824 },
+                retention_strategy: "close",
+                retention_strategy_config: { max_number_of_indices: 90 },
+                _testConnection: "fake",
+            },
+        },
+    });
+    assert.notEqual(res.isError, true);
+    const body = JSON.parse(res.content[0].text).preview.body;
+    assert.equal(
+        body.rotation_strategy_class,
+        "org.graylog2.indexer.rotation.strategies.SizeBasedRotationStrategy",
+    );
+    assert.equal(
+        body.rotation_strategy.type,
+        "org.graylog2.indexer.rotation.strategies.SizeBasedRotationStrategyConfig",
+    );
+    assert.equal(body.rotation_strategy.max_size, 1073741824);
+    assert.equal(
+        body.retention_strategy_class,
+        "org.graylog2.indexer.retention.strategies.ClosingRetentionStrategy",
+    );
+    assert.equal(
+        body.retention_strategy.type,
+        "org.graylog2.indexer.retention.strategies.ClosingRetentionStrategyConfig",
+    );
+});
+
+// -------- Task 2 Test 3: archive retention rejected with structured reason --------
+
+test("create_index_set archive retention rejected with reason archive_not_supported (in build, not apply)", async () => {
+    _setCaptureRequest(multiCapture([
+        { method: "GET", pathPattern: "/api/system/indices/index_sets", response: { total: 0, index_sets: [], stats: {} } },
+    ]));
+    const res = await handleCreateIndexSet({
+        params: {
+            arguments: {
+                title: "Archive me",
+                index_prefix: "archive_me",
+                rotation_strategy: "time-based",
+                rotation_strategy_config: { rotation_period: "P1D" },
+                retention_strategy: "archive",
+                retention_strategy_config: { max_number_of_indices: 365 },
+                _testConnection: "fake",
+            },
+        },
+    });
+    assert.equal(res.isError, true);
+    assert.match(res.content[0].text, /archive/i);
+    // The build() rejection routes through GraylogValidationError → wrapGraylogError,
+    // so the rendered text reflects the structured error.
+});
+
+// -------- Task 2 Test 4: existingMatches populated when a same-title set exists (M5) --------
+
+test("create_index_set surfaces existingMatches when a same-title index set exists (M5)", async () => {
+    _setCaptureRequest(multiCapture([
+        {
+            method: "GET",
+            pathPattern: "/api/system/indices/index_sets",
+            response: {
+                total: 1,
+                index_sets: [
+                    { id: "abc", title: "App errors", index_prefix: "app_errors" },
+                ],
+                stats: {},
+            },
+        },
+    ]));
+    const res = await handleCreateIndexSet({
+        params: {
+            arguments: {
+                title: "App errors",
+                index_prefix: "app_errors_2",
+                rotation_strategy: "message-count",
+                rotation_strategy_config: { max_docs_per_index: 1000000 },
+                retention_strategy: "delete",
+                retention_strategy_config: { max_number_of_indices: 30 },
+                _testConnection: "fake",
+            },
+        },
+    });
+    assert.notEqual(res.isError, true);
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.existingMatches.length, 1);
+    assert.equal(payload.existingMatches[0].id, "abc");
+    assert.equal(payload.existingMatches[0].title, "App errors");
+});
+
+// -------- Task 2 Test 5: apply path returns server-assigned id --------
+
+test("create_index_set apply path returns server-assigned id", async () => {
+    const FULL_RESPONSE = {
+        id: "iset-new",
+        title: "App errors",
+        index_prefix: "app_errors",
+        default: false,
+        writable: true,
+        can_be_default: true,
+        creation_date: FIXED_CREATION_DATE,
+    };
+    _setCaptureRequest(multiCapture([
+        { method: "GET", pathPattern: "/api/system/indices/index_sets", response: { total: 0, index_sets: [], stats: {} } },
+        { method: "POST", pathPattern: "/api/system/indices/index_sets", response: FULL_RESPONSE },
+    ]));
+    const res = await handleCreateIndexSet({
+        params: {
+            arguments: {
+                title: "App errors",
+                index_prefix: "app_errors",
+                rotation_strategy: "message-count",
+                rotation_strategy_config: { max_docs_per_index: 1000000 },
+                retention_strategy: "delete",
+                retention_strategy_config: { max_number_of_indices: 30 },
+                dryRun: false,
+                _testConnection: "fake",
+            },
+        },
+    });
+    assert.notEqual(res.isError, true, `expected success, got: ${res.content?.[0]?.text}`);
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.dryRun, false);
+    assert.equal(payload.applied, true);
+    assert.equal(payload.result.id, "iset-new");
+    assert.deepEqual(payload.result.body, FULL_RESPONSE);
+});
+
+// -------- Task 2 Test 6: defaults fill correctly when omitted --------
+
+test("create_index_set defaults fill correctly when shards/replicas/index_analyzer omitted", async () => {
+    _setCaptureRequest(multiCapture([
+        { method: "GET", pathPattern: "/api/system/indices/index_sets", response: { total: 0, index_sets: [], stats: {} } },
+    ]));
+    const res = await handleCreateIndexSet({
+        params: {
+            arguments: {
+                title: "Defaults test",
+                index_prefix: "defaults_test",
+                rotation_strategy: "message-count",
+                rotation_strategy_config: { max_docs_per_index: 1000000 },
+                retention_strategy: "delete",
+                retention_strategy_config: { max_number_of_indices: 30 },
+                _testConnection: "fake",
+            },
+        },
+    });
+    assert.notEqual(res.isError, true);
+    const body = JSON.parse(res.content[0].text).preview.body;
+    assert.equal(body.shards, 4);
+    assert.equal(body.replicas, 0);
+    assert.equal(body.index_analyzer, "standard");
+    assert.equal(body.index_optimization_max_num_segments, 1);
+    assert.equal(body.index_optimization_disabled, false);
+    assert.equal(body.field_type_refresh_interval, 5000);
+    assert.equal(body.writable, true);
+    assert.equal(body.use_legacy_rotation, true);
+    assert.equal(body.description, "");
 });
