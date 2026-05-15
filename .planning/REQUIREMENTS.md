@@ -54,10 +54,10 @@ Cross-cutting infrastructure that every domain phase depends on. Cannot be folde
 
 - [x] **STREAM-01**: `list_streams` — narrow projection; includes `mutable: boolean` per stream
 - [x] **STREAM-02**: `get_stream` — full DTO with rules
-- [ ] **STREAM-03**: `create_stream` — internal title-conflict check (M5); reports `existingMatches` in dry-run
-- [ ] **STREAM-04**: `update_stream` — partial-update
+- [x] **STREAM-03**: `create_stream` — internal title-conflict check (M5); reports `existingMatches` in dry-run
+- [x] **STREAM-04**: `update_stream` — partial-update
 - [ ] **STREAM-05**: `delete_stream` — pre-delete cascade preview showing rules, pipeline connections, and event definitions that reference this stream (C2)
-- [ ] **STREAM-06**: `start_stream` / `pause_stream`
+- [x] **STREAM-06**: `start_stream` / `pause_stream`
 - [x] **STREAM-07**: `list_stream_rules`
 - [ ] **STREAM-08**: `create_stream_rule` — covers all rule types (exact, regex, greater, less, present, contains, always-match)
 - [ ] **STREAM-09**: `update_stream_rule`
@@ -237,10 +237,10 @@ Populated by the roadmapper on 2026-05-13. Every v1 requirement maps to exactly 
 | INDEX-08 | Phase 2 | Complete |
 | STREAM-01 | Phase 3 | Complete |
 | STREAM-02 | Phase 3 | Complete |
-| STREAM-03 | Phase 3 | Pending |
-| STREAM-04 | Phase 3 | Pending |
+| STREAM-03 | Phase 3 | Complete |
+| STREAM-04 | Phase 3 | Complete |
 | STREAM-05 | Phase 3 | Pending |
-| STREAM-06 | Phase 3 | Pending |
+| STREAM-06 | Phase 3 | Complete |
 | STREAM-07 | Phase 3 | Complete |
 | STREAM-08 | Phase 3 | Pending |
 | STREAM-09 | Phase 3 | Pending |
