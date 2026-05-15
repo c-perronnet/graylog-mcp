@@ -43,8 +43,8 @@ Cross-cutting infrastructure that every domain phase depends on. Cannot be folde
 
 - [x] **INDEX-01**: `list_index_sets` — narrow projection; flags default and writable status
 - [x] **INDEX-02**: `get_index_set` — full DTO with retention/rotation strategies
-- [ ] **INDEX-03**: `create_index_set` — supports time-based, size-based, and message-count rotation strategies; supports delete/close/archive retention strategies
-- [ ] **INDEX-04**: `update_index_set` — partial-update pattern
+- [x] **INDEX-03**: `create_index_set` — supports time-based, size-based, and message-count rotation strategies; supports delete/close/archive retention strategies
+- [x] **INDEX-04**: `update_index_set` — partial-update pattern
 - [ ] **INDEX-05**: `delete_index_set` — **`deleteIndices` defaults to `false`** (C1); when `true`, requires confirmation token if index set contains messages; returns async system-job ID
 - [ ] **INDEX-06**: `set_default_index_set` — enforces `regular: true` invariant
 - [ ] **INDEX-07**: `cycle_deflector` — manual index rotation
@@ -229,8 +229,8 @@ Populated by the roadmapper on 2026-05-13. Every v1 requirement maps to exactly 
 | INPUT-11 | Phase 1 | Complete |
 | INDEX-01 | Phase 2 | Complete |
 | INDEX-02 | Phase 2 | Complete |
-| INDEX-03 | Phase 2 | Pending |
-| INDEX-04 | Phase 2 | Pending |
+| INDEX-03 | Phase 2 | Complete |
+| INDEX-04 | Phase 2 | Complete |
 | INDEX-05 | Phase 2 | Pending |
 | INDEX-06 | Phase 2 | Pending |
 | INDEX-07 | Phase 2 | Pending |
