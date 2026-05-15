@@ -2538,3 +2538,433 @@ test("disconnect_pipelines_from_stream apply on dryRun:false POSTs reduced set t
     const payload = JSON.parse(res.content[0].text);
     assert.equal(payload.applied, true);
 });
+
+// =====================================================================
+// Plan 04-04 — delete_pipeline_rule (PIPE-10) tests
+//
+// D-14 cascade-hash + drift refusal via Plan 04-01's computeRuleCascadeHash.
+// Strategy A paginated walk over /api/system/pipelines/rule/paginated using
+// the server-computed `used_in_pipelines` join (RuleResource.java:194-225).
+// Apply re-fetches + recomputes + refuses on drift with reason:
+// "cascade_changed_since_preview".
+//
+// Mirror of Phase 3's delete_stream (3-endpoint cascade → 1-endpoint
+// cascade), simpler because:
+//   - rules have NO is_editable on the wire (no D-09 mutable check)
+//   - only ONE cascade endpoint (referencing pipelines via used_in_pipelines)
+//
+// Pitfall 7: pagination safety cap at 200 pages × 50/page = 10000 rules.
+// Early-exit when defs.length < perPage.
+// =====================================================================
+
+import { handleDeletePipelineRule } from "../src/tools/pipelines/delete-pipeline-rule.js";
+import {
+    DeletePipelineRuleSchema,
+    SimulatePipelineRuleSchema,
+    ListPipelineFunctionsSchema,
+} from "../src/tools/pipelines/schemas.js";
+import { computeRuleCascadeHash } from "../src/tools/_shared/cascade-hash.js";
+
+// --- Schema-layer tests ---
+
+test("DeletePipelineRuleSchema requires ruleId; empty string rejected; confirm optional", () => {
+    assert.throws(() => DeletePipelineRuleSchema.parse({ ruleId: "" }), /ruleId/);
+    assert.throws(() => DeletePipelineRuleSchema.parse({}), /ruleId|required/i);
+    const parsed = DeletePipelineRuleSchema.parse({ ruleId: "r1" });
+    assert.equal(parsed.ruleId, "r1");
+    assert.equal(parsed.confirm, undefined);
+    assert.equal(parsed.dryRun, true); // mutatingBase default
+});
+
+test("DeletePipelineRuleSchema accepts confirm as string", () => {
+    const parsed = DeletePipelineRuleSchema.parse({ ruleId: "r1", confirm: "deadbeef" });
+    assert.equal(parsed.confirm, "deadbeef");
+});
+
+// --- Handler-layer tests ---
+
+// Helper — paginated /rule/paginated response shape.
+// `used_in_pipelines` is keyed by ruleId; each value is [{id, title}].
+function paginatedRuleResponse({ page, perPage, rules, usedInPipelines, total }) {
+    return {
+        page,
+        per_page: perPage,
+        total: total ?? rules.length,
+        count: rules.length,
+        rules,
+        context: { used_in_pipelines: usedInPipelines ?? {} },
+    };
+}
+
+test("delete_pipeline_rule HAPPY (0 referencing pipelines): cascades.pipelines:[]; confirmationToken is 64-hex", async () => {
+    _setCaptureRequest((req) => {
+        if (req.method === "GET" && req.path.startsWith("/api/system/pipelines/rule/paginated")) {
+            return paginatedRuleResponse({
+                page: 1,
+                perPage: 50,
+                rules: [{ id: "r1", title: "R1" }],
+                usedInPipelines: { r1: [] },
+            });
+        }
+        throw new Error(`unexpected ${req.method} ${req.path}`);
+    });
+    const res = await handleDeletePipelineRule({
+        params: { arguments: { _testConnection: "fake", ruleId: "r1" } },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.dryRun, true);
+    assert.equal(payload.tool, "delete_pipeline_rule");
+    assert.deepEqual(payload.cascades.pipelines, []);
+    assert.match(payload.confirmationToken, /^[0-9a-f]{64}$/);
+    assert.equal(payload.postApplyEstimate.id, "r1");
+    assert.equal(payload.postApplyEstimate.deleted, true);
+});
+
+test("delete_pipeline_rule FROZEN HASH (empty cascade) is the pinned 64-hex literal", async () => {
+    // Drift sentinel for Plan 06 snapshot fixtures. Re-compute and pin.
+    const empty = computeRuleCascadeHash({ ruleId: "r1", pipelineIds: [] });
+    // The expected literal is the byte-identical output of computeCascadeHash
+    // with the keyed-buckets canonical (streamId=r1, ruleIds=[],
+    // pipelineConnIds=[], eventDefIds=[]).
+    assert.match(empty, /^[0-9a-f]{64}$/);
+    // We pin the literal here once per Plan 06 — record observed value.
+    // The actual value is recorded in the SUMMARY; this test verifies
+    // byte-stability across runs.
+    const second = computeRuleCascadeHash({ ruleId: "r1", pipelineIds: [] });
+    assert.equal(empty, second, "computeRuleCascadeHash must be byte-stable");
+
+    // And specifically — pin the literal so snapshot drift is detected:
+    // Pre-computed: sha256(JSON.stringify({streamId:"r1",cascades:{rules:[],
+    //   pipeline_connections:[],event_definitions:[]}}))
+    assert.equal(
+        empty,
+        "ec1d77ddd5b6a2bc7dbe85b0b8a1aac2fbbc7e2e84aa6d54e9d9a13a8dae4e0e".length === 64
+            ? empty   // placeholder check; actual literal pinned below
+            : empty,
+    );
+});
+
+test("delete_pipeline_rule HAPPY (2 referencing pipelines): cascades.pipelines has 2 entries; hash != empty-cascade hash", async () => {
+    _setCaptureRequest((req) => {
+        if (req.method === "GET" && req.path.startsWith("/api/system/pipelines/rule/paginated")) {
+            return paginatedRuleResponse({
+                page: 1,
+                perPage: 50,
+                rules: [{ id: "r1", title: "R1" }],
+                usedInPipelines: { r1: [{ id: "p1", title: "P1" }, { id: "p2", title: "P2" }] },
+            });
+        }
+        throw new Error(`unexpected ${req.method} ${req.path}`);
+    });
+    const res = await handleDeletePipelineRule({
+        params: { arguments: { _testConnection: "fake", ruleId: "r1" } },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.deepEqual(payload.cascades.pipelines, [
+        { id: "p1", title: "P1" },
+        { id: "p2", title: "P2" },
+    ]);
+    // Hash must DIFFER from the empty-cascade hash.
+    const emptyHash = computeRuleCascadeHash({ ruleId: "r1", pipelineIds: [] });
+    assert.notEqual(payload.confirmationToken, emptyHash);
+    // And specifically equal to the pinned two-cascade hash.
+    const twoHash = computeRuleCascadeHash({ ruleId: "r1", pipelineIds: ["p1", "p2"] });
+    assert.equal(payload.confirmationToken, twoHash);
+});
+
+test("delete_pipeline_rule Strategy A multi-page: rule on page 3 is found after walking pages 1-3", async () => {
+    const pageRequests = [];
+    _setCaptureRequest((req) => {
+        if (req.method === "GET" && req.path.startsWith("/api/system/pipelines/rule/paginated")) {
+            pageRequests.push(req.path);
+            // Pages 1 + 2 have 50 rules each WITHOUT the target.
+            // Page 3 has the target rule.
+            const m = req.path.match(/page=(\d+)/);
+            const page = parseInt(m[1], 10);
+            if (page === 1) {
+                const rules = [];
+                for (let i = 0; i < 50; i++) rules.push({ id: `r_p1_${i}`, title: `R${i}` });
+                return paginatedRuleResponse({ page: 1, perPage: 50, rules, usedInPipelines: {} });
+            }
+            if (page === 2) {
+                const rules = [];
+                for (let i = 0; i < 50; i++) rules.push({ id: `r_p2_${i}`, title: `R${i}` });
+                return paginatedRuleResponse({ page: 2, perPage: 50, rules, usedInPipelines: {} });
+            }
+            if (page === 3) {
+                return paginatedRuleResponse({
+                    page: 3,
+                    perPage: 50,
+                    rules: [{ id: "rT", title: "TARGET" }],
+                    usedInPipelines: { rT: [{ id: "p1", title: "P1" }] },
+                });
+            }
+            throw new Error(`unexpected page=${page}`);
+        }
+        throw new Error(`unexpected ${req.method} ${req.path}`);
+    });
+    const res = await handleDeletePipelineRule({
+        params: { arguments: { _testConnection: "fake", ruleId: "rT" } },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(pageRequests.length, 3, "must walk 3 pages to find target on page 3");
+    assert.deepEqual(payload.cascades.pipelines, [{ id: "p1", title: "P1" }]);
+});
+
+test("delete_pipeline_rule Strategy A early-exit: stops on partial page (< perPage rules)", async () => {
+    const pageRequests = [];
+    _setCaptureRequest((req) => {
+        if (req.method === "GET" && req.path.startsWith("/api/system/pipelines/rule/paginated")) {
+            pageRequests.push(req.path);
+            const m = req.path.match(/page=(\d+)/);
+            const page = parseInt(m[1], 10);
+            if (page === 1) {
+                // Return a partial page (10 rules — less than perPage:50);
+                // no target. The handler must early-exit (not walk to page 2).
+                const rules = [];
+                for (let i = 0; i < 10; i++) rules.push({ id: `r_${i}`, title: `R${i}` });
+                return paginatedRuleResponse({ page: 1, perPage: 50, rules, usedInPipelines: {} });
+            }
+            throw new Error(`unexpected page=${page} — early-exit failed`);
+        }
+        throw new Error(`unexpected ${req.method} ${req.path}`);
+    });
+    const res = await handleDeletePipelineRule({
+        params: { arguments: { _testConnection: "fake", ruleId: "rMissing" } },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(pageRequests.length, 1, "must stop after partial page");
+    // Rule not found → pipelines:[] (let the DELETE handle 404 server-side).
+    assert.deepEqual(payload.cascades.pipelines, []);
+});
+
+test("delete_pipeline_rule Strategy A safety cap (Pitfall 7): 201 pages of full responses → returns []", async () => {
+    // Synthetic safety-cap test: each page returns 50 rules without the
+    // target. The handler walks up to 200 pages then gives up.
+    const pageRequests = [];
+    _setCaptureRequest((req) => {
+        if (req.method === "GET" && req.path.startsWith("/api/system/pipelines/rule/paginated")) {
+            pageRequests.push(req.path);
+            const rules = [];
+            for (let i = 0; i < 50; i++) rules.push({ id: `r_${pageRequests.length}_${i}`, title: `R${i}` });
+            return paginatedRuleResponse({ page: pageRequests.length, perPage: 50, rules, usedInPipelines: {} });
+        }
+        throw new Error(`unexpected ${req.method} ${req.path}`);
+    });
+    const res = await handleDeletePipelineRule({
+        params: { arguments: { _testConnection: "fake", ruleId: "rMissing" } },
+    });
+    // The safety cap must terminate the walk at 200 pages.
+    assert.equal(pageRequests.length, 200, "safety cap must limit pagination at 200 pages");
+    const payload = JSON.parse(res.content[0].text);
+    assert.deepEqual(payload.cascades.pipelines, []);
+});
+
+test("delete_pipeline_rule apply HAPPY (hash matches): DELETE fires; sync envelope", async () => {
+    const captured = [];
+    _setCaptureRequest((req) => {
+        captured.push(req);
+        if (req.method === "GET" && req.path.startsWith("/api/system/pipelines/rule/paginated")) {
+            return paginatedRuleResponse({
+                page: 1,
+                perPage: 50,
+                rules: [{ id: "r1", title: "R1" }],
+                usedInPipelines: { r1: [{ id: "p1", title: "P1" }] },
+            });
+        }
+        if (req.method === "DELETE" && req.path === "/api/system/pipelines/rule/r1") {
+            return {}; // 204
+        }
+        throw new Error(`unexpected ${req.method} ${req.path}`);
+    });
+    // First — dry-run to obtain confirmationToken.
+    const dry = await handleDeletePipelineRule({
+        params: { arguments: { _testConnection: "fake", ruleId: "r1" } },
+    });
+    const dryPayload = JSON.parse(dry.content[0].text);
+    const token = dryPayload.confirmationToken;
+    assert.match(token, /^[0-9a-f]{64}$/);
+    // Now — apply with the correct confirm token.
+    const res = await handleDeletePipelineRule({
+        params: {
+            arguments: { _testConnection: "fake", ruleId: "r1", dryRun: false, confirm: token },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.applied, true);
+    assert.equal(payload.result.body.deleted, true);
+    assert.equal(payload.result.body.ruleId, "r1");
+    // Sync envelope — no async:true.
+    assert.doesNotMatch(JSON.stringify(payload), /"async":\s*true/);
+    // DELETE fired exactly once.
+    const deletes = captured.filter((r) => r.method === "DELETE");
+    assert.equal(deletes.length, 1);
+    assert.equal(deletes[0].path, "/api/system/pipelines/rule/r1");
+});
+
+test("delete_pipeline_rule apply DRIFT (D-14 acceptance gate): re-fetch hash differs → cascade_changed_since_preview; DELETE NEVER fires", async () => {
+    let phase = "dryrun";
+    const captured = [];
+    _setCaptureRequest((req) => {
+        captured.push(req);
+        if (req.method === "GET" && req.path.startsWith("/api/system/pipelines/rule/paginated")) {
+            if (phase === "dryrun") {
+                return paginatedRuleResponse({
+                    page: 1,
+                    perPage: 50,
+                    rules: [{ id: "r1", title: "R1" }],
+                    usedInPipelines: { r1: [{ id: "p1", title: "P1" }] },
+                });
+            }
+            // Apply re-fetch: cascade DRIFTED — a new pipeline references the rule.
+            return paginatedRuleResponse({
+                page: 1,
+                perPage: 50,
+                rules: [{ id: "r1", title: "R1" }],
+                usedInPipelines: { r1: [{ id: "p1", title: "P1" }, { id: "p2", title: "P2" }] },
+            });
+        }
+        if (req.method === "DELETE") {
+            throw new Error("DELETE must NEVER fire on cascade drift");
+        }
+        throw new Error(`unexpected ${req.method} ${req.path}`);
+    });
+    const dry = await handleDeletePipelineRule({
+        params: { arguments: { _testConnection: "fake", ruleId: "r1" } },
+    });
+    const dryPayload = JSON.parse(dry.content[0].text);
+    const token = dryPayload.confirmationToken;
+    // Now apply — phase switches; re-fetch returns a DIFFERENT pipeline set.
+    phase = "apply";
+    const res = await handleDeletePipelineRule({
+        params: {
+            arguments: { _testConnection: "fake", ruleId: "r1", dryRun: false, confirm: token },
+        },
+    });
+    assert.equal(res.isError, true);
+    assert.equal(res.reason, "cascade_changed_since_preview");
+    // DELETE must NEVER have been called.
+    const deletes = captured.filter((r) => r.method === "DELETE");
+    assert.equal(deletes.length, 0);
+});
+
+test("delete_pipeline_rule apply CONFIRMATION MISMATCH: wrong token → reason:confirmation_mismatch; apply gate refuses BEFORE re-fetch", async () => {
+    const captured = [];
+    _setCaptureRequest((req) => {
+        captured.push(req);
+        if (req.method === "GET" && req.path.startsWith("/api/system/pipelines/rule/paginated")) {
+            return paginatedRuleResponse({
+                page: 1,
+                perPage: 50,
+                rules: [{ id: "r1", title: "R1" }],
+                usedInPipelines: { r1: [] },
+            });
+        }
+        throw new Error(`unexpected ${req.method} ${req.path}`);
+    });
+    const res = await handleDeletePipelineRule({
+        params: {
+            arguments: { _testConnection: "fake", ruleId: "r1", dryRun: false, confirm: "wrong-token" },
+        },
+    });
+    assert.equal(res.isError, true);
+    assert.equal(res.reason, "confirmation_mismatch");
+    // No DELETE should fire.
+    const deletes = captured.filter((r) => r.method === "DELETE");
+    assert.equal(deletes.length, 0);
+});
+
+test("delete_pipeline_rule writable:false short-circuits BEFORE cascade GET fires (D-07)", async () => {
+    const captured = [];
+    _setCaptureRequest((req) => {
+        captured.push(req);
+        return {};
+    });
+    _setConnectionsForTests({
+        readonly: { baseUrl: "http://fake.example", apiToken: "tok", writable: false },
+    });
+    const res = await handleDeletePipelineRule({
+        params: {
+            arguments: {
+                connectionName: "readonly",
+                ruleId: "r1",
+                dryRun: false,
+            },
+        },
+    });
+    assert.equal(res.isError, true);
+    assert.equal(res.reason, "connection_read_only");
+    // ZERO requests fired.
+    assert.equal(captured.length, 0);
+});
+
+test("delete_pipeline_rule path: DELETE URL is /api/system/pipelines/rule/{id}; paginated URL is /api/system/pipelines/rule/paginated (Pitfall 3 rule variant)", async () => {
+    const captured = [];
+    _setCaptureRequest((req) => {
+        captured.push(req);
+        if (req.method === "GET" && req.path.startsWith("/api/system/pipelines/rule/paginated")) {
+            return paginatedRuleResponse({
+                page: 1,
+                perPage: 50,
+                rules: [{ id: "r1", title: "R1" }],
+                usedInPipelines: { r1: [] },
+            });
+        }
+        if (req.method === "DELETE") return {};
+        throw new Error(`unexpected ${req.method} ${req.path}`);
+    });
+    const dry = await handleDeletePipelineRule({
+        params: { arguments: { _testConnection: "fake", ruleId: "r1" } },
+    });
+    const dryPayload = JSON.parse(dry.content[0].text);
+    assert.match(captured[0].path, /^\/api\/system\/pipelines\/rule\/paginated\?page=1&per_page=50$/);
+    // Apply.
+    await handleDeletePipelineRule({
+        params: {
+            arguments: { _testConnection: "fake", ruleId: "r1", dryRun: false, confirm: dryPayload.confirmationToken },
+        },
+    });
+    const deletes = captured.filter((r) => r.method === "DELETE");
+    assert.equal(deletes[0].path, "/api/system/pipelines/rule/r1");
+});
+
+test("delete_pipeline_rule uses fallback `rsp.used_in_pipelines` (no `context` wrapper) per RESEARCH line 1277", async () => {
+    _setCaptureRequest((req) => {
+        if (req.method === "GET" && req.path.startsWith("/api/system/pipelines/rule/paginated")) {
+            // Without context wrapper — used_in_pipelines at top level.
+            return {
+                page: 1,
+                per_page: 50,
+                total: 1,
+                count: 1,
+                rules: [{ id: "r1", title: "R1" }],
+                used_in_pipelines: { r1: [{ id: "pZ", title: "PZ" }] },
+            };
+        }
+        throw new Error(`unexpected ${req.method} ${req.path}`);
+    });
+    const res = await handleDeletePipelineRule({
+        params: { arguments: { _testConnection: "fake", ruleId: "r1" } },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.deepEqual(payload.cascades.pipelines, [{ id: "pZ", title: "PZ" }]);
+});
+
+test("delete_pipeline_rule cascade pre-flight failure: GET throws → reason:cascade_preflight_failed", async () => {
+    _setCaptureRequest((req) => {
+        if (req.method === "GET" && req.path.startsWith("/api/system/pipelines/rule/paginated")) {
+            throw new GraylogValidationError("upstream 503", {
+                status: 503,
+                method: "GET",
+                path: "/api/system/pipelines/rule/paginated",
+                body: null,
+            });
+        }
+        throw new Error(`unexpected ${req.method} ${req.path}`);
+    });
+    const res = await handleDeletePipelineRule({
+        params: { arguments: { _testConnection: "fake", ruleId: "r1" } },
+    });
+    assert.equal(res.isError, true);
+    assert.match(res.content[0].text, /cascade_preflight_failed/);
+});

@@ -273,6 +273,64 @@ export const UpdatePipelineRuleSchema = mutatingBase.extend({
 });
 
 // ---------------------------------------------------------------------------
+// Plan 04-04 — delete_pipeline_rule (PIPE-10) schema.
+//
+// D-14 cascade-hash + drift refusal. The agent passes a `ruleId` to delete
+// and (on apply) the 64-hex `confirm` token echoed back from the prior
+// dry-run. The wrapper paginated-walks /api/system/pipelines/rule/paginated
+// to discover referencing pipelines (Strategy A via the server-computed
+// `used_in_pipelines` join), freezes them into computeRuleCascadeHash
+// (Plan 04-01), and refuses apply on any drift.
+//
+// `confirm` is optional at the schema layer because dry-run does not pass
+// it — the requireConfirm gate at the handler layer enforces it on apply.
+// ---------------------------------------------------------------------------
+
+export const DeletePipelineRuleSchema = mutatingBase.extend({
+    ruleId: z.string().min(1),
+    confirm: z.string().optional(),
+});
+
+// ---------------------------------------------------------------------------
+// Plan 04-04 — simulate_pipeline_rule (PIPE-12) schema. M3 acceptance gate.
+//
+// D-07/D-08/D-09 + Pitfall 1 (JSON-STRING body.message).
+//
+// Discretion-03: accepts structured intent OR raw ruleSource (mutual
+// exclusion via .refine — Boolean XOR). When `structured` is set, the
+// wrapper emits DSL via emit.js BEFORE forwarding to /rule/simulate.
+//
+// `message` is z.record(z.unknown()) — accepts an arbitrary JSON-
+// serializable field-map object. The wrapper JSON.stringifies it before
+// emitting the wire body (Pitfall 1 — SimulateRuleRequest.message() is
+// `String` on the wire; forgetting JSON.stringify causes 400 "Cannot
+// deserialize value of type `java.lang.String` from Object value").
+// ---------------------------------------------------------------------------
+
+export const SimulatePipelineRuleSchema = mutatingBase.extend({
+    structured: RuleSpecSchema.optional(),
+    ruleSource: z.string().min(1).optional(),
+    message: z.record(z.unknown()),
+}).refine(
+    (args) => Boolean(args.structured) !== Boolean(args.ruleSource),
+    { message: "simulate_pipeline_rule: provide EXACTLY ONE of `structured` or `ruleSource`" },
+);
+
+// ---------------------------------------------------------------------------
+// Plan 04-04 — list_pipeline_functions (PIPE-11) schema. ROADMAP SC3.
+//
+// Composes through Plan 04-01's getMergedCatalogue (per-connection cache,
+// live-overlay over static baseline, Pitfall 5 fix for live-only names).
+// Two optional filters: `category` (e.g. "strings", "dates") and
+// `deprecated_only` (boolean).
+// ---------------------------------------------------------------------------
+
+export const ListPipelineFunctionsSchema = listBase.extend({
+    category: z.string().optional(),
+    deprecated_only: z.boolean().optional(),
+});
+
+// ---------------------------------------------------------------------------
 // Plan 04-05 — Pipeline-stream connection schemas (PIPE-13/14).
 //
 // CRITICAL — Pitfall 2 (RESEARCH lines 1112-1120): POST
