@@ -1,0 +1,150 @@
+{
+  "org.graylog2.inputs.gelf.udp.GELFUDPInput": {
+    "type": "org.graylog2.inputs.gelf.udp.GELFUDPInput",
+    "name": "GELF UDP",
+    "description": null,
+    "is_exclusive": false,
+    "requested_configuration": {
+      "bind_address": {
+        "field_type": "text",
+        "name": "bind_address",
+        "human_name": "Bind address",
+        "default_value": "0.0.0.0",
+        "is_optional": false,
+        "is_encrypted": false,
+        "attributes": [],
+        "additional_information": {},
+        "position": 100
+      },
+      "port": {
+        "field_type": "number",
+        "name": "port",
+        "human_name": "Port",
+        "default_value": 12201,
+        "is_optional": false,
+        "is_encrypted": false,
+        "attributes": [],
+        "additional_information": {},
+        "position": 110
+      },
+      "recv_buffer_size": {
+        "field_type": "number",
+        "name": "recv_buffer_size",
+        "human_name": "Receive Buffer Size",
+        "default_value": 1048576,
+        "is_optional": false,
+        "is_encrypted": false,
+        "attributes": [],
+        "additional_information": {},
+        "position": 120
+      }
+    },
+    "link_to_docs": ""
+  },
+  "org.graylog2.inputs.gelf.tcp.GELFTCPInput": {
+    "type": "org.graylog2.inputs.gelf.tcp.GELFTCPInput",
+    "name": "GELF TCP",
+    "description": null,
+    "is_exclusive": false,
+    "requested_configuration": {
+      "bind_address": {
+        "field_type": "text",
+        "name": "bind_address",
+        "human_name": "Bind address",
+        "default_value": "0.0.0.0",
+        "is_optional": false,
+        "is_encrypted": false,
+        "attributes": [],
+        "additional_information": {},
+        "position": 100
+      },
+      "port": {
+        "field_type": "number",
+        "name": "port",
+        "human_name": "Port",
+        "default_value": 12201,
+        "is_optional": false,
+        "is_encrypted": false,
+        "attributes": [],
+        "additional_information": {},
+        "position": 110
+      },
+      "tls_enable": {
+        "field_type": "boolean",
+        "name": "tls_enable",
+        "human_name": "Enable TLS",
+        "default_value": false,
+        "is_optional": true,
+        "is_encrypted": false,
+        "attributes": [],
+        "additional_information": {},
+        "position": 200
+      },
+      "tls_cert_file": {
+        "field_type": "text",
+        "name": "tls_cert_file",
+        "human_name": "TLS cert file",
+        "default_value": "",
+        "is_optional": true,
+        "is_encrypted": false,
+        "attributes": [],
+        "additional_information": {},
+        "position": 210
+      },
+      "tls_key_file": {
+        "field_type": "text",
+        "name": "tls_key_file",
+        "human_name": "TLS key file",
+        "default_value": "",
+        "is_optional": true,
+        "is_encrypted": false,
+        "attributes": [],
+        "additional_information": {},
+        "position": 220
+      },
+      "tls_key_password": {
+        "field_type": "text",
+        "name": "tls_key_password",
+        "human_name": "TLS key password",
+        "default_value": "",
+        "is_optional": true,
+        "is_encrypted": true,
+        "attributes": ["is_password"],
+        "additional_information": {},
+        "position": 230
+      }
+    },
+    "link_to_docs": ""
+  },
+  "org.graylog.plugins.beats.Beats2Input": {
+    "type": "org.graylog.plugins.beats.Beats2Input",
+    "name": "Beats",
+    "description": null,
+    "is_exclusive": false,
+    "requested_configuration": {
+      "bind_address": {
+        "field_type": "text",
+        "name": "bind_address",
+        "human_name": "Bind address",
+        "default_value": "0.0.0.0",
+        "is_optional": false,
+        "is_encrypted": false,
+        "attributes": [],
+        "additional_information": {},
+        "position": 100
+      },
+      "port": {
+        "field_type": "number",
+        "name": "port",
+        "human_name": "Port",
+        "default_value": 5044,
+        "is_optional": false,
+        "is_encrypted": false,
+        "attributes": [],
+        "additional_information": {},
+        "position": 110
+      }
+    },
+    "link_to_docs": ""
+  }
+}
