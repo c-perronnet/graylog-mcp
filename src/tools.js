@@ -954,6 +954,23 @@ export const toolDefinitions = [
         },
     },
     // ====================================================================
+    // Phase 2 — set_default_index_set (Plan 02-04; INDEX-06)
+    // ====================================================================
+    {
+        name: "set_default_index_set",
+        description: "Designate an index set as the default. The wrapper pre-flights the server's `can_be_default` eligibility flag on the target; if false (events-style or system index set, OR any future eligibility rule Graylog adds), the dry-run returns a structured error (reason: default_eligibility_failed) BEFORE any PUT is attempted — the would-be 409 surfaces in dry-run, not apply (UPDATED D-13 / pitfall m2). The wrapper reads `can_be_default` rather than the underlying `regular` boolean because `can_be_default` is the server's derived eligibility answer and naturally absorbs any future rules without a wrapper-side update. On apply, issues PUT /api/system/indices/index_sets/{id}/default with an empty body and returns the full IndexSetResponse DTO with `default: true`.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                connectionName: { type: "string", description: "Optional per-call connection override" },
+                dryRun: { type: "boolean", description: "Default true. Set to false to apply." },
+                idempotencyKey: { type: "string", description: "Optional agent-supplied idempotency key" },
+                indexSetId: { type: "string", description: "The Graylog index-set ID to designate as the default" },
+            },
+            required: ["indexSetId"],
+        },
+    },
+    // ====================================================================
     // Phase 2 — delete_index_set (Plan 02-03; INDEX-05 — C1 mitigation centerpiece)
     // ====================================================================
     {

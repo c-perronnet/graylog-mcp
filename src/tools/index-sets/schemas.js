@@ -267,3 +267,31 @@ export const DeleteIndexSetSchema = mutatingBase.extend({
     deleteIndices: z.boolean().optional().default(false), // D-04 INVERTED DEFAULT
     confirm: z.string().optional(),                       // D-01 echo-the-token
 });
+
+// =====================================================================
+// Plan 02-04 — SetDefaultIndexSetSchema (INDEX-06) + CycleDeflectorSchema (INDEX-07)
+// =====================================================================
+//
+// SetDefaultIndexSetSchema (UPDATED D-13 + m2): the handler pre-flights
+// GET /api/system/indices/index_sets/{id} and reads `can_be_default: boolean` —
+// the server's derived eligibility flag. When can_be_default === false
+// (events-style, system, or any future-rejected index set), build() throws
+// GraylogValidationError with reason `default_eligibility_failed` BEFORE the
+// PUT fires. The schema itself is minimal — just indexSetId; eligibility is a
+// pre-flight wire concern, not a zod-layer concern.
+//
+// CycleDeflectorSchema (UPDATED D-14 SYNCHRONOUS + ND3): the handler
+// pre-flights GET on the index set and refuses if current.writable === false
+// (ND3 — DeflectorResource.checkCycle throws 400 if !indexSet.getConfig()
+// .isWritable()). On apply, the rotation is synchronous (verified against
+// Graylog 7.0.6 DeflectorResource.cycle — calls indexSet.cycle() directly,
+// NOT via systemJobManager.submit). The closed-index range rebuild kicks
+// off as a separate system job observable via /system/jobs.
+
+export const SetDefaultIndexSetSchema = mutatingBase.extend({
+    indexSetId: z.string().min(1, "indexSetId is required"),
+});
+
+export const CycleDeflectorSchema = mutatingBase.extend({
+    indexSetId: z.string().min(1, "indexSetId is required"),
+});

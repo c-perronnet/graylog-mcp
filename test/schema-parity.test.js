@@ -171,3 +171,15 @@ test("schema-parity: delete_index_set", async () => {
     const { DeleteIndexSetSchema } = await import("../src/tools/index-sets/schemas.js");
     await assertSchemaParityForTool("delete_index_set", DeleteIndexSetSchema);
 });
+
+// ---------------------------------------------------------------------------
+// Plan 02-04 enrichment — set_default_index_set (INDEX-06) + cycle_deflector (INDEX-07)
+//
+// Both schemas are plain mutatingBase.extend({ indexSetId }) — no superRefine
+// wrap so .shape is direct.
+// ---------------------------------------------------------------------------
+
+test("schema-parity: set_default_index_set", async () => {
+    const { SetDefaultIndexSetSchema } = await import("../src/tools/index-sets/schemas.js");
+    await assertSchemaParityForTool("set_default_index_set", SetDefaultIndexSetSchema);
+});
