@@ -60,7 +60,12 @@
   2. An agent can create a time-based, size-based, or message-count rotated index set bundled with delete/close retention by calling `create_index_set` once, and the dry-run output shows the resolved rotation/retention strategy class + config.
   3. `set_default_index_set` enforces the `regular: true` invariant — calling it against an events-style index set surfaces a clear 409-style error in the dry-run output before any apply is attempted.
   4. `await_system_job` (introduced here as a reusable primitive) lets the agent poll `/system/jobs/{id}` to completion after an async operation like `cycle_deflector` or `delete_index_set?deleteIndices=true` — and the same primitive is available for later phases.
-**Plans**: TBD
+**Plans**: 5 plans
+  - [ ] 02-01-PLAN.md — Foundation amendments (handler.js _confirmationToken forward + requireConfirm gate; conflict.js index_sets envelope) + await_system_job (INDEX-08) + list_index_sets (INDEX-01) + get_index_set (INDEX-02) + U1 live-smoke decision artifact
+  - [ ] 02-02-PLAN.md — create_index_set (INDEX-03) with D-10 + D-08 friendly aliases + D-09 6 strict configs + M5 idempotency; update_index_set (INDEX-04) with D-11 atomic strategy-replace + U1-resolved partial-update + ND2 pre-flight
+  - [ ] 02-03-PLAN.md — delete_index_set (INDEX-05) C1 mitigation centerpiece — sha-256 confirmation hash, D-04 inverted default, D-05 stats hard-block, ND1 default refusal, D-15 async envelope
+  - [ ] 02-04-PLAN.md — set_default_index_set (INDEX-06) D-13 can_be_default invariant + cycle_deflector (INDEX-07) ND3 writable pre-flight + UPDATED D-14 sync semantics + side_effects.observable_at
+  - [ ] 02-05-PLAN.md — Snapshot fixtures (9 per RESEARCH §Snapshot Fixture Design) + schema-parity enrichment (8 tools) + auth-redaction confirmationToken allowlist + VALIDATION.md flip + human-verify checkpoint
 
 ### Phase 3: Streams & Stream Rules
 **Goal**: An agent can route messages into streams and manage the rules that scope them, with the cascade impact of every mutation made visible before the world changes.
@@ -71,7 +76,12 @@
   2. `list_streams` returns each stream's `mutable: boolean` field, so an agent can filter built-in/protected streams out of any candidate-for-deletion set before composing a mutation.
   3. `test_stream_match` accepts a stream config + a sample message and returns per-rule match outcomes — letting the agent verify rule intent without round-tripping a real message through Graylog.
   4. `create_stream` dry-run output includes `existingMatches: [{ id, title, similarity_reason }]` when a stream with a similar title already exists (case-different, prefix match, or exact), eliminating the "list-before-create skipped under context pressure" duplication failure.
-**Plans**: TBD
+**Plans**: 5 plans
+  - [ ] 02-01-PLAN.md — Foundation amendments (handler.js _confirmationToken forward + requireConfirm gate; conflict.js index_sets envelope) + await_system_job (INDEX-08) + list_index_sets (INDEX-01) + get_index_set (INDEX-02) + U1 live-smoke decision artifact
+  - [ ] 02-02-PLAN.md — create_index_set (INDEX-03) with D-10 + D-08 friendly aliases + D-09 6 strict configs + M5 idempotency; update_index_set (INDEX-04) with D-11 atomic strategy-replace + U1-resolved partial-update + ND2 pre-flight
+  - [ ] 02-03-PLAN.md — delete_index_set (INDEX-05) C1 mitigation centerpiece — sha-256 confirmation hash, D-04 inverted default, D-05 stats hard-block, ND1 default refusal, D-15 async envelope
+  - [ ] 02-04-PLAN.md — set_default_index_set (INDEX-06) D-13 can_be_default invariant + cycle_deflector (INDEX-07) ND3 writable pre-flight + UPDATED D-14 sync semantics + side_effects.observable_at
+  - [ ] 02-05-PLAN.md — Snapshot fixtures (9 per RESEARCH §Snapshot Fixture Design) + schema-parity enrichment (8 tools) + auth-redaction confirmationToken allowlist + VALIDATION.md flip + human-verify checkpoint
 
 ### Phase 4: Pipelines, Pipeline Rules & Connections
 **Goal**: An agent can author Graylog pipeline rules from structured intent or raw DSL, with both client-side validation and server-authoritative parse + simulate gating every apply.
@@ -85,7 +95,12 @@
 
 **Research notes**: This phase has a **mandatory pre-phase research pass** flagged by `research/SUMMARY.md` — the ~100 Java built-in function classes under `source-code/graylog2-server/.../plugin/pipelineprocessor/functions/` must be enumerated into `src/pipeline-dsl/builtins.js` (name, signature, one-line description) before implementation of PIPE-08 begins. Hand-curated; auto-regeneration is future work.
 
-**Plans**: TBD
+**Plans**: 5 plans
+  - [ ] 02-01-PLAN.md — Foundation amendments (handler.js _confirmationToken forward + requireConfirm gate; conflict.js index_sets envelope) + await_system_job (INDEX-08) + list_index_sets (INDEX-01) + get_index_set (INDEX-02) + U1 live-smoke decision artifact
+  - [ ] 02-02-PLAN.md — create_index_set (INDEX-03) with D-10 + D-08 friendly aliases + D-09 6 strict configs + M5 idempotency; update_index_set (INDEX-04) with D-11 atomic strategy-replace + U1-resolved partial-update + ND2 pre-flight
+  - [ ] 02-03-PLAN.md — delete_index_set (INDEX-05) C1 mitigation centerpiece — sha-256 confirmation hash, D-04 inverted default, D-05 stats hard-block, ND1 default refusal, D-15 async envelope
+  - [ ] 02-04-PLAN.md — set_default_index_set (INDEX-06) D-13 can_be_default invariant + cycle_deflector (INDEX-07) ND3 writable pre-flight + UPDATED D-14 sync semantics + side_effects.observable_at
+  - [ ] 02-05-PLAN.md — Snapshot fixtures (9 per RESEARCH §Snapshot Fixture Design) + schema-parity enrichment (8 tools) + auth-redaction confirmationToken allowlist + VALIDATION.md flip + human-verify checkpoint
 
 ### Phase 5: Events & Notifications
 **Goal**: An agent can upgrade Graylog's read-only event surface to full CRUD — defining alerts and notifications without accidentally firing them at create-time or saving v6-syntax aggregations that never trigger on v7.
@@ -96,7 +111,12 @@
   2. If an agent passes a v6-shape aggregation expression like `count(source)`, the wrapper migrates it to v7's `count_source` and surfaces `{ migrated_from_v6_shape: true, original, emitted }` in the dry-run output — translation is visible, never silent.
   3. `create_event_notification` validates the discriminator string (`email-notification-v1`, `http-notification-v2`, etc.) against a zod discriminated union — invalid notification types fail validation before any HTTP call.
   4. `enable_event_definition` / `disable_event_definition` send an empty body to `PUT /events/definitions/{id}/schedule|unschedule` — handling the `@Consumes(WILDCARD)` quirk so the agent can't waste context constructing a fake body.
-**Plans**: TBD
+**Plans**: 5 plans
+  - [ ] 02-01-PLAN.md — Foundation amendments (handler.js _confirmationToken forward + requireConfirm gate; conflict.js index_sets envelope) + await_system_job (INDEX-08) + list_index_sets (INDEX-01) + get_index_set (INDEX-02) + U1 live-smoke decision artifact
+  - [ ] 02-02-PLAN.md — create_index_set (INDEX-03) with D-10 + D-08 friendly aliases + D-09 6 strict configs + M5 idempotency; update_index_set (INDEX-04) with D-11 atomic strategy-replace + U1-resolved partial-update + ND2 pre-flight
+  - [ ] 02-03-PLAN.md — delete_index_set (INDEX-05) C1 mitigation centerpiece — sha-256 confirmation hash, D-04 inverted default, D-05 stats hard-block, ND1 default refusal, D-15 async envelope
+  - [ ] 02-04-PLAN.md — set_default_index_set (INDEX-06) D-13 can_be_default invariant + cycle_deflector (INDEX-07) ND3 writable pre-flight + UPDATED D-14 sync semantics + side_effects.observable_at
+  - [ ] 02-05-PLAN.md — Snapshot fixtures (9 per RESEARCH §Snapshot Fixture Design) + schema-parity enrichment (8 tools) + auth-redaction confirmationToken allowlist + VALIDATION.md flip + human-verify checkpoint
 **UI hint**: yes
 
 ### Phase 6: Dashboards, Widget Templates & Blueprints
@@ -108,7 +128,12 @@
   2. The blueprint `setup_app_monitoring_stack(app_name, source_pattern)` produces a working stream + pipeline (with starter rules) + dashboard (with 4 starter widgets from the curated library) + error-rate event definition, all reachable in the Graylog UI on apply, with the dry-run output showing the full ordered chain of would-be requests annotated with `dependsOn` references.
   3. The curated widget-template library (DASH-08) ships 8 templates — `error_rate_over_time`, `top_sources_by_volume`, `level_distribution`, `top_error_clusters`, `request_rate_over_time`, `field_value_distribution`, `recent_events_table`, `stream_activity_overview` — and `add_widget_from_template` drops any of them onto an existing dashboard from a single tool call.
   4. All 6 blueprints (BLUE-01 through BLUE-06) compose from `src/services/*` (never from other tool handlers), and their dry-run output is a list of planned requests with explicit `dependsOn` annotations so the agent can reason about each step independently.
-**Plans**: TBD
+**Plans**: 5 plans
+  - [ ] 02-01-PLAN.md — Foundation amendments (handler.js _confirmationToken forward + requireConfirm gate; conflict.js index_sets envelope) + await_system_job (INDEX-08) + list_index_sets (INDEX-01) + get_index_set (INDEX-02) + U1 live-smoke decision artifact
+  - [ ] 02-02-PLAN.md — create_index_set (INDEX-03) with D-10 + D-08 friendly aliases + D-09 6 strict configs + M5 idempotency; update_index_set (INDEX-04) with D-11 atomic strategy-replace + U1-resolved partial-update + ND2 pre-flight
+  - [ ] 02-03-PLAN.md — delete_index_set (INDEX-05) C1 mitigation centerpiece — sha-256 confirmation hash, D-04 inverted default, D-05 stats hard-block, ND1 default refusal, D-15 async envelope
+  - [ ] 02-04-PLAN.md — set_default_index_set (INDEX-06) D-13 can_be_default invariant + cycle_deflector (INDEX-07) ND3 writable pre-flight + UPDATED D-14 sync semantics + side_effects.observable_at
+  - [ ] 02-05-PLAN.md — Snapshot fixtures (9 per RESEARCH §Snapshot Fixture Design) + schema-parity enrichment (8 tools) + auth-redaction confirmationToken allowlist + VALIDATION.md flip + human-verify checkpoint
 **UI hint**: yes
 
 ### Phase 7: Final Hardening
@@ -120,7 +145,12 @@
   2. An agent can call `list_admin_tools(domain?)` to receive a brief inventory grouped by domain, avoiding the cost of fitting all ~91 tool descriptions in every system prompt.
   3. All v2.3 read tools (`fetch_graylog_messages`, `get_log_histogram` with each of its 4 fallback strategies individually, `get_event_definitions`, etc.) pass a smoke-test pass against Graylog 7.2 — any v7 breakage encountered is a documented targeted fix, not a refactor.
   4. `c8 node --test` produces a coverage report; the baseline coverage percentage is documented in the milestone-complete artifact, and a follow-up migration plan exists for the deprecated `GET /api/streams` → `GET /api/streams/paginated` path.
-**Plans**: TBD
+**Plans**: 5 plans
+  - [ ] 02-01-PLAN.md — Foundation amendments (handler.js _confirmationToken forward + requireConfirm gate; conflict.js index_sets envelope) + await_system_job (INDEX-08) + list_index_sets (INDEX-01) + get_index_set (INDEX-02) + U1 live-smoke decision artifact
+  - [ ] 02-02-PLAN.md — create_index_set (INDEX-03) with D-10 + D-08 friendly aliases + D-09 6 strict configs + M5 idempotency; update_index_set (INDEX-04) with D-11 atomic strategy-replace + U1-resolved partial-update + ND2 pre-flight
+  - [ ] 02-03-PLAN.md — delete_index_set (INDEX-05) C1 mitigation centerpiece — sha-256 confirmation hash, D-04 inverted default, D-05 stats hard-block, ND1 default refusal, D-15 async envelope
+  - [ ] 02-04-PLAN.md — set_default_index_set (INDEX-06) D-13 can_be_default invariant + cycle_deflector (INDEX-07) ND3 writable pre-flight + UPDATED D-14 sync semantics + side_effects.observable_at
+  - [ ] 02-05-PLAN.md — Snapshot fixtures (9 per RESEARCH §Snapshot Fixture Design) + schema-parity enrichment (8 tools) + auth-redaction confirmationToken allowlist + VALIDATION.md flip + human-verify checkpoint
 
 ## Progress
 
@@ -128,7 +158,7 @@
 |-------|----------------|--------|-----------|
 | 0. Foundation | 6/6 | Complete | 2026-05-15 |
 | 1. Inputs & Extractors | 0/5 | Planned | - |
-| 2. Index Sets & Retention | 0/? | Not started | - |
+| 2. Index Sets & Retention | 0/5 | Planned | - |
 | 3. Streams & Stream Rules | 0/? | Not started | - |
 | 4. Pipelines, Pipeline Rules & Connections | 0/? | Not started | - |
 | 5. Events & Notifications | 0/? | Not started | - |
