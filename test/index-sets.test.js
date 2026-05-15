@@ -1453,3 +1453,176 @@ test("delete_index_set ND1 refuses the default index set even when deleteIndices
     assert.equal(res.isError, true);
     assert.match(res.content[0].text, /default_index_set_undeletable/);
 });
+
+// =====================================================================
+// Plan 02-04 — Task 1: set_default_index_set handler (INDEX-06)
+// =====================================================================
+//
+// UPDATED D-13 + m2: set_default_index_set pre-flights GET on the target
+// index set and reads `can_be_default: boolean` — the server's authoritative
+// eligibility flag (absorbs the `regular: true` invariant today AND any
+// future eligibility rules Graylog adds). When can_be_default === false
+// (events-style or system index set), the dry-run returns isError with
+// reason `default_eligibility_failed` BEFORE any PUT fires. This surfaces
+// the would-be 409 in dry-run, not apply.
+//
+//   1: SetDefaultIndexSetSchema parses { indexSetId } -> success; required
+//   2: regular index set — dry-run preview with method:PUT + correct path
+//   3: ineligible (can_be_default:false) — isError reason default_eligibility_failed; PUT NOT fired
+//   4: apply path — script GET + PUT; result.id matches indexSetId
+//   5: pre-flight GET 404 propagates as MCP error envelope
+
+import { handleSetDefaultIndexSet } from "../src/tools/index-sets/set-default-index-set.js";
+import { SetDefaultIndexSetSchema } from "../src/tools/index-sets/schemas.js";
+
+const ELIGIBLE_REGULAR_INDEX_SET = {
+    id: "iset-1",
+    title: "Default index set candidate",
+    description: "Eligible — regular + can_be_default true",
+    default: false,
+    writable: true,
+    can_be_default: true,
+    regular: true,
+    index_prefix: "graylog",
+};
+
+const INELIGIBLE_EVENTS_INDEX_SET = {
+    id: "iset-events",
+    title: "Events Index",
+    description: "Events / system index — NOT eligible as default",
+    default: false,
+    writable: true,
+    can_be_default: false, // UPDATED D-13: this is the gate the wrapper reads
+    regular: false,
+    index_prefix: "gl-events",
+};
+
+// -------- Task 1 Test 1: SetDefaultIndexSetSchema parse contract --------
+
+test("SetDefaultIndexSetSchema parses { indexSetId } and rejects missing indexSetId", () => {
+    const ok = SetDefaultIndexSetSchema.safeParse({ indexSetId: "iset-1" });
+    assert.equal(ok.success, true);
+    assert.equal(ok.data.indexSetId, "iset-1");
+    const bad = SetDefaultIndexSetSchema.safeParse({});
+    assert.equal(bad.success, false);
+});
+
+// -------- Task 1 Test 2: regular index set dry-run preview --------
+
+test("set_default_index_set against a regular index set emits the PUT dry-run preview with isDefault:true estimate", async () => {
+    let putCallCount = 0;
+    _setCaptureRequest((req) => {
+        if (req.method === "PUT") {
+            putCallCount += 1;
+            throw new Error(`PUT must NOT fire on dry-run; got ${req.path}`);
+        }
+        if (req.method === "GET" && req.path === "/api/system/indices/index_sets/iset-1") {
+            return ELIGIBLE_REGULAR_INDEX_SET;
+        }
+        throw new Error(`unexpected req: ${req.method} ${req.path}`);
+    });
+    const res = await handleSetDefaultIndexSet({
+        params: {
+            arguments: {
+                indexSetId: "iset-1",
+                _testConnection: "fake",
+            },
+        },
+    });
+    assert.notEqual(res.isError, true, `expected success, got: ${res.content?.[0]?.text}`);
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.dryRun, true);
+    assert.equal(payload.preview.method, "PUT");
+    assert.equal(payload.preview.path, "/api/system/indices/index_sets/iset-1/default");
+    assert.equal(payload.preview.body, undefined, "set-default PUT carries no body");
+    assert.equal(payload.postApplyEstimate.id, "iset-1");
+    assert.equal(payload.postApplyEstimate.isDefault, true);
+    assert.equal(putCallCount, 0, "PUT MUST NOT fire on dry-run");
+});
+
+// -------- Task 1 Test 3: ineligible (can_be_default:false) refused with reason default_eligibility_failed --------
+
+test("set_default_index_set against an ineligible (can_be_default:false) index set is refused with reason default_eligibility_failed — PUT never fires (UPDATED D-13 + m2)", async () => {
+    let putCallCount = 0;
+    _setCaptureRequest((req) => {
+        if (req.method === "PUT") {
+            putCallCount += 1;
+            return null;
+        }
+        if (req.method === "GET" && req.path === "/api/system/indices/index_sets/iset-events") {
+            return INELIGIBLE_EVENTS_INDEX_SET;
+        }
+        throw new Error(`unexpected req: ${req.method} ${req.path}`);
+    });
+    const res = await handleSetDefaultIndexSet({
+        params: {
+            arguments: {
+                indexSetId: "iset-events",
+                _testConnection: "fake",
+            },
+        },
+    });
+    assert.equal(res.isError, true);
+    assert.match(res.content[0].text, /default_eligibility_failed/);
+    assert.match(res.content[0].text, /can_be_default/);
+    assert.match(res.content[0].text, /Events Index/);
+    assert.equal(res.reason, "default_eligibility_failed");
+    assert.equal(putCallCount, 0, "PUT MUST NOT fire when wrapper-side eligibility check refuses");
+});
+
+// -------- Task 1 Test 4: apply path fires PUT + returns IndexSetResponse --------
+
+test("set_default_index_set apply with dryRun:false fires PUT /default and returns the response body", async () => {
+    let putPath = null;
+    _setCaptureRequest((req) => {
+        if (req.method === "GET" && req.path === "/api/system/indices/index_sets/iset-1") {
+            return ELIGIBLE_REGULAR_INDEX_SET;
+        }
+        if (req.method === "PUT" && req.path === "/api/system/indices/index_sets/iset-1/default") {
+            putPath = req.path;
+            return { ...ELIGIBLE_REGULAR_INDEX_SET, default: true };
+        }
+        throw new Error(`unexpected req: ${req.method} ${req.path}`);
+    });
+    const res = await handleSetDefaultIndexSet({
+        params: {
+            arguments: {
+                indexSetId: "iset-1",
+                dryRun: false,
+                _testConnection: "fake",
+            },
+        },
+    });
+    assert.notEqual(res.isError, true, `expected success, got: ${res.content?.[0]?.text}`);
+    assert.equal(putPath, "/api/system/indices/index_sets/iset-1/default");
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.applied, true);
+    assert.equal(payload.result.id, "iset-1");
+    assert.equal(payload.result.body.default, true);
+    assert.equal(payload.result.body.title, "Default index set candidate");
+});
+
+// -------- Task 1 Test 5: pre-flight GET 404 propagates as MCP error --------
+
+test("set_default_index_set propagates 404 from the pre-flight GET as a clean MCP error envelope", async () => {
+    _setCaptureRequest((req) => {
+        if (req.method === "GET") {
+            throw new GraylogNotFoundError("Index set not found", {
+                status: 404,
+                method: "GET",
+                path: req.path,
+            });
+        }
+        throw new Error(`unexpected req: ${req.method} ${req.path}`);
+    });
+    const res = await handleSetDefaultIndexSet({
+        params: {
+            arguments: {
+                indexSetId: "missing",
+                _testConnection: "fake",
+            },
+        },
+    });
+    assert.equal(res.isError, true);
+    assert.match(res.content[0].text, /Index set not found|404/i);
+});
