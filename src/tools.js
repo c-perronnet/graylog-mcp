@@ -717,12 +717,41 @@ export const toolDefinitions = [
     },
     // Plan 05-01 S5 displacement: the v2.3 `list_event_definitions` and
     // `list_event_notifications` tool-definition entries were removed here.
-    // Plan 05-02 re-adds list_event_definitions with a narrow-projection
-    // /paginated-backed shape (tool count returns to 67); Plan 05-04 re-adds
-    // list_event_notifications (count → 68). The v2.3 handlers stay exported
-    // in src/handlers.js for HARD-03 audit reference (Phase 7) but are no
-    // longer wired into dispatch — see src/tools/_register.js for the
-    // Phase 3 S5 precedent narrative.
+    // Plan 05-02 Task 1 re-adds list_event_definitions with a narrow-projection
+    // /paginated-backed shape and adds get_event_definition (count → 68);
+    // Task 2 adds create_event_definition (→ 69); Task 3 adds
+    // update_event_definition (→ 70). Plan 05-04 re-adds list_event_notifications
+    // + 3 more (→ 77 phase-end). The v2.3 handlers stay exported in
+    // src/handlers.js for HARD-03 audit reference (Phase 7) but are no longer
+    // wired into dispatch — see src/tools/_register.js for the Phase 3 S5
+    // precedent narrative.
+    {
+        name: "list_event_definitions",
+        description: "List event definitions on the active Graylog connection. Returns a narrow projection [id, title, description, priority, state, alert] by default; pass fields:\"all\" for the full DTO including scheduler context. Filter via the query param (Graylog filter syntax). Backed by /api/events/definitions/paginated (unwraps PageListResponse.elements per Plan 05-01).",
+        inputSchema: {
+            type: "object",
+            properties: {
+                connectionName: { type: "string", description: "Optional connection name; defaults to active" },
+                fields: { type: "string", description: "\"all\" for the full DTO, or an array of field names to project. Default narrow projection: id,title,description,priority,state,alert" },
+                limit: { type: "number", description: "Max results per page (maps to upstream per_page). Default: 25; ceiling: 200" },
+                query: { type: "string", description: "Filter expression (Graylog query syntax)" },
+                sort: { type: "string", enum: ["title", "priority", "updated_at"], description: "Sort field. Default: title" },
+                order: { type: "string", enum: ["asc", "desc"], description: "Sort direction. Default: asc" },
+            },
+        },
+    },
+    {
+        name: "get_event_definition",
+        description: "Get the full EventDefinitionDto for one event definition by id. Includes scheduler context (READ-ONLY per Pitfall 5 — never echoed back on update) and notifications[] (consumed by delete_event_definition's D-08 cascade preview). The full DTO is the agent's canonical view; for an operational-state summary across many definitions, call list_event_definitions instead.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                connectionName: { type: "string", description: "Optional connection name; defaults to active" },
+                definitionId: { type: "string", description: "Event definition id from list_event_definitions" },
+            },
+            required: ["definitionId"],
+        },
+    },
     {
         name: "cluster_log_messages",
         description: "Cluster similar log messages into Drain3-style templates. Fetches messages with the same args as search_messages_graylog, then groups them by structural similarity. Templates are persisted per connection and reused across calls.",

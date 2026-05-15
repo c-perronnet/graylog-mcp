@@ -434,28 +434,25 @@ test("DeleteEventNotificationSchema accepts optional confirm 64-hex (D-09 cascad
 });
 
 // =====================================================================
-// events/index.js empty side-effect barrel
+// events/index.js side-effect barrel (Plan 05-02 — registers EVENT-01..04)
 // =====================================================================
+//
+// Plan 05-01 shipped this as an empty stub. Plan 05-02 populates it with
+// list_event_definitions + get_event_definition (Task 1), then
+// create_event_definition (Task 2), then update_event_definition (Task 3).
+// We assert the barrel loads cleanly here — the full dispatch wiring is
+// covered by the dispatch test farther down.
+//
+// We do NOT call _clearForTests here (would clobber subsequent dispatch
+// tests due to ES-module cache preventing re-registration on re-import —
+// see test/streams.test.js test 10 for the same pattern).
 
-test("events/index.js loads as a no-op side-effect barrel (Plan 05-01 stub)", async () => {
-    // Should not throw; should not register any tool names yet. We import the
-    // dispatch registry post-load and verify no event_* names appear.
-    const { _clearForTests, register } = await import("../src/dispatch.js");
-    _clearForTests();
-    // Track every registration that happens during the import.
-    const seen = new Set();
-    const origRegister = register;
-    // (defensive — Plan 05-01 barrel should not register; we just confirm
-    // the module loads and exports nothing that crashes.)
+test("events/index.js loads cleanly as the Phase 5 side-effect barrel", async () => {
+    // Side-effect import: registers list_event_definitions + get_event_definition
+    // (Plan 05-02 Task 1) into the dispatch Map. Subsequent imports are no-ops
+    // (ES module cache).
     await import("../src/tools/events/index.js");
-    // No event_* names should be in the registry after import:
-    // (the registry is module-level and persists across imports — clear above)
-    // Re-import via cache-bust to verify idempotence is not the goal here,
-    // just that the import itself succeeded above.
     assert.ok(true, "events/index.js imported without throwing");
-    // Silence unused-var lint
-    void origRegister;
-    void seen;
 });
 
 // =====================================================================
@@ -648,8 +645,10 @@ test_p2("get_event_definition rejects empty definitionId via schema", async () =
 // ---------- dispatch + tool-count ----------
 
 test_p2("dispatch resolves list_event_definitions + get_event_definition after Plan 05-02 Task 1 registration", async () => {
-    const { _clearForTests } = await import("../src/dispatch.js");
-    _clearForTests();
+    // Do NOT call _clearForTests here — we want the production registry as
+    // populated by the side-effect imports. The ES-module cache means a
+    // re-import would not re-fire registration calls; mirror the streams test
+    // 10 pattern (test/streams.test.js:310).
     const { dispatch } = await import("../src/dispatch.js");
     await import("../src/tools/_register.js");
     _setCaptureRequest_p2(() => ({ elements: [], total: 0 }));

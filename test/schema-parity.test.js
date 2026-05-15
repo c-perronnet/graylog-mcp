@@ -404,3 +404,21 @@ test("schema-parity: list_pipeline_functions", async () => {
     const { ListPipelineFunctionsSchema } = await import("../src/tools/pipelines/schemas.js");
     await assertSchemaParityForTool("list_pipeline_functions", ListPipelineFunctionsSchema);
 });
+
+// ---------------------------------------------------------------------------
+// Plan 05-02 — Phase 5 event-definition CRUD (4 net-new tools).
+// list_event_definitions extends listBase (3 keys) with {query, sort, order}
+// → 6 keys total; get/create/update extend mutatingBase (3 keys) with their
+// per-tool args. All four schemas are plain extend() without superRefine
+// wrapping, so getShape returns .shape directly.
+// ---------------------------------------------------------------------------
+
+test("schema-parity: list_event_definitions", async () => {
+    const { ListEventDefinitionsSchema } = await import("../src/tools/events/schemas.js");
+    await assertSchemaParityForTool("list_event_definitions", ListEventDefinitionsSchema);
+});
+
+test("schema-parity: get_event_definition", async () => {
+    const { GetEventDefinitionSchema } = await import("../src/tools/events/schemas.js");
+    await assertSchemaParityForTool("get_event_definition", GetEventDefinitionSchema);
+});
