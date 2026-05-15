@@ -188,3 +188,24 @@ test("schema-parity: cycle_deflector", async () => {
     const { CycleDeflectorSchema } = await import("../src/tools/index-sets/schemas.js");
     await assertSchemaParityForTool("cycle_deflector", CycleDeflectorSchema);
 });
+
+// ---------------------------------------------------------------------------
+// Plan 03-01 enrichment — 3 new read tools (list_streams, get_stream,
+// list_stream_rules). All three schemas use plain ZodObject (no superRefine
+// wrap) so .shape is direct; getShape handles them without extra plumbing.
+// ---------------------------------------------------------------------------
+
+test("schema-parity: list_streams", async () => {
+    const { ListStreamsSchema } = await import("../src/tools/streams/schemas.js");
+    await assertSchemaParityForTool("list_streams", ListStreamsSchema);
+});
+
+test("schema-parity: get_stream", async () => {
+    const { GetStreamSchema } = await import("../src/tools/streams/schemas.js");
+    await assertSchemaParityForTool("get_stream", GetStreamSchema);
+});
+
+test("schema-parity: list_stream_rules", async () => {
+    const { ListStreamRulesSchema } = await import("../src/tools/streams/schemas.js");
+    await assertSchemaParityForTool("list_stream_rules", ListStreamRulesSchema);
+});
