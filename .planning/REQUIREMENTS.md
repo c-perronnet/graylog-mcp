@@ -17,7 +17,7 @@ Cross-cutting infrastructure that every domain phase depends on. Cannot be folde
 - [x] **FOUND-04**: `runOrPreview` helper that returns a structured preview payload (HTTP method, path, body) with `__SERVER_ASSIGNED__` ID sentinels in dry-run mode.
 - [x] **FOUND-05**: Adopt `zod ^3.25.76` (already declared) for input validation; establish the per-domain `schemas.js` co-location pattern.
 - [x] **FOUND-06**: Bump `engines.node` to `>= 22.3.0` (or `>= 20.6.0` minimum) so `node:test` `t.snapshot()` is stable; fix the broken `npm test` script.
-- [ ] **FOUND-07**: Snapshot test infrastructure proven with 5–10 fixture tests before any domain phase begins.
+- [x] **FOUND-07**: Snapshot test infrastructure proven with 5–10 fixture tests before any domain phase begins.
 - [x] **FOUND-08**: Cross-cutting response normalizer that returns `{ id, body }` regardless of Graylog's inconsistent create-response shapes (200 DTO vs 201 partial vs 201+Location header).
 - [x] **FOUND-09**: Per-call `connectionName` argument with singleton fallback on every mutating tool's zod schema; existing read tools unchanged.
 - [x] **FOUND-10**: Idempotency-key mechanism for create tools — auto-generated from `hash(connectionName, toolName, args)`, agent can override.
@@ -209,7 +209,7 @@ Populated by the roadmapper on 2026-05-13. Every v1 requirement maps to exactly 
 | FOUND-04 | Phase 0 | Complete |
 | FOUND-05 | Phase 0 | Complete |
 | FOUND-06 | Phase 0 | Complete |
-| FOUND-07 | Phase 0 | Pending |
+| FOUND-07 | Phase 0 | Complete |
 | FOUND-08 | Phase 0 | Complete |
 | FOUND-09 | Phase 0 | Complete |
 | FOUND-10 | Phase 0 | Complete |

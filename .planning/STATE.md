@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v2.3
 milestone_name: milestone
-status: Ready to execute
-last_updated: "2026-05-15T07:34:44.923Z"
+status: Phase complete — ready for verification
+last_updated: "2026-05-15T07:49:51.625Z"
 progress:
   total_phases: 8
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 6
-  completed_plans: 5
-  percent: 83
+  completed_plans: 6
+  percent: 100
 ---
 
 # Project Memory: Graylog MCP — Full Admin Surface
@@ -27,13 +27,13 @@ progress:
 
 ## Current Position
 
-Phase: 00 (foundation) — EXECUTING
-Plan: 6 of 6
+Phase: 00 (foundation) — COMPLETE, READY FOR VERIFICATION
+Plan: 6 of 6 (final)
 
 - **Phase**: 0 — Foundation
-- **Plan**: 6 of 6 — Wave 4 dispatch refactor + tool rename (00-05) shipped; next up is 00-06 (schema-parity + auth-redaction + writable-flag check)
-- **Status**: Phase 0 in progress; `npm test` green via `node --test`, full unified suite running (142 tests / 18 suites)
-- **Progress bar**: `[████████░░] 83%` (5 of 6 Phase 0 plans complete)
+- **Plan**: 6 of 6 — Plan 00-06 shipped (snapshot infrastructure proven + auth-redaction + schema-parity scaffold); Phase 0 closed with `wave_0_complete: true` + `nyquist_compliant: true` in VALIDATION.md
+- **Status**: All 13 FOUND requirements green; `npm test` exits 0 with 153 tests / 18 suites; 10 deterministic snapshot fixtures pass byte-identically across two consecutive runs
+- **Progress bar**: `[██████████] 100%` (6 of 6 Phase 0 plans complete)
 
 ## Performance Metrics
 
@@ -49,6 +49,7 @@ Plan: 6 of 6
 | Phase 00-foundation P03 | ~3 min | 2 tasks | 6 files |
 | Phase 00-foundation P04 | ~7min | 2 tasks | 13 files |
 | Phase 00-foundation P05 | ~26 min | 3 tasks | 13 files |
+| Phase 00-foundation P06 | ~10 min | 3 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -103,6 +104,15 @@ Drawn from `PROJECT.md` Key Decisions table — restated here for quick referenc
   - Snapshot fixtures live under `test/regression/__snapshots__/` (not `test/__snapshots__/` as the plan predicted) because Plan 01's `setResolveSnapshotPath` uses `dirname(testFilePath)`. Co-located with the test file; functionally identical to the plan's target location.
   - `src/index.js` shrunk from 904 lines (903-line dispatcher) to 32 lines (transport wiring + module-init `assertAllToolsRegistered`). Module-init assertion fails loudly if any tool in `tools.js` lacks a registered handler (Discretion-06).
 
+- **Plan 00-06 (snapshot fixtures + auth-redaction + schema-parity scaffold)**:
+  - Snapshot fixtures store the JSON-parsed payload (`t.assert.snapshot(JSON.parse(res.content[0].text))`), not the raw text. The parse-then-snapshot pattern is robust to future refactors of `JSON.stringify` key-order in the wrapper; the resulting `.snapshot` file is also more human-readable because node:test's default serializer normalises indentation and key order.
+  - 10 fixtures across 4 test files (handler 4, list 3, normalize 1 combined, dispatch 2) all use static-only args — no `Date.now()`, no `randomUUID()`, no machine-state. Idempotency key `c2563630c56b18bf5dfdb3bda76bea97` is the sha-256-truncated hash of canonicalised `{ connectionName: "fixture_conn", toolName: "create_stream", args: { title: "Snapshot fixture stream" } }`, deterministic across developer machines.
+  - Two consecutive `npm test` runs produce byte-identical md5sums of all 4 snapshot files (`06914d2eec3ab4a9f095d6e0f60efe55  list`, `6be9b517c8d9393e2ec637e6afa71aa4  handler`, `e05deb67dad4b96957e4f3d8edd5946e  normalize`, `e45b695d78a41608861711b4db15227d  dispatch`). FOUND-07 determinism contract provably met.
+  - `test/auth-redaction.test.js` uses a context-aware allowlist (`isAllowedMatch`) to distinguish idempotency-key field values (32-hex sha-256 truncations) from genuine apiToken leaks. Both are 32+ alphanumeric chars and match the same regex; the allowlist inspects the ~40 chars preceding each match and whitelists only matches whose context is `idempotencyKey":` (or escape-variant). Self-maintaining — new snapshots inherit the same guard automatically.
+  - `test/schema-parity.test.js` Phase 0 baseline asserts only `mutatingBase.shape` keys = `["connectionName", "dryRun", "idempotencyKey"]` and `listBase.shape` keys = `["connectionName", "fields", "limit"]`. Commented enrichment template documents the `assertSchemaParityForTool(toolName, zodSchema)` pattern that Phase 1+ must extend when shipping per-domain mutating tools.
+  - Synthetic-fixture sanity check: dropped `"Authorization": "Bearer xyz"` plus a 40-char alphanumeric into a tampered snapshot file under `/tmp/test_auth_check/__snapshots__/` and ran the auth-redaction test; confirmed it correctly fires with 2 violations listed. The allowlist does not over-allow.
+  - Zero deviations from plan. RED→GREEN sequence clean: Task 1 RED at `422f942` (ERR_INVALID_STATE on missing snapshots); GREEN at `ab6c628` after `--test-update-snapshots`; Task 2 at `2f643e0` (stub-replace, not strict RED/GREEN — both stubs already trivially passed); Task 3 at `e6bfb72` (VALIDATION.md frontmatter flip).
+
 ### Foundation Primitives To Be Built In Phase 0
 
 These are the cross-cutting concerns every later phase depends on. They live in `FOUND-01` through `FOUND-13`:
@@ -151,11 +161,11 @@ None.
 
 ## Session Continuity
 
-**Last action**: Completed `00-05-PLAN.md` — replaced the 903-line `if (name === ...)` dispatcher in `src/index.js` with a Map-backed dispatch (`src/dispatch.js`, 4 exports), extracted 17 read-tool handlers to `src/handlers.js`, wired registration via the side-effect-import barrel `src/tools/_register.js`, and renamed 12 of 23 v2.3 tools per the D-03 `<verb>_<domain>_<noun>` map (no aliases). `src/index.js` shrunk from 904 → 32 lines; module-init `assertAllToolsRegistered` fails loudly at startup if any tool in `tools.js` lacks a registered handler (Discretion-06). Regression snapshots prove byte-identical behavior through the refactor; single-line diff after the rename (only the embedded tool-name string in one error message). CHANGELOG.md created with rename map + v3.0.0-unreleased entry. `npm test` exits 0 with 142 tests / 18 suites green (+18 net-new: 8 regression fixtures + 12 dispatch unit tests, minus 2 replaced stubs). Commits: `c3f847c` (Task 1 — handlers extract + baseline regression snapshot), `334b877` (Task 2 — dispatch Map + flip), `1394362` (Task 3 — rename + CHANGELOG + README). FOUND-01 and FOUND-13 complete.
+**Last action**: Completed `00-06-PLAN.md` — Phase 0 closing plan. Added 10 `t.assert.snapshot()` calls across handler.test.js (4), list.test.js (3), normalize.test.js (1 combined of 3 shapes), and dispatch.test.js (2). Generated the 4 fixture files under `test/__snapshots__/`. Verified determinism: two consecutive `npm test` runs produced byte-identical md5sums for all 4 snapshot files. Replaced the Plan 01 stubs at `test/auth-redaction.test.js` (Pitfall 6 scan for Authorization headers / 32+ char apiToken-like strings / password literals, with context-aware idempotency-key allowlist) and `test/schema-parity.test.js` (Pitfall 3 scaffold asserting mutatingBase + listBase shape keys; Phase 1+ enrichment pattern documented in a comment block). Flipped `wave_0_complete: true` + `nyquist_compliant: true` in `00-VALIDATION.md` frontmatter. `npm test` exits 0 with 153 tests / 18 suites green (+11 net-new). Commits: `422f942` (Task 1 RED), `ab6c628` (Task 1 GREEN), `2f643e0` (Task 2 — auth-redaction + schema-parity implementations), `e6bfb72` (Task 3 — VALIDATION.md flip). FOUND-07 complete; all 13 FOUND requirements green; Phase 0 fully closed.
 
-**Stopped at**: Completed 00-05-PLAN.md
+**Stopped at**: Completed 00-06-PLAN.md — Phase 0 ready for verification.
 
-**Next action**: Execute `00-06-PLAN.md` (zod schema-parity check + auth-redaction snapshot lint + writable-flag enforcement coverage — the final Phase 0 plan, closing out the foundation milestone).
+**Next action**: Run `/gsd-verify-work` to verify Phase 0 end-to-end, then proceed to Phase 1 (Inputs & Extractors) which can now compose every mutating tool through `defineMutatingHandler` / `defineListHandler` and every list tool through `defineListHandler`. Phase 1's first plan MUST extend `test/schema-parity.test.js` with one `assertSchemaParityForTool(toolName, zodSchema)` call per the commented enrichment template.
 
 ---
 *State initialized: 2026-05-13*

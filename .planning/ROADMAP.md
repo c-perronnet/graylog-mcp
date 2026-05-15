@@ -7,7 +7,7 @@
 
 ## Phases
 
-- [ ] **Phase 0: Foundation** — Cross-cutting infrastructure (dispatch refactor, HTTP client, mutating-handler factory, dry-run primitive, zod adoption, snapshot test harness) so every subsequent domain phase composes the same safety primitives.
+- [x] **Phase 0: Foundation** — Cross-cutting infrastructure (dispatch refactor, HTTP client, mutating-handler factory, dry-run primitive, zod adoption, snapshot test harness) so every subsequent domain phase composes the same safety primitives.
 - [ ] **Phase 1: Inputs & Extractors** — CRUD for inputs (GELF/Beats/Syslog/Raw) + extractors, including the partial-update pattern that protects encrypted fields on `update_input`.
 - [ ] **Phase 2: Index Sets & Retention** — Index-set CRUD with rotation/retention strategies, the inverted `deleteIndices` default, and the reusable `await_system_job` async-poll primitive.
 - [ ] **Phase 3: Streams & Stream Rules** — Stream CRUD + stream-rule CRUD with `test_stream_match` validation and pre-delete cascade preview (rules + pipeline connections + event defs).
@@ -33,7 +33,7 @@
   - [x] 00-03-PLAN.md — Graylog HTTP client layer (FOUND-02, FOUND-08 + D-07 client-side)
   - [x] 00-04-PLAN.md — Handler primitives defineMutatingHandler/defineListHandler (FOUND-03/04/05/09/10/11/12 + D-07 wrapper-side)
   - [x] 00-05-PLAN.md — Dispatch refactor + tool naming hard rename (FOUND-01, FOUND-13)
-  - [ ] 00-06-PLAN.md — Snapshot fixture pass + auth-redaction + schema-parity scaffold (FOUND-07)
+  - [x] 00-06-PLAN.md — Snapshot fixture pass + auth-redaction + schema-parity scaffold (FOUND-07)
 
 ### Phase 1: Inputs & Extractors
 **Goal**: An agent can create, configure, lifecycle, and tear down Graylog inputs and their extractors safely, without ever zeroing an encrypted password through a round-tripped config.
@@ -121,7 +121,7 @@
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 0. Foundation | 4/6 | In Progress | - |
+| 0. Foundation | 6/6 | Complete | 2026-05-15 |
 | 1. Inputs & Extractors | 0/? | Not started | - |
 | 2. Index Sets & Retention | 0/? | Not started | - |
 | 3. Streams & Stream Rules | 0/? | Not started | - |
