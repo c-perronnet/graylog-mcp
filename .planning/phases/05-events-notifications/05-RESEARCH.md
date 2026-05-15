@@ -943,7 +943,9 @@ Optional 13th fixture (recommend for Plan 05): `create_event_notification` with 
 
 **Result:** All claims tagged either `[VERIFIED: ...]` or `[CITED: ...]`. The Discretion-02 D-05 draft list contained two unverified type names (`script-notification-v1`, `pagerduty-notification-v1`); both have been **corrected** via source-walk and the corrected catalogue is in §"Notification Type Catalogue".
 
-## Open Questions
+## Open Questions (RESOLVED)
+
+> **RESOLVED 2026-05-15:** All three questions below have inline recommendations consumed by the plans — Q1 → Plan 03 documents aggregation-v1 scope (dependent-events out of scope); Q2 → Plan 01 ships `05-U1-SMOKE.md` artifact; Q3 → Plan 01 schemas.js includes the superRefine for field_spec ⊇ key_spec.
 
 1. **Should `delete_event_definition` (D-08) ALSO pre-flight for dependent events via `eventResolver.dependentEvents(definitionId)`?**
    - What we know: Graylog's server-side `delete()` (EventDefinitionsResource.java:373-400) throws `ValidationFailureException` if other event_defs reference this one as a correlation parent.
