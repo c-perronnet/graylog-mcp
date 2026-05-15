@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v2.3
 milestone_name: milestone
 status: Ready to execute
-last_updated: "2026-05-15T10:28:09.080Z"
+last_updated: "2026-05-15T10:43:14.593Z"
 progress:
   total_phases: 8
   completed_phases: 1
   total_plans: 11
-  completed_plans: 7
-  percent: 64
+  completed_plans: 8
+  percent: 73
 ---
 
 # Project Memory: Graylog MCP — Full Admin Surface
@@ -28,12 +28,12 @@ progress:
 ## Current Position
 
 Phase: 01 (inputs-extractors) — EXECUTING
-Plan: 2 of 5
+Plan: 3 of 5
 
 - **Phase**: 1 — Inputs & Extractors
-- **Plan**: 1 of 5 complete (01-01-PLAN.md shipped: A4 + A2 amendments + D-06 type-catalogue cache + defineListHandler defaultFields override + INPUT-01/02/03 read tools)
-- **Status**: 177 tests / 18 suites green (+24 net-new over Phase 0 baseline of 153); all Phase 0 contracts preserved (Test 20 specifically pins back-compat for defineListHandler callers without defaultFields)
-- **Progress bar**: `[██████░░░░] 64%` (7 of 11 milestone plans complete: 6 Phase 0 + 1 Phase 1)
+- **Plan**: 2 of 5 complete (01-01 shipped: foundation amendments + read tools; 01-02 shipped: create_input + update_input C3 mitigation + delete_input cascade enumeration)
+- **Status**: 195 tests / 18 suites green (+18 net-new over Plan 01-01 baseline of 177); all Phase 0 + Plan 01-01 contracts preserved
+- **Progress bar**: `[███████░░░] 73%` (8 of 11 milestone plans complete: 6 Phase 0 + 2 Phase 1)
 
 ## Performance Metrics
 
@@ -51,6 +51,7 @@ Plan: 2 of 5
 | Phase 00-foundation P05 | ~26 min | 3 tasks | 13 files |
 | Phase 00-foundation P06 | ~10 min | 3 tasks | 11 files |
 | Phase 01-inputs-extractors P01 | ~6min | 2 tasks | 16 files |
+| Phase 01 P02 | ~8min | 2 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -125,6 +126,20 @@ Drawn from `PROJECT.md` Key Decisions table — restated here for quick referenc
   - **Test growth**: 153 → 177 (+24). Focused run = 49/49 pass; full `npm test` = 177/177 pass; zero regressions on the Phase 0 baseline. Commits: `c05817d` (Task 1 RED, 9 failures across 5 files), `1b9504e` (Task 2 GREEN, all 24 new tests pass + 153 baseline preserved).
   - **Plan 02 hand-off**: `update_input` can now compose `getCachedTypeCatalogue` + `getEncryptedFieldNamesForType` inside its `build()` for C3 mitigation. `create_input` can wire `findExistingMatches({ listPath: "/api/system/inputs", matchFn })` for list-before-create idempotency. The `cascades-forwarding amendment` on `delete_input` and the `assertSchemaParityForTool` enrichment of `test/schema-parity.test.js` are owed by Plan 02 (no mutating-tool schemas yet exist to enrich; this plan was read-only).
 
+- **Plan 01-02 (input CRUD + C3 mitigation centerpiece)**:
+  - **C3 mitigation + D-03 STRICT NO-ECHO landed**: `update_input` wire `configuration` is built ONLY from `args.changes.configuration` — no copy-from-current loop. The prior plan iteration's "iterate current.configuration and copy non-encrypted entries" approach is gone. Graylog's PUT deserializer preserves unspecified fields server-side via `EncryptedInputConfigs.merge` so no data is lost. Encrypted fields the agent did not pass are NEVER on the wire (automatic consequence). Verified via Test 27: `update_input` no-op against TLS GELF TCP with `changes:{configuration:{port:12202}}` → wire `configuration` has `config_key_count===1`, no `tls_key_password`, no `bind_address`.
+  - **agentConfig sentinel**: `null` (agent did not touch config) → configuration key omitted entirely from wire body. `{}` (agent passed empty) → `configuration:{}` emitted. `{...}` (agent passed specific) → emitted as-is. Three shapes pinned by Tests 27/28/29; satisfies ROADMAP success criterion 2 ("only the changed field").
+  - **D-04 redaction landed**: `create_input` + `update_input` dry-run previews show encrypted fields as `<redacted>`. Apply body wraps explicit string values as `{ set_value: "<plaintext>" }` via `encodeEncryptedForWire`. `_applyBody` sibling on the RequestDescriptor — handler.js stays body-agnostic; per-tool internals carry the preview/apply asymmetry. Test 20 verifies the literal `"supersecret"` never appears in `JSON.stringify(payload)`.
+  - **D-05 cascade enumeration landed**: `delete_input.build()` pre-flights `GET /api/system/inputs/{id}/extractors`; `cascades.extractors[{id,title,extractor_type}]` surfaced in dry-run preview. Best-effort: 404/403 on the pre-flight yields empty cascade list, not failure. handler.js owns the one-line spread `...(req.cascades ? { cascades: req.cascades } : {})` in the preview emitter — opt-in, no behavior change for tools that don't set the field.
+  - **BLOCKER #1 fix landed**: handler.js cascades forwarding declared in this plan's `files_modified`. Single-line additive amendment between `existingMatches` and `applyHint` in the dry-run JSON.
+  - **WARNING #9 fix landed**: `GelfHttpConfig` ships strict — `NettyBase + TlsConfigExt + HTTP-codec fields` (idle_writer_timeout, max_chunk_size, enable_cors, additional_headers, decompress_size_limit). Wired into `variantMap` so GELF HTTP no longer falls through to generic `z.record(z.unknown())`. D-01's GELF-family commitment now end-to-end with UDP/TCP/HTTP all strict.
+  - **8 strict input variants total**: GELF UDP/TCP/HTTP, Beats2, Syslog UDP/TCP, Raw UDP/TCP. Generic fallback for AWS / CEF / Kafka / OpenTelemetry / etc. preserved at the top level.
+  - **superRefine variant dispatch**: `CreateInputSchema` accepts generic `z.record(z.unknown())` for `configuration`; `superRefine` looks up the per-FQCN strict variant in `variantMap` and re-paths its issues under `['configuration', ...issue.path]`. Adding a new strict variant is a one-line registration in `variantMap`. Pattern reusable for `create_extractor` (Plan 04 — keyed on `extractor_type`).
+  - **`_connectionName` + `_conn` pass-through in `defineMutatingHandler.build()`**: Generalizes Plan 01-01's equivalent pattern in `defineListHandler.fetch()`. handler.js calls `build({ ...args, _connectionName, _conn })`. Build callbacks read those keys directly — no duplicate `resolveConnection` call inside each handler. **Found during Task 2 GREEN**: original plan said `build()` would call `resolveConnection(seamArgs)` itself, but zod's `strip` mode removes `_testConnection` from `args` so the seam was unreachable inside build. The handler.js pass-through is the minimal additive fix; existing handlers that don't read `_connectionName` / `_conn` see no change.
+  - **`REDACTION_PLACEHOLDER = "<redacted>"`**: Discretion-03 resolved. ASCII-safe (no Unicode normalization in snapshots or grep); self-documenting in JSON. Single constant in `redact.js`.
+  - **Test growth**: 177 → 195 (+18 net-new). Focused run = 24/24 pass; full `npm test` = 195/195 pass; zero regressions. Commits: `d1ba1f1` (Task 1 RED, ERR_MODULE_NOT_FOUND), `1e7520b` (Task 2 GREEN, all 18 pass + 177 baseline preserved).
+  - **Plan 03-04-05 hand-off**: `_applyBody` sibling pattern + strict-no-echo wire-build available for `update_extractor` (D-09 reuses this contract). `findExistingMatches` per-input scoped is wired for `create_extractor` (Plan 04). The C3 + D-03 + D-04 + D-05 acceptance gates are pinned as ad-hoc tests now; Plan 05 lands them as byte-identical snapshot fixtures + `assertSchemaParityForTool(create_input/update_input/delete_input)` enrichment of `test/schema-parity.test.js`.
+
 ### Foundation Primitives To Be Built In Phase 0
 
 These are the cross-cutting concerns every later phase depends on. They live in `FOUND-01` through `FOUND-13`:
@@ -173,11 +188,11 @@ None.
 
 ## Session Continuity
 
-**Last action**: Completed `01-01-PLAN.md` — Phase 1's foundation-amendments plan. Shipped the A4 (`await build()` in `defineMutatingHandler` + try/catch routing build rejections through `wrapGraylogError`), A2 (real `findExistingMatches({ listPath, matchFn })` with envelope-shape normalization and callable similarityReason), and BLOCKER #3 fix (`defineListHandler` per-tool `defaultFields` override). Created `src/tools/inputs/type-catalogue.js` with the D-06 per-connection cache + `getEncryptedFieldNamesForType` helper for Plan 02's C3 mitigation. Wired 3 read-only tools (INPUT-01 list_input_types, INPUT-02 list_inputs default projection [id,title,type,global], INPUT-03 get_input). Per-domain module layout proven end-to-end under `src/tools/inputs/`. Test growth 153 → 177 (+24); focused run 49/49; full `npm test` 177/177 pass; zero regressions. Commits: `c05817d` (Task 1 RED), `1b9504e` (Task 2 GREEN).
+**Last action**: Completed `01-02-PLAN.md` — Phase 1's input-CRUD plan (the C3 mitigation centerpiece). Shipped `create_input` (INPUT-04: D-04 encrypted-field redaction, M5 existingMatches via real findExistingMatches), `update_input` (INPUT-05: C3 mitigation + D-03 STRICT NO-ECHO wire-build — configuration block built ONLY from args.changes.configuration, no copy-from-current loop, encrypted fields never echoed unless explicitly passed then wrapped as `{ set_value }`), `delete_input` (INPUT-06: D-05 cascade enumeration via best-effort pre-flight GET /api/system/inputs/{id}/extractors). handler.js cascades-forwarding amendment (BLOCKER #1 fix, declared in this plan's files_modified). `_connectionName` + `_conn` pass-through into `defineMutatingHandler.build()` (generalizes Plan 01-01's list-handler pass-through; eliminates duplicate resolveConnection boilerplate per handler). 8 strict input variants in `variantMap` (GELF UDP/TCP/HTTP + Beats2 + Syslog UDP/TCP + Raw UDP/TCP — WARNING #9 fix: GELF HTTP now strict). Generic fallback for other input types preserved. `redact.js` ships `REDACTION_PLACEHOLDER = "<redacted>"`, `redactForPreview`, `encodeEncryptedForWire` as pure reusable helpers. Test growth 177 → 195 (+18); focused run 24/24; full `npm test` 195/195 pass; zero regressions on Plan 01-01 baseline. Commits: `d1ba1f1` (Task 1 RED, ERR_MODULE_NOT_FOUND), `1e7520b` (Task 2 GREEN).
 
-**Stopped at**: Completed 01-01-PLAN.md — every Plan 02 blocker cleared; ready for Plan 02 (create_input + update_input with C3 mitigation).
+**Stopped at**: Completed 01-02-PLAN.md — C3 + D-03 + D-04 + D-05 acceptance gates all green; ready for Plan 03 (start_input + stop_input lifecycle).
 
-**Next action**: Execute `01-02-PLAN.md` (create_input + delete_input — the two simpler CRUD endpoints) OR `01-02/03-PLAN.md` per the phase planning sequence. Plan 02 inherits: (1) `await build()` so update_input can pre-flight inside build; (2) real `findExistingMatches` for create-before-list idempotency; (3) `getCachedTypeCatalogue` + `getEncryptedFieldNamesForType` for update_input's C3 mitigation. Plan 02 still owes: cascade-forwarding amendment in handler.js for delete_input's dry-run; `assertSchemaParityForTool` enrichment of `test/schema-parity.test.js` for the first set of mutating-tool schemas; the C3-mitigation snapshot fixture (encrypted field absent from update_input dry-run body).
+**Next action**: Execute `01-03-PLAN.md` (start_input PUT + stop_input DELETE — INPUT-07). Plan 03 inherits: (1) `_connectionName` + `_conn` pass-through in `defineMutatingHandler.build()` so lifecycle build callbacks reach the resolved connection without re-resolving; (2) cascades-forwarding amendment in handler.js (irrelevant for start/stop but available); (3) `_applyBody` sibling pattern (irrelevant for start/stop — they have no body; the pattern is for future tools with preview/apply asymmetry). The C3 + D-03 + D-04 + D-05 acceptance gates are currently pinned by Test 27/28/29/20/31/34 (ad-hoc assertions); Plan 05 lands them as byte-identical snapshot fixtures + `assertSchemaParityForTool(create_input/update_input/delete_input)` enrichment of `test/schema-parity.test.js`. Plan 04 (extractors CRUD) reuses the `_applyBody` pattern + strict-no-echo wire-build for `update_extractor` per D-09.
 
 ---
 *State initialized: 2026-05-13*
