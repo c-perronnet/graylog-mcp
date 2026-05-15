@@ -753,6 +753,23 @@ export const toolDefinitions = [
         },
     },
     {
+        name: "create_event_definition",
+        description: "Create an event definition on the active Graylog connection. M1 + C5 mitigation centerpiece: wire path is /api/events/definitions?schedule=false UNCONDITIONALLY (D-01 structural enforcement — the schema does NOT accept a `schedule` argument; agents must call enable_event_definition separately to activate). v6 aggregation shapes {type:\"function\", function:\"count\", parameter:\"source\"} are auto-migrated to v7 {type:\"number-ref\", ref:\"count_source\"} and the migration is VISIBLE in dry-run output via migration:{migrated, warnings:[{original, emitted}]} (C5 acceptance gate). Body wraps in CreateEntityRequest envelope {entity, share_request:null} (Pitfall 3). definition.id is stripped before POST (Pitfall 8 — server assigns). dryRun:true by default; existingMatches probes /api/events/definitions/paginated for exact-title duplicates.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                connectionName: { type: "string", description: "Optional connection name; defaults to active" },
+                dryRun: { type: "boolean", description: "Preview without applying. Default: true" },
+                idempotencyKey: { type: "string", description: "Optional retry-window dedupe key" },
+                definition: {
+                    type: "object",
+                    description: "EventDefinitionDto: { title (required, non-empty), description, priority (1-3; default 2), alert (default true), config (EventProcessorConfig discriminated union — e.g. aggregation-v1; v6 aggregation shapes auto-migrated), field_spec, key_spec (must ⊆ field_spec keys), notification_settings, notifications, storage, state (default DISABLED), remediation_steps, event_procedure, event_summary_template }. id is @Nullable on input (stripped server-side). scheduler is READ_ONLY and excluded from the schema.",
+                },
+            },
+            required: ["definition"],
+        },
+    },
+    {
         name: "cluster_log_messages",
         description: "Cluster similar log messages into Drain3-style templates. Fetches messages with the same args as search_messages_graylog, then groups them by structural similarity. Templates are persisted per connection and reused across calls.",
         inputSchema: {

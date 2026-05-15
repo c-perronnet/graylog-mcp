@@ -163,6 +163,14 @@ export function defineMutatingHandler(spec) {
                         // absent when build() didn't set it (e.g. update_pipeline
                         // with title-only changes that skip the parse round-trip).
                         ...(req.parseResult ? { parseResult: req.parseResult } : {}),
+                        // Plan 05-02 / D-03 (C5 mitigation): build() may populate
+                        // migration to surface the v6→v7 aggregation-condition
+                        // rewrite emitted by migrateV6ToV7AggregationConditions.
+                        // Opt-in only — absent when migration.migrated is false
+                        // (build() omits the key entirely so the preview JSON stays
+                        // lean on the v7 happy path). Consumed by create_event_definition
+                        // + update_event_definition.
+                        ...(req.migration ? { migration: req.migration } : {}),
                         applyHint: "Re-call with dryRun: false to apply",
                     }),
                 }],

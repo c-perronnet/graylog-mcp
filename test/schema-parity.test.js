@@ -422,3 +422,8 @@ test("schema-parity: get_event_definition", async () => {
     const { GetEventDefinitionSchema } = await import("../src/tools/events/schemas.js");
     await assertSchemaParityForTool("get_event_definition", GetEventDefinitionSchema);
 });
+
+test("schema-parity: create_event_definition", async () => {
+    const { CreateEventDefinitionSchema } = await import("../src/tools/events/schemas.js");
+    await assertSchemaParityForTool("create_event_definition", CreateEventDefinitionSchema);
+});

@@ -17,6 +17,9 @@ import { register } from "../../dispatch.js";
 // Plan 05-02 Task 1 — EVENT-01 + EVENT-02 read tools.
 import { handleListEventDefinitions } from "./list-event-definitions.js";
 import { handleGetEventDefinition } from "./get-event-definition.js";
+// Plan 05-02 Task 2 — EVENT-03 create (M1 + C5 mitigation centerpiece).
+import { handleCreateEventDefinition } from "./create-event-definition.js";
 
 register("list_event_definitions", handleListEventDefinitions);
 register("get_event_definition", handleGetEventDefinition);
+register("create_event_definition", handleCreateEventDefinition);
