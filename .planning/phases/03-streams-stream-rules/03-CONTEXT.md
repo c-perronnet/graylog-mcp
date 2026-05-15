@@ -23,7 +23,7 @@ Out of scope: pipelines, pipeline rules, pipeline-to-stream connections (Phase 4
   - `GET /streams/{streamId}/rules` → `cascades.stream_rules: [{id, type, field, value}]`
   - `GET /streams/{streamId}/pipelines` (or pipeline-connections endpoint to be confirmed by research against 7.0.6) → `cascades.pipeline_connections: [{id, title}]`
   - `GET /events/definitions?stream_id={streamId}` (or whatever filter Graylog 7.0.6 exposes) → `cascades.event_definitions: [{id, title}]`
-- **D-02:** Confirmation hash for `delete_stream` is `sha256(JSON.stringify({streamId, cascadeIds: [...sortedRuleIds, ...sortedPipelineConnIds, ...sortedEventDefIds].sort()}))`. Dry-run emits this as `confirmationToken` (reusing Phase 2's `_confirmationToken` forwarding + `requireConfirm` apply-time gate machinery — no new framework primitive).
+- **D-02:** Confirmation hash for `delete_stream` is `sha256(JSON.stringify({ streamId, cascades: { rules: [...sortedRuleIds], pipeline_connections: [...sortedConnIds], event_definitions: [...sortedEventDefIds] } }))` — **keyed-buckets canonicalization**. Type information is preserved so a rule ID that happens to collide byte-wise with a pipeline-connection ID produces different hashes. Dry-run emits this as `confirmationToken` (reusing Phase 2's `_confirmationToken` forwarding + `requireConfirm` apply-time gate machinery — no new framework primitive). (Updated 2026-05-15 after research recommended keyed-buckets over flat-sort for type-collision safety.)
 - **D-03:** Apply (`dryRun: false`) requires `confirm: "<hash>"`. The apply path re-fetches all three cascade endpoints, re-computes the hash, and refuses with `reason: "cascade_changed_since_preview"` if mismatched. Refusal fires for BOTH additions AND removals (any drift) — the strictest interpretation of "world changed" since either case may invalidate the agent's intent. Mitigates C2.
 - **D-04:** If ANY of the three pre-flight endpoints fails during dry-run (network failure, unexpected 5xx — 404 on a never-attached endpoint is fine and produces an empty list), the dry-run returns `isError: true` with `reason: "cascade_preflight_failed"` and the failing endpoint named in the message. No confirmation token issued. Same safety stance as Phase 2 D-05 (stats_unreachable hard-block for delete_index_set).
 
@@ -50,7 +50,7 @@ Out of scope: pipelines, pipeline rules, pipeline-to-stream connections (Phase 4
 
 ### Stream rule schemas (STREAM-08)
 
-- **D-11:** `StreamRuleSchema` is a `z.discriminatedUnion("type", [...])` with 7 variants — one per named rule type:
+- **D-11:** `StreamRuleSchema` is a `z.discriminatedUnion("type", [...])` with **8 variants** — Graylog 7.0.6's full `StreamRuleType` enum (reconfirmed 2026-05-15 after research surfaced an 8th value, `MATCH_INPUT`, missing from the original D-11 draft of 7; same pattern as Phase 1's 6→8 extractor reconfirmation):
   - `exact` → `{ type: "exact", field: string, value: string, inverted?: boolean }`
   - `regex` → `{ type: "regex", field: string, value: string, inverted?: boolean }`
   - `greater` → `{ type: "greater", field: string, value: number, inverted?: boolean }`
@@ -58,7 +58,8 @@ Out of scope: pipelines, pipeline rules, pipeline-to-stream connections (Phase 4
   - `present` → `{ type: "present", field: string, inverted?: boolean }` (no `value`)
   - `contains` → `{ type: "contains", field: string, value: string, inverted?: boolean }`
   - `always_match` → `{ type: "always_match", inverted?: boolean }` (no `field`, no `value`)
-  Each variant types `value` correctly. Strong type guarantees at the agent's boundary. Pattern mirrors Phase 1's input-type discriminated union and Phase 1's all-6-types extractor strategy (closed-set strict typing — researcher should verify the 7 named types map cleanly to Graylog 7.0.6's StreamRuleType enum and adjust if a Graylog primitive is missing or renamed).
+  - `match_input` → `{ type: "match_input", value: string /* input id */, inverted?: boolean }` (no `field` — rule fires when message originates from the named input)
+  Each variant types `value` correctly. Strong type guarantees at the agent's boundary. Closed-set strict typing covers Graylog's full primitive set with no generic escape hatch. The wrapper maps the aliases to Graylog's numeric wire format (1=EXACT, 2=REGEX, 3=GREATER, 4=SMALLER, 5=PRESENCE, 6=CONTAINS, 7=ALWAYS_MATCH, 8=MATCH_INPUT) — verified in `StreamRuleType.java`.
 
 ### Lifecycle (STREAM-06)
 
