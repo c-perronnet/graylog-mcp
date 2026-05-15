@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v2.3
 milestone_name: milestone
-status: Executing Phase 02
-last_updated: "2026-05-15T14:12:43.439Z"
+status: Ready to execute
+last_updated: "2026-05-15T14:27:57.439Z"
 progress:
   total_phases: 8
   completed_phases: 2
   total_plans: 16
-  completed_plans: 11
-  percent: 69
+  completed_plans: 12
+  percent: 75
 ---
 
 # Project Memory: Graylog MCP — Full Admin Surface
@@ -28,12 +28,12 @@ progress:
 ## Current Position
 
 Phase: 02 (index-sets-retention) — EXECUTING
-Plan: 1 of 5
+Plan: 2 of 5
 
-- **Phase**: 1 — Inputs & Extractors
-- **Plan**: 4 of 5 complete (01-01 shipped: foundation amendments + read tools; 01-02 shipped: create_input + update_input C3 mitigation + delete_input cascade enumeration; 01-03 shipped: start_input + stop_input lifecycle tools; 01-04 shipped: extractor CRUD — list_extractors + create_extractor [all 8 D-07 types] + update_extractor + delete_extractor)
-- **Status**: 223 tests / 18 suites green (+20 net-new over Plan 01-03 baseline of 203); all Phase 0 + Plans 01-01/02/03 contracts preserved; module-init contract holds (`assertAllToolsRegistered(toolDefinitions)` → "OK"); tool count 31 → 35 (12 of 12 Phase 1 net-new tools shipped — behavior-wise Phase 1 is complete, only Plan 05 snapshot/parity/validation work remains)
-- **Progress bar**: `[█████████░] 91%` (10 of 11 milestone plans complete: 6 Phase 0 + 4 Phase 1)
+- **Phase**: 2 — Index sets & retention
+- **Plan**: 1 of 5 complete (02-01 shipped: foundation amendments [_confirmationToken forwarding + requireConfirm gate + index_sets envelope] + await_system_job polling primitive with info_substring discovery + list_index_sets + get_index_set + U1/cycle live-smoke decision artifact)
+- **Status**: 271 tests / 18 suites green (+36 net-new over Plan 01-05 baseline of 235); all Phase 0 + Phase 1 contracts preserved; module-init contract holds (`assertAllToolsRegistered(toolDefinitions)` → "OK"); tool count 35 → 38 (list_index_sets + get_index_set + await_system_job — 3 of 8 Phase 2 net-new tools shipped)
+- **Progress bar**: `[████████░░] 75%` (12 of 16 milestone plans complete: 6 Phase 0 + 5 Phase 1 + 1 Phase 2)
 
 ## Performance Metrics
 
@@ -41,7 +41,7 @@ Plan: 1 of 5
 |--------|-------|
 | v1 requirements | 71 mapped / 71 total |
 | Phases | 0 complete / 8 total |
-| Plans complete | 5 |
+| Plans complete | 12 |
 | Net-new tools target | ~64 (58 CRUD primitives + 6 blueprints) |
 | Total MCP surface at milestone end | ~91 tools |
 | Phase 00-foundation P01 | 2min | 2 tasks | 13 files |
@@ -54,6 +54,7 @@ Plan: 1 of 5
 | Phase 01 P02 | ~8min | 2 tasks | 8 files |
 | Phase 01 P03 | ~2 min | 1 tasks | 6 files |
 | Phase 01-inputs-extractors P04 | ~6 min | 2 tasks | 8 files |
+| Phase 02-index-sets-retention P01 | 10min | 4 tasks | 15 files |
 
 ## Accumulated Context
 
@@ -165,6 +166,21 @@ Drawn from `PROJECT.md` Key Decisions table — restated here for quick referenc
   - **Tool count milestone reached**: 35 tools registered (23 v2.3 + 12 Phase 1 = 3 read in Plan 01 + 3 mutating in Plan 02 + 2 lifecycle in Plan 03 + 4 extractor in Plan 04). Phase 1's full scope (INPUT-01..11 → 12 tools) is now complete behavior-wise. Module-init `assertAllToolsRegistered(toolDefinitions)` returns "OK".
   - **Plan 05 hand-off**: 8 mutating-tool schemas exist and are exported from `src/tools/inputs/schemas.js` for the `assertSchemaParityForTool(toolName, zodSchema)` enrichment in `test/schema-parity.test.js`. The C3 + D-03 + D-04 + D-05 + D-07 + D-09 + lifecycle verb-mapping acceptance gates are all currently pinned by ad-hoc tests; Plan 05 lands them as byte-identical snapshot fixtures + flips `01-VALIDATION.md` to complete + closes Phase 1.
 
+- **Plan 02-01 (foundation amendments + await_system_job + read tools)**:
+  - **U1 smoke unreachable** — no Graylog API token in the executor environment (`~/.graylog-mcp/config.json` does not exist). The instance at `http://<graylog-host>:9000` is reachable (HTTP 401 from unauthenticated probe — confirms live Graylog) but smoke calls require auth. Per `<u1_smoke_protocol>`'s "no matching connection exists" branch, the artifact records `UNREACHABLE_DEFAULT_MERGE` for Plan 02-02's update_index_set (merge-from-current — safe because index-set configs carry NO encrypted fields; C3 not reachable) and `SYNC_OPTION_A` for Plan 02-04's cycle_deflector (synchronous envelope with `side_effects.observable_at` for the IndexRangesUpdateJob — source-verified in RESEARCH.md against `DeflectorResource.java`).
+  - **`_confirmationToken` forwarding** — additive amendment in handler.js: build() may return `_confirmationToken: <hex>` on the request descriptor; dry-run preview JSON emits `confirmationToken: <hex>` ONLY when present. Back-compat preserved for every Phase 0/1 tool that does not set it. The leading-underscore key marks it as framework-internal (same convention as `_testConnection`, `_connectionName`).
+  - **`requireConfirm` apply-time gate** — second additive amendment in handler.js: `spec.requireConfirm({ args, req }) → token|null` is checked AFTER the writable gate (D-16) but BEFORE apply(). Mismatched OR missing `args.confirm` → isError with `reason: 'confirmation_mismatch'`; apply() never runs. Returning null is a no-op (e.g. delete_index_set with `deleteIndices:false` issues no token). Plan 02-03's delete_index_set will compute the hash in build() and route it through both hooks: forward via `_confirmationToken` + check via `requireConfirm: ({req}) => req._confirmationToken ?? null`.
+  - **`findExistingMatches` `index_sets` envelope** — one additive line in conflict.js: `?? response?.index_sets` inserted before `?? response?.items` in the envelope-unwrap chain. Plan 02-02's create_index_set consumes this for M5 list-before-create idempotency. Back-compat: every Phase 1 envelope shape (`inputs`, `streams`, `extractors`, `items`) still works.
+  - **`await_system_job` primitive** — INDEX-08 shipped under `src/tools/_shared/system-job.js` (cross-domain reuse; Phase 3+ async tools will import it). Composes through defineMutatingHandler so dryRun + writable-flag inheritance is uniform (D-07). Exponential backoff `[500, 1000, 2000, 4000, 5000]` ms capped at 5s; default 60s timeout, hard zod-bounded 600s max (T-02-01-04). Accepts EXACTLY ONE of `jobId` / `jobIdOrEnvelope` / `info_substring` via zod `.refine()`. `extractJobId` helper handles forgiving input (bare string, `{job_id}`, `{jobId}`, `{id}`). 404 on poll endpoint → `completed:true` with `synthetic:true` finalStatus.
+  - **UPDATED D-15 `info_substring` discovery** — delete_index_set's apply envelope deliberately omits `job_id` because Graylog DELETE returns 204 with no body. The agent passes `info_substring: <indexSetId>`; `await_system_job` apply() calls `resolveJobIdFromInfo(client, substring)` which GETs `/api/system/jobs` and matches via `String.prototype.includes` (literal substring — T-02-01-10 mitigation against catastrophic-backtracking DoS). 0 matches → `isError` reason `job_not_found`; 1 match → poll that job's id with the standard schedule; 2+ matches → `isError` reason `ambiguous_info_substring` with the list of candidate ids so the agent can disambiguate. Dry-run (dryRun:true) returns the resolution plan WITHOUT firing the list call.
+  - **handler.js apply() isError pass-through (Rule 3 blocking deviation)** — Tests 12/13 (info_substring 0/2+ match) required apply() to return `{isError:true, reason, content:[...]}` envelopes, but the existing wrapper unconditionally normalized via `req.normalize?.(raw) ?? { id: raw?.id, body: raw }`. Added a 4-line additive guard BEFORE the normalize step: `if (raw && raw.isError === true) return raw;`. Pass-through is opt-in via the explicit `isError:true` tag on apply()'s return; no existing tool's behavior changes (existing apply() callbacks return plain DTOs). Pattern is now reusable for any future tool whose apply() needs to surface a structured-error reason without throwing a typed GraylogError.
+  - **`list_index_sets` (INDEX-01)** — defineListHandler with `defaultFields: [id, title, description, default, writable, can_be_default, index_prefix]`. Unwraps the `{ total, index_sets: [...], stats: {} }` envelope and queries with `?stats=false` to keep the list response cheap. Stats are intentionally OUT — fetching them would require N stats calls per list (too expensive); the agent uses `get_index_set` or `delete_index_set`'s dry-run preview when stats matter.
+  - **`get_index_set` (INDEX-02)** — plain async handler returning the full IndexSetResponse DTO (id, title, description, default, writable, can_be_default, index_prefix, shards, replicas, rotation_strategy_class, rotation_strategy, retention_strategy_class, retention_strategy, creation_date, index_analyzer, ...). Errors map through `wrapGraylogError` so 404 surfaces as a clean MCP error envelope.
+  - **Schema-parity coverage** — 3 new `assertSchemaParityForTool` calls (list_index_sets, get_index_set, await_system_job). The await_system_job entry pins `info_substring` (UPDATED D-15) as a public-surface field. ZodEffects (from the `.refine()` exactly-one-of rule) handled via `getShape`'s `_def.schema.shape` fallback — no changes needed to the helper.
+  - **Test growth**: 235 → 271 (+36 net-new — 6 handler + 2 conflict + 18 system-job + 7 index-sets + 3 schema-parity). Full `npm test` = 271/271 pass; zero regressions on the Phase 0 + Phase 1 baselines. Tool count 35 → 38.
+  - **Commits**: `bf5a274` (Task 1 docs — U1 smoke artifact), `df887b2` (Task 2 RED), `9b982ea` (Task 2 GREEN — handler + conflict), `b6cfd8a` (Task 3 RED), `403fdfb` (Task 3 GREEN — system-job + handler isError pass-through), `7a95858` (Task 4 RED), `a322a67` (Task 4 GREEN — index-sets + register + tools.js).
+  - **Plan 02-02 / 02-03 / 02-04 hand-off**: All cross-cutting amendments shipped. (a) Plan 02-02's create_index_set can wire `findExistingMatches({listPath:"/api/system/indices/index_sets", matchFn})` for M5 list-before-create. (b) Plan 02-02's update_index_set ships merge-from-current per the U1 decision artifact. (c) Plan 02-03's delete_index_set ships C1 confirmation hash via `_confirmationToken` (in build()) + `requireConfirm` (gate); apply envelope omits `job_id` per UPDATED D-15 and the tool description tells the agent to call `await_system_job` with `info_substring:<indexSetId>`. (d) Plan 02-04's cycle_deflector ships SYNC_OPTION_A envelope per the artifact.
+
 ### Foundation Primitives To Be Built In Phase 0
 
 These are the cross-cutting concerns every later phase depends on. They live in `FOUND-01` through `FOUND-13`:
@@ -213,11 +229,11 @@ None.
 
 ## Session Continuity
 
-**Last action**: Completed `01-04-PLAN.md` — Phase 1's extractor CRUD plan. Shipped `list_extractors` (INPUT-08: GET /api/system/inputs/{inputId}/extractors via defineListHandler), `create_extractor` (INPUT-09 — all 8 D-07 reconfirmed Graylog 7.0.6 primitive types under strict zod schemas: grok, regex, regex_replace, split_and_index, substring, copy_input, json, lookup_table; M5 per-input-scoped findExistingMatches keyed on title+extractor_type; C6 __SERVER_ASSIGNED__ sentinel; toIdBody hint ["extractor_id", "id"] handles Graylog's create-extractor response quirk), `update_extractor` (INPUT-10 — D-09 partial-update merge-from-current; extractor_type immutable enforced at both schema + build layers; merge pattern acceptable here because extractors carry no encrypted fields per RESEARCH.md), and `delete_extractor` (INPUT-11 — D-09 single-target leaf-delete; NO cascade key in build descriptor, no-cascade contract provable by absence). The D-07 "key-value → json" mapping (the original CONTEXT.md draft listed "key-value" as a 6th primitive; Graylog 7.0.6's actual enum has 8 entries with NO key_value) is documented in 3 places: schemas.js comment above ExtractorConfigJson, src/tools.js create_extractor description, and the 01-04-SUMMARY's §D-07 Reconfirmation Narrative. Test growth 203 → 223 (+20 net-new — 8 per-type preview-shape tests + M5 + C6 + zod rejections incl. 'key_value' + key-value→json mapping + apply path + 2 list + 2 update + 2 delete); focused run 20/20; full `npm test` 223/223 pass; zero regressions. Tool count 31 → 35 — Phase 1's 12 net-new tools (full INPUT-01..11 scope) shipped behavior-wise. Commits: `193e218` (Task 1 RED, ERR_MODULE_NOT_FOUND on list-extractors.js), `25a3b16` (Task 2 GREEN, all 20 pass + 203 baseline preserved). One auto-fixed Rule 1 deviation: per-type tests unrolled from for-loop into 8 explicit declarations to satisfy the plan's ≥18 lexical `test(` grep gate AND improve failure-message clarity.
+**Last action**: Completed `02-01-PLAN.md` — Phase 2's foundation amendments + the cross-domain `await_system_job` polling primitive + the lowest-risk read tools. Shipped two additive handler.js hooks (`_confirmationToken` forwarding into the dry-run preview JSON when build() sets it + `requireConfirm({args, req}) → token|null` apply-time gate that returns `isError, reason: 'confirmation_mismatch'` on missing/wrong `args.confirm`; null token = no-op for tools that skip the gate), one additive conflict.js envelope-chain line (`?? response?.index_sets`), `await_system_job` under `src/tools/_shared/system-job.js` (exponential backoff [500,1000,2000,4000,5000] capped at 5s, default 60s/max 600s timeout, exactly-one-of jobId/jobIdOrEnvelope/info_substring via zod refine, 404 synthetic completed:true, UPDATED D-15 info_substring discovery with 0→job_not_found / 1→poll / 2+→ambiguous_info_substring), `list_index_sets` (INDEX-01 — narrow projection [id, title, description, default, writable, can_be_default, index_prefix] via defaultFields, `?stats=false` query, envelope unwrap), and `get_index_set` (INDEX-02 — plain async handler returning the full IndexSetResponse DTO with 404 via wrapGraylogError). The U1+cycle live-smoke was UNREACHABLE in this environment (no Graylog API token in `~/.graylog-mcp/config.json`); per protocol, `02-U1-SMOKE.md` records `UNREACHABLE_DEFAULT_MERGE` (Plan 02-02 ships merge-from-current — safe because index-set configs carry NO encrypted fields, C3 not reachable) and `SYNC_OPTION_A` (Plan 02-04 ships synchronous-cycle envelope with `side_effects.observable_at` for the IndexRangesUpdateJob, source-verified in RESEARCH.md against DeflectorResource.java). One Rule 3 blocking deviation: added a 4-line additive guard in handler.js's apply branch so apply()-returned `{isError:true}` envelopes pass through verbatim — required by await_system_job's info_substring path to surface job_not_found / ambiguous_info_substring without throwing typed GraylogError. Test growth 235 → 271 (+36 net-new: 6 handler + 2 conflict + 18 system-job + 7 index-sets + 3 schema-parity); full `npm test` 271/271 pass; zero regressions. Tool count 35 → 38 (list_index_sets + get_index_set + await_system_job — 3 of 8 Phase 2 net-new tools shipped). Commits: `bf5a274` (Task 1 docs), `df887b2` (Task 2 RED), `9b982ea` (Task 2 GREEN), `b6cfd8a` (Task 3 RED), `403fdfb` (Task 3 GREEN + handler isError pass-through), `7a95858` (Task 4 RED), `a322a67` (Task 4 GREEN).
 
-**Stopped at**: Completed 01-04-PLAN.md — extractor CRUD landed; Phase 1 is 12-of-12 tools shipped behavior-wise; only Plan 05 snapshot/parity/validation work remains to close Phase 1.
+**Stopped at**: Completed 02-01-PLAN.md — foundation amendments + await_system_job + read tools landed; Plans 02-02 / 02-03 / 02-04 can now build purely additively within `src/tools/index-sets/`.
 
-**Next action**: Execute `01-05-PLAN.md` (Phase 1 closeout — snapshot fixtures + assertSchemaParityForTool enrichment + 01-VALIDATION.md flip). Plan 05 inherits from Plans 01-02 + 01-03 + 01-04: (1) 8 mutating-tool schemas exist and are exported from `src/tools/inputs/schemas.js` for the `assertSchemaParityForTool(toolName, zodSchema)` enrichment in `test/schema-parity.test.js` — CreateInputSchema, UpdateInputSchema, DeleteInputSchema, StartInputSchema, StopInputSchema, CreateExtractorSchema, UpdateExtractorSchema, DeleteExtractorSchema; (2) the C3 + D-03 + D-04 + D-05 + D-07 + D-09 + lifecycle verb-mapping acceptance gates are all currently pinned by ad-hoc tests (Tests 20/27/28/29/31/34/37-44 in inputs.test.js + 20 tests in extractors.test.js including the 8 per-type preview-shape tests and the explicit 'key-value→json' mapping test) — Plan 05 lands these as byte-identical snapshot fixtures under `test/__snapshots__/`; (3) 01-VALIDATION.md flip from "in-progress" to "complete" — Phase 1 status closure with all 11 INPUT-* requirements traced to their landing plan (INPUT-01..03 → 01-01, INPUT-04..06 → 01-02, INPUT-07 → 01-03, INPUT-08..11 → 01-04).
+**Next action**: Execute `02-02-PLAN.md` (create_index_set + update_index_set — INDEX-03 + INDEX-04). Plan 02-02 inherits Plan 02-01's cross-cutting amendments: (1) `findExistingMatches` envelope chain unwraps `{index_sets:[...]}` — create_index_set wires `findExistingMatches({listPath:"/api/system/indices/index_sets", matchFn:(it)=>it.title===args.title})` for M5 list-before-create. (2) U1 decision `UNREACHABLE_DEFAULT_MERGE` — update_index_set ships merge-from-current (Phase 1's update_extractor pattern); the pre-flight GET on `/api/system/indices/index_sets/{id}` populates the wire body and the agent's `changes` overlay on top. (3) Strategy alias mapping (D-08, D-09) — `rotation_strategy ∈ {time-based, size-based, message-count}` + `retention_strategy ∈ {delete, close}` each with strict-typed `*_strategy_config` zod schemas; alias→FQCN map likely under `src/tools/index-sets/strategies.js` per Discretion-02.
 
 ---
 *State initialized: 2026-05-13*

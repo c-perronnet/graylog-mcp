@@ -41,14 +41,14 @@ Cross-cutting infrastructure that every domain phase depends on. Cannot be folde
 
 ### Index Sets & Retention (INDEX)
 
-- [ ] **INDEX-01**: `list_index_sets` — narrow projection; flags default and writable status
-- [ ] **INDEX-02**: `get_index_set` — full DTO with retention/rotation strategies
+- [x] **INDEX-01**: `list_index_sets` — narrow projection; flags default and writable status
+- [x] **INDEX-02**: `get_index_set` — full DTO with retention/rotation strategies
 - [ ] **INDEX-03**: `create_index_set` — supports time-based, size-based, and message-count rotation strategies; supports delete/close/archive retention strategies
 - [ ] **INDEX-04**: `update_index_set` — partial-update pattern
 - [ ] **INDEX-05**: `delete_index_set` — **`deleteIndices` defaults to `false`** (C1); when `true`, requires confirmation token if index set contains messages; returns async system-job ID
 - [ ] **INDEX-06**: `set_default_index_set` — enforces `regular: true` invariant
 - [ ] **INDEX-07**: `cycle_deflector` — manual index rotation
-- [ ] **INDEX-08**: `await_system_job` — poll `/system/jobs/{id}` for async-operation completion (introduced here, reused later)
+- [x] **INDEX-08**: `await_system_job` — poll `/system/jobs/{id}` for async-operation completion (introduced here, reused later)
 
 ### Streams & Stream Rules (STREAM)
 
@@ -227,14 +227,14 @@ Populated by the roadmapper on 2026-05-13. Every v1 requirement maps to exactly 
 | INPUT-09 | Phase 1 | Complete |
 | INPUT-10 | Phase 1 | Complete |
 | INPUT-11 | Phase 1 | Complete |
-| INDEX-01 | Phase 2 | Pending |
-| INDEX-02 | Phase 2 | Pending |
+| INDEX-01 | Phase 2 | Complete |
+| INDEX-02 | Phase 2 | Complete |
 | INDEX-03 | Phase 2 | Pending |
 | INDEX-04 | Phase 2 | Pending |
 | INDEX-05 | Phase 2 | Pending |
 | INDEX-06 | Phase 2 | Pending |
 | INDEX-07 | Phase 2 | Pending |
-| INDEX-08 | Phase 2 | Pending |
+| INDEX-08 | Phase 2 | Complete |
 | STREAM-01 | Phase 3 | Pending |
 | STREAM-02 | Phase 3 | Pending |
 | STREAM-03 | Phase 3 | Pending |
