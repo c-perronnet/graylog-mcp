@@ -194,6 +194,14 @@ export function defineMutatingHandler(spec) {
         try {
             const client = makeClient(conn);
             const raw = await apply(client, req);
+            // Plan 02-01: apply() may surface a structured MCP error envelope
+            // verbatim — used by await_system_job's info_substring path to
+            // return job_not_found / ambiguous_info_substring reasons without
+            // having to throw a typed GraylogError. The wrapper passes the
+            // envelope through unchanged. Detect by isError flag presence.
+            if (raw && raw.isError === true) {
+                return raw;
+            }
             // FOUND-08: normalize to { id, body } regardless of Graylog's response shape.
             const { id, body } = req.normalize?.(raw) ?? { id: raw?.id, body: raw };
             return {
