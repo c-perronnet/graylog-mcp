@@ -394,3 +394,13 @@ test("schema-parity: delete_pipeline_rule", async () => {
     const { DeletePipelineRuleSchema } = await import("../src/tools/pipelines/schemas.js");
     await assertSchemaParityForTool("delete_pipeline_rule", DeletePipelineRuleSchema);
 });
+
+test("schema-parity: simulate_pipeline_rule", async () => {
+    const { SimulatePipelineRuleSchema } = await import("../src/tools/pipelines/schemas.js");
+    await assertSchemaParityForTool("simulate_pipeline_rule", SimulatePipelineRuleSchema);
+});
+
+test("schema-parity: list_pipeline_functions", async () => {
+    const { ListPipelineFunctionsSchema } = await import("../src/tools/pipelines/schemas.js");
+    await assertSchemaParityForTool("list_pipeline_functions", ListPipelineFunctionsSchema);
+});

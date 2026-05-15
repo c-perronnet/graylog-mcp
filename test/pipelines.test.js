@@ -393,7 +393,7 @@ test("dispatch resolves list_pipelines/get_pipeline/delete_pipeline via the new 
     assert.ok(Array.isArray(payload.items));
 });
 
-test("assertAllToolsRegistered passes after Plan 04-04 Task 1 adds delete_pipeline_rule (count = 66)", async () => {
+test("assertAllToolsRegistered passes after Plan 04-04 (final count = 68; PIPE-01..14 + delete_pipeline_rule + simulate + list_functions)", async () => {
     const { dispatch, assertAllToolsRegistered } = await import("../src/dispatch.js");
     await import("../src/tools/_register.js");
     const { toolDefinitions } = await import("../src/tools.js");
@@ -401,10 +401,11 @@ test("assertAllToolsRegistered passes after Plan 04-04 Task 1 adds delete_pipeli
     assert.equal(typeof dispatch, "function");
     // Plan 04-02 left 59 (PIPE-01..PIPE-05); Plan 04-03 Task 2 finished the
     // pipeline-rule CRUD quartet → 63; Plan 04-05 adds connect/disconnect
-    // pipelines↔streams (PIPE-13/14) → 65. Plan 04-04 Task 1 adds
-    // delete_pipeline_rule (PIPE-10) → 66. Task 2 will add the remaining
-    // 2 tools (simulate_pipeline_rule + list_pipeline_functions) → 68 final.
-    assert.equal(toolDefinitions.length, 66, `Expected 66 tools after Plan 04-04 Task 1; got ${toolDefinitions.length}`);
+    // pipelines↔streams (PIPE-13/14) → 65. Plan 04-04 adds the 3 final
+    // pipeline tools (delete_pipeline_rule + simulate_pipeline_rule +
+    // list_pipeline_functions) → 68 final. All PIPE-01..PIPE-14 requirements
+    // complete; Phase 4 closes after Plan 06 (snapshot fixtures + VALIDATION).
+    assert.equal(toolDefinitions.length, 68, `Expected 68 tools after Plan 04-04; got ${toolDefinitions.length}`);
 });
 
 // =====================================================================
@@ -2984,3 +2985,602 @@ test("delete_pipeline_rule cascade pre-flight failure: GET throws → reason:cas
     assert.equal(res.isError, true);
     assert.match(res.content[0].text, /cascade_preflight_failed/);
 });
+
+// =====================================================================
+// Plan 04-04 — simulate_pipeline_rule (PIPE-12) tests. M3 ACCEPTANCE GATE.
+//
+// CRITICAL Pitfall 1: body.message is JSON-STRINGIFIED. Forgetting
+// JSON.stringify causes 400 "Cannot deserialize value of type
+// `java.lang.String` from Object value".
+//
+// Discretion-03: accepts structured intent OR raw ruleSource (mutual
+// exclusion). Structured intent compiles via emit.js BEFORE forwarding.
+//
+// D-07/D-08/D-09: routes through defineMutatingHandler (uniform dryRun +
+// writable inheritance). The endpoint has no Graylog state change but
+// the dryRun guarantee is project-wide for POST/PUT/DELETE.
+// =====================================================================
+
+import { handleSimulatePipelineRule } from "../src/tools/pipelines/simulate-pipeline-rule.js";
+import { handleListPipelineFunctions } from "../src/tools/pipelines/list-pipeline-functions.js";
+import { emitRule } from "../src/pipeline-dsl/emit.js";
+
+// --- Schema tests ---
+
+test("SimulatePipelineRuleSchema D-10-style XOR: REJECTS when BOTH structured AND ruleSource set", () => {
+    assert.throws(
+        () => SimulatePipelineRuleSchema.parse({
+            structured: VALID_STRUCTURED,
+            ruleSource: 'rule "x" when has_field("y") then end',
+            message: { source: "host" },
+        }),
+        /EXACTLY ONE|structured|ruleSource/i,
+    );
+});
+
+test("SimulatePipelineRuleSchema D-10-style XOR: REJECTS when NEITHER structured NOR ruleSource set", () => {
+    assert.throws(
+        () => SimulatePipelineRuleSchema.parse({
+            message: { source: "host" },
+        }),
+        /EXACTLY ONE|structured|ruleSource/i,
+    );
+});
+
+test("SimulatePipelineRuleSchema requires `message` field-map (z.record(z.unknown))", () => {
+    assert.throws(
+        () => SimulatePipelineRuleSchema.parse({
+            ruleSource: 'rule "x" when has_field("y") then end',
+            // message missing
+        }),
+        /message|required/i,
+    );
+});
+
+test("SimulatePipelineRuleSchema rejects non-object message (e.g. a string)", () => {
+    assert.throws(
+        () => SimulatePipelineRuleSchema.parse({
+            ruleSource: 'rule "x" when has_field("y") then end',
+            message: "not an object",
+        }),
+        /message|expected|object|record/i,
+    );
+});
+
+test("SimulatePipelineRuleSchema accepts structured + message", () => {
+    const parsed = SimulatePipelineRuleSchema.parse({
+        structured: VALID_STRUCTURED,
+        message: { source: "host", level: 6 },
+    });
+    assert.equal(parsed.structured.name, "uppercase-source");
+    assert.deepEqual(parsed.message, { source: "host", level: 6 });
+});
+
+// --- simulate_pipeline_rule M3 ACCEPTANCE GATE tests ---
+
+// Fixture: a rule that conditionally sets a field. Demonstrates the
+// simulate-catches-semantic-bugs value proposition (M3 acceptance gate).
+const ALERT_ON_LEVEL_STRUCTURED = {
+    name: "alert-on-level",
+    when: {
+        type: "comparison",
+        op: ">=",
+        left: { type: "field_ref", field: "level", source: "message" },
+        right: { type: "literal", value: 4 },
+    },
+    then: [
+        {
+            type: "set_field",
+            field: "alert",
+            value: { type: "literal", value: true },
+        },
+    ],
+};
+
+test("simulate_pipeline_rule M3 ACCEPTANCE GATE: structured rule's set_field action surfaces in post-rule message", async () => {
+    let postBody = null;
+    _setCaptureRequest((req) => {
+        if (req.method === "POST" && req.path === "/api/system/pipelines/rule/parse") {
+            return { source: "parsed ok" };
+        }
+        if (req.method === "POST" && req.path === "/api/system/pipelines/rule/simulate") {
+            postBody = req.body;
+            // Synthetic /simulate response: Message DTO with post-rule fields.
+            // The agent's input message had `{level: 5, source: "host"}`;
+            // the rule's set_field action added `alert: true`.
+            return {
+                message: {
+                    fields: { level: 5, source: "host", alert: true },
+                    timestamp: "2026-05-15T12:00:00.000Z",
+                },
+                simulator_state: { rule_fired: true },
+            };
+        }
+        throw new Error(`unexpected ${req.method} ${req.path}`);
+    });
+    const res = await handleSimulatePipelineRule({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                structured: ALERT_ON_LEVEL_STRUCTURED,
+                message: { level: 5, source: "host" },
+                dryRun: false,   // apply mode — hit /simulate
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.applied, true);
+    // M3 acceptance gate proof: the post-rule message shows the alert field.
+    assert.equal(payload.result.body.message.fields.alert, true);
+    assert.equal(payload.result.body.message.fields.level, 5);
+});
+
+test("simulate_pipeline_rule Pitfall 1: body.message is JSON-STRINGIFIED (typeof string; round-trips through JSON.parse)", async () => {
+    let captured = null;
+    _setCaptureRequest((req) => {
+        if (req.method === "POST" && req.path === "/api/system/pipelines/rule/parse") {
+            return { source: "parsed ok" };
+        }
+        if (req.method === "POST" && req.path === "/api/system/pipelines/rule/simulate") {
+            captured = req;
+            return { message: { fields: {} } };
+        }
+        throw new Error(`unexpected ${req.method} ${req.path}`);
+    });
+    const inputMessage = { source: "host", level: 6, payload: "test" };
+    await handleSimulatePipelineRule({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                ruleSource: 'rule "noop" when has_field("source") then end',
+                message: inputMessage,
+                dryRun: false,
+            },
+        },
+    });
+    // Pitfall 1 acceptance: body.message must be a STRING.
+    assert.equal(typeof captured.body.message, "string", "body.message must be JSON-STRINGIFIED per Pitfall 1");
+    // Round-trip through JSON.parse recovers the agent's original object.
+    const roundTripped = JSON.parse(captured.body.message);
+    assert.deepEqual(roundTripped, inputMessage);
+    // rule_source is the structural envelope around the DSL.
+    assert.equal(typeof captured.body.rule_source.source, "string");
+});
+
+test("simulate_pipeline_rule Pitfall 1 (exact stringification): {source:'host',level:6} → '{\"source\":\"host\",\"level\":6}'", async () => {
+    let captured = null;
+    _setCaptureRequest((req) => {
+        if (req.method === "POST" && req.path === "/api/system/pipelines/rule/parse") {
+            return { source: "parsed ok" };
+        }
+        if (req.method === "POST" && req.path === "/api/system/pipelines/rule/simulate") {
+            captured = req;
+            return { message: { fields: {} } };
+        }
+        throw new Error(`unexpected ${req.method} ${req.path}`);
+    });
+    await handleSimulatePipelineRule({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                ruleSource: 'rule "x" when has_field("source") then end',
+                message: { source: "host", level: 6 },
+                dryRun: false,
+            },
+        },
+    });
+    assert.equal(captured.body.message, '{"source":"host","level":6}');
+});
+
+test("simulate_pipeline_rule Discretion-03 structured input: emits DSL via emitRule; wire body's rule_source.source matches emitRule output", async () => {
+    let captured = null;
+    _setCaptureRequest((req) => {
+        if (req.method === "POST" && req.path === "/api/system/pipelines/rule/parse") {
+            return { source: "ok" };
+        }
+        if (req.method === "POST" && req.path === "/api/system/pipelines/rule/simulate") {
+            captured = req;
+            return { message: { fields: {} } };
+        }
+        throw new Error(`unexpected ${req.method} ${req.path}`);
+    });
+    await handleSimulatePipelineRule({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                structured: ALERT_ON_LEVEL_STRUCTURED,
+                message: { level: 5 },
+                dryRun: false,
+            },
+        },
+    });
+    const expectedSource = emitRule(ALERT_ON_LEVEL_STRUCTURED);
+    assert.equal(captured.body.rule_source.source, expectedSource);
+    // Sanity: the emitted DSL contains the expected fragments.
+    assert.match(expectedSource, /rule "alert-on-level"/);
+    assert.match(expectedSource, /set_field\(/);
+});
+
+test("simulate_pipeline_rule Discretion-03 raw input: ruleSource forwards verbatim", async () => {
+    let captured = null;
+    const rawSource = 'rule "raw-test"\nwhen has_field("source")\nthen\n    set_field("seen", true);\nend';
+    _setCaptureRequest((req) => {
+        if (req.method === "POST" && req.path === "/api/system/pipelines/rule/parse") {
+            return { source: "ok" };
+        }
+        if (req.method === "POST" && req.path === "/api/system/pipelines/rule/simulate") {
+            captured = req;
+            return { message: { fields: {} } };
+        }
+        throw new Error(`unexpected ${req.method} ${req.path}`);
+    });
+    await handleSimulatePipelineRule({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                ruleSource: rawSource,
+                message: { source: "host" },
+                dryRun: false,
+            },
+        },
+    });
+    assert.equal(captured.body.rule_source.source, rawSource);
+});
+
+test("simulate_pipeline_rule C4 GATE carried forward: parse pre-flight 400 → reason:rule_parse_failed; /simulate NEVER fires", async () => {
+    let simulateFired = false;
+    _setCaptureRequest((req) => {
+        if (req.method === "POST" && req.path === "/api/system/pipelines/rule/parse") {
+            throw new GraylogValidationError("parse failed", {
+                status: 400,
+                method: "POST",
+                path: "/api/system/pipelines/rule/parse",
+                body: [{ type: "SyntaxError", line: 1, positionInLine: 5, message: "unexpected token" }],
+            });
+        }
+        if (req.method === "POST" && req.path === "/api/system/pipelines/rule/simulate") {
+            simulateFired = true;
+            return { message: { fields: {} } };
+        }
+        throw new Error(`unexpected ${req.method} ${req.path}`);
+    });
+    const res = await handleSimulatePipelineRule({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                ruleSource: 'rule "broken" when has_field("source") then',  // truncated
+                message: { source: "host" },
+                dryRun: false,
+            },
+        },
+    });
+    assert.equal(res.isError, true);
+    assert.equal(res.reason, "rule_parse_failed");
+    assert.equal(simulateFired, false, "/simulate must NOT fire when parse pre-flight 400s");
+});
+
+test("simulate_pipeline_rule D-07 writable:false short-circuits BEFORE parse pre-flight fires", async () => {
+    const captured = [];
+    _setCaptureRequest((req) => {
+        captured.push(req);
+        return {};
+    });
+    _setConnectionsForTests({
+        readonly: { baseUrl: "http://fake.example", apiToken: "tok", writable: false },
+    });
+    const res = await handleSimulatePipelineRule({
+        params: {
+            arguments: {
+                connectionName: "readonly",
+                ruleSource: 'rule "x" when has_field("y") then end',
+                message: { source: "host" },
+                dryRun: false,
+            },
+        },
+    });
+    assert.equal(res.isError, true);
+    assert.equal(res.reason, "connection_read_only");
+    // Zero captured-request calls — parse pre-flight URL count must be 0.
+    const parseCalls = captured.filter(
+        (r) => r.method === "POST" && r.path === "/api/system/pipelines/rule/parse",
+    );
+    assert.equal(parseCalls.length, 0);
+});
+
+test("simulate_pipeline_rule paths: simulate URL is /api/system/pipelines/rule/simulate; parse URL is /api/system/pipelines/rule/parse", async () => {
+    const captured = [];
+    _setCaptureRequest((req) => {
+        captured.push(req);
+        if (req.method === "POST" && req.path === "/api/system/pipelines/rule/parse") return { source: "ok" };
+        if (req.method === "POST" && req.path === "/api/system/pipelines/rule/simulate") return { message: { fields: {} } };
+        throw new Error(`unexpected ${req.method} ${req.path}`);
+    });
+    await handleSimulatePipelineRule({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                ruleSource: 'rule "x" when has_field("y") then end',
+                message: { source: "host" },
+                dryRun: false,
+            },
+        },
+    });
+    const paths = captured.map((r) => r.path);
+    assert.ok(paths.includes("/api/system/pipelines/rule/parse"), "parse URL missing");
+    assert.ok(paths.includes("/api/system/pipelines/rule/simulate"), "simulate URL missing");
+});
+
+test("simulate_pipeline_rule D-09 routes through defineMutatingHandler: dryRun:true returns preview WITHOUT firing /simulate", async () => {
+    const captured = [];
+    _setCaptureRequest((req) => {
+        captured.push(req);
+        if (req.method === "POST" && req.path === "/api/system/pipelines/rule/parse") return { source: "ok" };
+        if (req.method === "POST" && req.path === "/api/system/pipelines/rule/simulate") {
+            throw new Error("/simulate MUST NOT fire on dryRun:true");
+        }
+        throw new Error(`unexpected ${req.method} ${req.path}`);
+    });
+    const res = await handleSimulatePipelineRule({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                ruleSource: 'rule "x" when has_field("y") then end',
+                message: { source: "host" },
+                // dryRun defaults to true.
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.dryRun, true);
+    assert.equal(payload.preview.method, "POST");
+    assert.equal(payload.preview.path, "/api/system/pipelines/rule/simulate");
+    // parseResult must surface in dry-run JSON.
+    assert.equal(payload.parseResult.ok, true);
+});
+
+// =====================================================================
+// Plan 04-04 — list_pipeline_functions (PIPE-11) tests. ROADMAP SC3.
+//
+// Composes through Plan 04-01's getMergedCatalogue (per-connection cache,
+// live-overlay over static baseline). Live wins on collisions; static-only
+// retained; live-only accepted (Pitfall 5 surface).
+// =====================================================================
+
+test("ListPipelineFunctionsSchema accepts category + deprecated_only optional", () => {
+    const parsed = ListPipelineFunctionsSchema.parse({
+        connectionName: "fake",
+        category: "strings",
+        deprecated_only: true,
+    });
+    assert.equal(parsed.category, "strings");
+    assert.equal(parsed.deprecated_only, true);
+});
+
+test("ListPipelineFunctionsSchema accepts empty args (no filter)", () => {
+    const parsed = ListPipelineFunctionsSchema.parse({});
+    assert.equal(parsed.category, undefined);
+    assert.equal(parsed.deprecated_only, undefined);
+});
+
+test("list_pipeline_functions HAPPY: returns merged catalogue sorted by name; static-only entries surface", async () => {
+    _setCaptureRequest((req) => {
+        if (req.method === "GET" && req.path === "/api/system/pipelines/rule/functions") {
+            return [];   // empty live → merged equals static baseline
+        }
+        throw new Error(`unexpected ${req.method} ${req.path}`);
+    });
+    const res = await handleListPipelineFunctions({
+        params: { arguments: { _testConnection: "fake", limit: 200 } },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.tool, "list_pipeline_functions");
+    // Static catalogue has 133 entries per Plan 04-01 SUMMARY.
+    assert.ok(payload.count >= 130, `Expected >= 130 entries; got ${payload.count}`);
+    // Sorted alphabetically by name.
+    const names = payload.items.map((e) => e.name);
+    const sortedNames = [...names].sort();
+    assert.deepEqual(names, sortedNames, "entries must be sorted by name");
+    // Static-only entries surface with source: "static".
+    const hasFieldEntry = payload.items.find((e) => e.name === "has_field");
+    assert.ok(hasFieldEntry, "has_field entry must be present (static-only)");
+    assert.equal(hasFieldEntry.source, "static");
+});
+
+test("list_pipeline_functions Pitfall 5 — live-only function name accepted; surfaces with source: 'live'", async () => {
+    _setCaptureRequest((req) => {
+        if (req.method === "GET" && req.path === "/api/system/pipelines/rule/functions") {
+            return [
+                {
+                    name: "__phase4_test_live_only__",
+                    return_type: "String",
+                    params: [{ name: "input", type: "String", optional: false }],
+                    description: "Live-only function not in static baseline",
+                    deprecated: false,
+                },
+            ];
+        }
+        throw new Error(`unexpected ${req.method} ${req.path}`);
+    });
+    const res = await handleListPipelineFunctions({
+        params: { arguments: { _testConnection: "fake", limit: 200 } },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    const liveOnly = payload.items.find((e) => e.name === "__phase4_test_live_only__");
+    assert.ok(liveOnly, "live-only function must surface in merged catalogue");
+    assert.equal(liveOnly.source, "live");
+});
+
+test("list_pipeline_functions D-03 live-wins on collision: live description overrides static for same name", async () => {
+    _setCaptureRequest((req) => {
+        if (req.method === "GET" && req.path === "/api/system/pipelines/rule/functions") {
+            return [
+                {
+                    name: "to_long",   // exists in static baseline
+                    return_type: "Long",
+                    params: [{ name: "value", type: "Object", optional: false }],
+                    description: "LIVE DESC FROM PHASE4 TEST",
+                    deprecated: false,
+                },
+            ];
+        }
+        throw new Error(`unexpected ${req.method} ${req.path}`);
+    });
+    const res = await handleListPipelineFunctions({
+        params: { arguments: { _testConnection: "fake", limit: 200 } },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    const toLong = payload.items.find((e) => e.name === "to_long");
+    assert.ok(toLong);
+    // Live wins.
+    assert.equal(toLong.source, "live");
+    // Default projection excludes oneLineDescription; expand returns it.
+    const expandRes = await handleListPipelineFunctions({
+        params: { arguments: { _testConnection: "fake", limit: 200, fields: "all" } },
+    });
+    const expandPayload = JSON.parse(expandRes.content[0].text);
+    const toLongFull = expandPayload.items.find((e) => e.name === "to_long");
+    assert.equal(toLongFull.oneLineDescription, "LIVE DESC FROM PHASE4 TEST");
+});
+
+test("list_pipeline_functions cache fetch-once: two consecutive calls fire ONE GET", async () => {
+    let getCount = 0;
+    _setCaptureRequest((req) => {
+        if (req.method === "GET" && req.path === "/api/system/pipelines/rule/functions") {
+            getCount += 1;
+            return [];
+        }
+        throw new Error(`unexpected ${req.method} ${req.path}`);
+    });
+    await handleListPipelineFunctions({
+        params: { arguments: { _testConnection: "fake" } },
+    });
+    await handleListPipelineFunctions({
+        params: { arguments: { _testConnection: "fake" } },
+    });
+    assert.equal(getCount, 1, "second call must come from cache; live GET fires once per connection per process");
+});
+
+test("list_pipeline_functions cache isolation: different connectionName fires separate GET", async () => {
+    let getCount = 0;
+    _setCaptureRequest((req) => {
+        if (req.method === "GET" && req.path === "/api/system/pipelines/rule/functions") {
+            getCount += 1;
+            return [];
+        }
+        throw new Error(`unexpected ${req.method} ${req.path}`);
+    });
+    _setConnectionsForTests({
+        connA: { baseUrl: "http://a.example", apiToken: "t" },
+        connB: { baseUrl: "http://b.example", apiToken: "t" },
+    });
+    await handleListPipelineFunctions({
+        params: { arguments: { connectionName: "connA" } },
+    });
+    await handleListPipelineFunctions({
+        params: { arguments: { connectionName: "connB" } },
+    });
+    assert.equal(getCount, 2, "different connections must each fetch fresh (cache keyed by connectionName)");
+});
+
+test("list_pipeline_functions filter by category: only matching entries returned", async () => {
+    _setCaptureRequest((req) => {
+        if (req.method === "GET" && req.path === "/api/system/pipelines/rule/functions") return [];
+        throw new Error(`unexpected ${req.method} ${req.path}`);
+    });
+    const res = await handleListPipelineFunctions({
+        params: { arguments: { _testConnection: "fake", category: "strings", limit: 200 } },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    // All entries must have category: "strings".
+    for (const entry of payload.items) {
+        assert.equal(entry.category, "strings", `Entry ${entry.name} category must be 'strings'`);
+    }
+    // The strings category has ~22 entries per Plan 04-01 builtins; verify > 10.
+    assert.ok(payload.count > 10, `Expected > 10 string-category entries; got ${payload.count}`);
+});
+
+test("list_pipeline_functions filter by deprecated_only: only deprecated entries returned", async () => {
+    _setCaptureRequest((req) => {
+        if (req.method === "GET" && req.path === "/api/system/pipelines/rule/functions") {
+            return [
+                {
+                    name: "deprecated_fn",
+                    return_type: "String",
+                    params: [],
+                    description: "Deprecated test fn",
+                    deprecated: true,
+                },
+                {
+                    name: "current_fn",
+                    return_type: "String",
+                    params: [],
+                    description: "Current test fn",
+                    deprecated: false,
+                },
+            ];
+        }
+        throw new Error(`unexpected ${req.method} ${req.path}`);
+    });
+    const res = await handleListPipelineFunctions({
+        params: { arguments: { _testConnection: "fake", deprecated_only: true, limit: 200 } },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    // Only deprecated_fn should surface.
+    assert.ok(payload.items.find((e) => e.name === "deprecated_fn"));
+    assert.ok(!payload.items.find((e) => e.name === "current_fn"));
+    // All returned entries must have deprecated: true.
+    for (const e of payload.items) {
+        assert.equal(e.deprecated, true);
+    }
+});
+
+test("list_pipeline_functions narrow projection: default fields are [name, signature, category, source, deprecated]", async () => {
+    _setCaptureRequest((req) => {
+        if (req.method === "GET" && req.path === "/api/system/pipelines/rule/functions") return [];
+        throw new Error(`unexpected ${req.method} ${req.path}`);
+    });
+    const res = await handleListPipelineFunctions({
+        params: { arguments: { _testConnection: "fake" } },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.deepEqual(payload.fields, ["name", "signature", "category", "source", "deprecated"]);
+    // oneLineDescription + sourceRef are excluded from default projection.
+    const first = payload.items[0];
+    assert.equal(first.oneLineDescription, undefined);
+    assert.equal(first.sourceRef, undefined);
+});
+
+test("list_pipeline_functions handler URL: GET path = /api/system/pipelines/rule/functions (delegated through getMergedCatalogue)", async () => {
+    let captured = null;
+    _setCaptureRequest((req) => {
+        if (req.method === "GET" && req.path === "/api/system/pipelines/rule/functions") {
+            captured = req;
+            return [];
+        }
+        throw new Error(`unexpected ${req.method} ${req.path}`);
+    });
+    await handleListPipelineFunctions({
+        params: { arguments: { _testConnection: "fake" } },
+    });
+    assert.ok(captured);
+    assert.equal(captured.path, "/api/system/pipelines/rule/functions");
+});
+
+// =====================================================================
+// Plan 04-04 final tool count + dispatch wiring tests
+// =====================================================================
+
+test("dispatch resolves delete_pipeline_rule, simulate_pipeline_rule, list_pipeline_functions via barrel", async () => {
+    const { dispatch } = await import("../src/dispatch.js");
+    await import("../src/tools/_register.js");
+    _setConnectionsForTests({
+        fake: { baseUrl: "http://fake.example", apiToken: "tok" },
+    });
+    setActiveConnection("fake");
+    _setCaptureRequest(() => []);
+    // list_pipeline_functions through dispatch (list factory).
+    const res = await dispatch({ params: { name: "list_pipeline_functions", arguments: {} } });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.tool, "list_pipeline_functions");
+});
+
