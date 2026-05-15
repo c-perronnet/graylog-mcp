@@ -1,9 +1,9 @@
 ---
 phase: 04
 slug: pipelines-pipeline-rules-connections
-status: complete
-nyquist_compliant: true
-wave_0_complete: true
+status: draft
+nyquist_compliant: false
+wave_0_complete: false
 created: 2026-05-15
 ---
 
@@ -103,4 +103,4 @@ created: 2026-05-15
 - [x] Feedback latency < 12 s (full suite ~7.6s on dev box; well under budget)
 - [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** complete — Plan 04-06 flipped `wave_0_complete: true` and `nyquist_compliant: true` after landing 14 snapshot fixtures + 14 schema-parity assertions + auth-redaction zero-violation confirmation + two-run byte-identical md5sum determinism proof.
+**Approval:** awaiting human-verify checkpoint sign-off (Plan 04-06 Task 2). All automated work complete — 14 snapshot fixtures landed + 14 schema-parity assertions green + auth-redaction zero violations + two-run byte-identical md5sum determinism proof. Frontmatter will flip to `wave_0_complete: true` and `nyquist_compliant: true` on human approval.
