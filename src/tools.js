@@ -223,6 +223,22 @@ export const toolDefinitions = [
             required: ["streamId"],
         },
     },
+    // ----- Phase 3 Plan 03 stream deletion (STREAM-05; C2 mitigation centerpiece) -----
+    {
+        name: "delete_stream",
+        description: "Delete a Graylog stream with a frozen-cascade safety contract. Dry-run pre-flights 3 cascade endpoints — GET /api/streams/{streamId}/rules (attached stream rules), GET /api/streams/{streamId}/pipelines (pipeline-to-stream connections), and a paginated walk of /api/events/definitions/paginated client-side-filtered by def.config.streams (event definitions referencing this stream) — and emits cascades.{stream_rules, pipeline_connections, event_definitions} + a confirmationToken (keyed-buckets sha-256). Apply requires `confirm:<token>` echoed back; the wrapper re-fetches all 3 cascade endpoints, re-computes the hash, and refuses with reason `cascade_changed_since_preview` on ANY drift (additions OR removals). Refuses with reason `stream_immutable` if current.is_editable === false (built-in/system streams) BEFORE any cascade GET fires (saves 3 round-trips). Refuses with reason `cascade_preflight_failed` if any cascade endpoint errors (no token issued — hard-block). Apply envelope is SYNC `{deleted:true, streamId}` (no async/job_id).",
+        inputSchema: {
+            type: "object",
+            properties: {
+                connectionName: { type: "string", description: "Optional per-call connection override" },
+                dryRun: { type: "boolean", description: "Default true. Set to false to apply." },
+                idempotencyKey: { type: "string", description: "Optional agent-supplied idempotency key" },
+                streamId: { type: "string", description: "Stream ID to delete (from list_streams)" },
+                confirm: { type: "string", description: "On apply (dryRun:false): the 64-hex confirmationToken from the immediately-prior dry-run. Required when dryRun:false; the wrapper refuses with reason `confirmation_mismatch` if absent or stale, and with `cascade_changed_since_preview` if the cascade drifted between dry-run and apply." },
+            },
+            required: ["streamId"],
+        },
+    },
     {
         name: "list_field_values",
         description: "List distinct values of a field with message counts. Useful for discovering available sources, environments, logger names, etc. Results are sorted by count descending.",

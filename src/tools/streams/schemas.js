@@ -170,3 +170,17 @@ export const StartStreamSchema = mutatingBase.extend({
 export const PauseStreamSchema = mutatingBase.extend({
     streamId: z.string().min(1),
 });
+
+// =====================================================================
+// Plan 03-03 — delete_stream (STREAM-05; C2 mitigation centerpiece).
+// =====================================================================
+//
+// confirm is OPTIONAL at parse time; the requireConfirm gate in
+// handler.js (Plan 02-01) enforces it at apply time based on whether
+// build() populated _confirmationToken — and build() ALWAYS does for
+// delete_stream (the cascade preview is mandatory), so apply requires
+// the matching token in args.confirm.
+export const DeleteStreamSchema = mutatingBase.extend({
+    streamId: z.string().min(1),
+    confirm: z.string().optional(),
+});

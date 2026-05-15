@@ -21,6 +21,8 @@ import { handleCreateStream } from "./create-stream.js";
 import { handleUpdateStream } from "./update-stream.js";
 import { handleStartStream } from "./start-stream.js";
 import { handlePauseStream } from "./pause-stream.js";
+// Plan 03-03 — STREAM-05 (C2 mitigation centerpiece).
+import { handleDeleteStream } from "./delete-stream.js";
 
 register("list_streams", handleListStreams);
 register("get_stream", handleGetStream);
@@ -29,3 +31,4 @@ register("create_stream", handleCreateStream);
 register("update_stream", handleUpdateStream);
 register("start_stream", handleStartStream);
 register("pause_stream", handlePauseStream);
+register("delete_stream", handleDeleteStream);
