@@ -2739,11 +2739,11 @@ test("snapshot: delete_stream apply with WRONG confirm refuses with confirmation
     });
     assert.equal(res.isError, true);
     assert.equal(res.reason, "confirmation_mismatch");
-    // Snapshot the parsed error-content text (it's JSON-stringified in
-    // content[0].text). The reason + isError shape is captured for drift
-    // detection on the C2 refusal envelope.
-    const payload = JSON.parse(res.content[0].text);
-    t.assert.snapshot(payload);
+    // Snapshot the full error envelope. content[0].text is a plain message
+    // string (NOT a JSON document) on the refusal path, so we snapshot the
+    // whole response object — captures isError, reason, and the text
+    // string verbatim for drift detection on the C2 refusal envelope.
+    t.assert.snapshot(res);
 });
 
 // ---------- Fixture 8 — delete_stream mutable:false refusal; ZERO cascade GETs fire ----------
@@ -2795,8 +2795,9 @@ test("snapshot: delete_stream on immutable stream refuses with stream_immutable;
     assert.equal(cascadeFired, false, "no cascade GET should fire when D-09 refuses");
     assert.equal(res.isError, true);
     assert.match(res.content[0].text, /stream_immutable|non-editable/i);
-    const payload = JSON.parse(res.content[0].text);
-    t.assert.snapshot(payload);
+    // Snapshot the full error envelope (refusal-path text is a plain string,
+    // not JSON). Captures isError, reason, and the message text verbatim.
+    t.assert.snapshot(res);
 });
 
 // ---------- Fixture 9 — test_stream_match dry-run with one match + one miss (ROADMAP SC3) ----------

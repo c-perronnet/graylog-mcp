@@ -1,0 +1,348 @@
+exports[`snapshot: create_stream dry-run on empty cluster emits CreateEntityRequest envelope with __SERVER_ASSIGNED__ 1`] = `
+{
+  "dryRun": true,
+  "tool": "create_stream",
+  "connection": "fake",
+  "idempotencyKey": "7ef88c5c8ed2e60c737b88a39b70b69f",
+  "summary": "Create stream \\"fixture-stream\\" (index set fixture-ix1)",
+  "preview": {
+    "method": "POST",
+    "path": "/api/streams",
+    "body": {
+      "entity": {
+        "title": "fixture-stream",
+        "description": null,
+        "rules": [],
+        "content_pack": null,
+        "matching_type": "AND",
+        "remove_matches_from_default_stream": false,
+        "index_set_id": "fixture-ix1"
+      },
+      "share_request": null
+    }
+  },
+  "postApplyEstimate": {
+    "id": "__SERVER_ASSIGNED__"
+  },
+  "existingMatches": [],
+  "applyHint": "Re-call with dryRun: false to apply"
+}
+`;
+
+exports[`snapshot: create_stream dry-run with case-insensitive existingMatch (similarity_reason case_insensitive) 1`] = `
+{
+  "dryRun": true,
+  "tool": "create_stream",
+  "connection": "fake",
+  "idempotencyKey": "bbe8ad809ab9539c11e5610f28662a1b",
+  "summary": "Create stream \\"FixtureStream\\" (index set fixture-ix1)",
+  "preview": {
+    "method": "POST",
+    "path": "/api/streams",
+    "body": {
+      "entity": {
+        "title": "FixtureStream",
+        "description": null,
+        "rules": [],
+        "content_pack": null,
+        "matching_type": "AND",
+        "remove_matches_from_default_stream": false,
+        "index_set_id": "fixture-ix1"
+      },
+      "share_request": null
+    }
+  },
+  "postApplyEstimate": {
+    "id": "__SERVER_ASSIGNED__"
+  },
+  "existingMatches": [
+    {
+      "id": "s_case",
+      "title": "fixturestream",
+      "similarity_reason": "case_insensitive"
+    }
+  ],
+  "applyHint": "Re-call with dryRun: false to apply"
+}
+`;
+
+exports[`snapshot: create_stream dry-run with exact-title existingMatch (similarity_reason exact) 1`] = `
+{
+  "dryRun": true,
+  "tool": "create_stream",
+  "connection": "fake",
+  "idempotencyKey": "7ef88c5c8ed2e60c737b88a39b70b69f",
+  "summary": "Create stream \\"fixture-stream\\" (index set fixture-ix1)",
+  "preview": {
+    "method": "POST",
+    "path": "/api/streams",
+    "body": {
+      "entity": {
+        "title": "fixture-stream",
+        "description": null,
+        "rules": [],
+        "content_pack": null,
+        "matching_type": "AND",
+        "remove_matches_from_default_stream": false,
+        "index_set_id": "fixture-ix1"
+      },
+      "share_request": null
+    }
+  },
+  "postApplyEstimate": {
+    "id": "__SERVER_ASSIGNED__"
+  },
+  "existingMatches": [
+    {
+      "id": "s_exact",
+      "title": "fixture-stream",
+      "similarity_reason": "exact"
+    }
+  ],
+  "applyHint": "Re-call with dryRun: false to apply"
+}
+`;
+
+exports[`snapshot: create_stream dry-run with prefix existingMatch (similarity_reason prefix) 1`] = `
+{
+  "dryRun": true,
+  "tool": "create_stream",
+  "connection": "fake",
+  "idempotencyKey": "d2cf175b57a660a51f1483a3fb853673",
+  "summary": "Create stream \\"fixture-stream-long\\" (index set fixture-ix1)",
+  "preview": {
+    "method": "POST",
+    "path": "/api/streams",
+    "body": {
+      "entity": {
+        "title": "fixture-stream-long",
+        "description": null,
+        "rules": [],
+        "content_pack": null,
+        "matching_type": "AND",
+        "remove_matches_from_default_stream": false,
+        "index_set_id": "fixture-ix1"
+      },
+      "share_request": null
+    }
+  },
+  "postApplyEstimate": {
+    "id": "__SERVER_ASSIGNED__"
+  },
+  "existingMatches": [
+    {
+      "id": "s_prefix",
+      "title": "fixture-stream",
+      "similarity_reason": "prefix"
+    }
+  ],
+  "applyHint": "Re-call with dryRun: false to apply"
+}
+`;
+
+exports[`snapshot: delete_stream apply with WRONG confirm refuses with confirmation_mismatch (C2 apply gate) 1`] = `
+{
+  "isError": true,
+  "reason": "confirmation_mismatch",
+  "content": [
+    {
+      "type": "text",
+      "text": "[delete_stream] confirmation_mismatch: agent must echo the dry-run confirmationToken in args.confirm to apply this destructive operation."
+    }
+  ]
+}
+`;
+
+exports[`snapshot: delete_stream cascade preview with EMPTY rules+pipelines+events (D-02 empty-buckets hash) 1`] = `
+{
+  "dryRun": true,
+  "tool": "delete_stream",
+  "connection": "fake",
+  "idempotencyKey": "6e969f2c0eb40d463dfd207e1c397705",
+  "summary": "Delete stream fixture-s1",
+  "preview": {
+    "method": "DELETE",
+    "path": "/api/streams/fixture-s1"
+  },
+  "postApplyEstimate": {
+    "id": "fixture-s1",
+    "deleted": true
+  },
+  "existingMatches": [],
+  "confirmationToken": "ba11f7642263fef9555f6bca0df59083ed013d6f2b572885108ea59e854714c7",
+  "cascades": {
+    "stream_rules": [],
+    "pipeline_connections": [],
+    "event_definitions": []
+  },
+  "applyHint": "Re-call with dryRun: false to apply"
+}
+`;
+
+exports[`snapshot: delete_stream cascade preview with rules+pipelines+events populated (D-02 hash + ROADMAP SC1) 1`] = `
+{
+  "dryRun": true,
+  "tool": "delete_stream",
+  "connection": "fake",
+  "idempotencyKey": "6e969f2c0eb40d463dfd207e1c397705",
+  "summary": "Delete stream fixture-s1",
+  "preview": {
+    "method": "DELETE",
+    "path": "/api/streams/fixture-s1"
+  },
+  "postApplyEstimate": {
+    "id": "fixture-s1",
+    "deleted": true
+  },
+  "existingMatches": [],
+  "confirmationToken": "dbaae7a7dea951d011756716492810fb038b4673c50db805dd95167cf84cdaab",
+  "cascades": {
+    "stream_rules": [
+      {
+        "id": "fixture-r1",
+        "type": 1,
+        "field": "source",
+        "value": "host"
+      },
+      {
+        "id": "fixture-r2",
+        "type": 6,
+        "field": "msg",
+        "value": "warn"
+      }
+    ],
+    "pipeline_connections": [
+      {
+        "id": "fixture-p1",
+        "title": "FixturePipeline"
+      }
+    ],
+    "event_definitions": [
+      {
+        "id": "fixture-e1",
+        "title": "FixtureAlert"
+      }
+    ]
+  },
+  "applyHint": "Re-call with dryRun: false to apply"
+}
+`;
+
+exports[`snapshot: delete_stream on immutable stream refuses with stream_immutable; cascade GETs skipped (D-09) 1`] = `
+{
+  "isError": true,
+  "content": [
+    {
+      "type": "text",
+      "text": "[delete_stream] 400 DELETE /api/streams/fixture-s-immutable: Stream \\"FixtureSystem\\" (id: fixture-s-immutable) is non-editable (Graylog built-in or system stream); refusing delete. Call list_streams and filter by mutable: true to find a deletable candidate. [reason: stream_immutable]"
+    }
+  ],
+  "reason": "stream_immutable"
+}
+`;
+
+exports[`snapshot: list_stream_rules narrow projection items have exactly [id, type, field, value, inverted] 1`] = `
+{
+  "tool": "list_stream_rules",
+  "connection": "fake",
+  "count": 2,
+  "limit": 25,
+  "fields": [
+    "id",
+    "type",
+    "field",
+    "value",
+    "inverted"
+  ],
+  "items": [
+    {
+      "id": "fixture-r1",
+      "type": 1,
+      "field": "source",
+      "value": "host",
+      "inverted": false
+    },
+    {
+      "id": "fixture-r2",
+      "type": 6,
+      "field": "msg",
+      "value": "warn",
+      "inverted": false
+    }
+  ]
+}
+`;
+
+exports[`snapshot: test_stream_match dry-run emits literal-outer-key { message: ... } body (ROADMAP SC3) 1`] = `
+{
+  "dryRun": true,
+  "tool": "test_stream_match",
+  "connection": "fake",
+  "idempotencyKey": "b1c5075e351ff0831f9e3cf4751cfb3e",
+  "summary": "Test stream fixture-s1 match against sample message (3 field(s))",
+  "preview": {
+    "method": "POST",
+    "path": "/api/streams/fixture-s1/testMatch",
+    "body": {
+      "message": {
+        "source": "host-1",
+        "message": "hello world",
+        "level": 6
+      }
+    }
+  },
+  "postApplyEstimate": {
+    "matches": "__SERVER_ASSIGNED__",
+    "rules": "__SERVER_ASSIGNED__"
+  },
+  "existingMatches": [],
+  "applyHint": "Re-call with dryRun: false to apply"
+}
+`;
+
+exports[`snapshot: test_stream_match dry-run with minimal sample message (D-11 always_match coverage) 1`] = `
+{
+  "dryRun": true,
+  "tool": "test_stream_match",
+  "connection": "fake",
+  "idempotencyKey": "2c6d918dfdbb4ac1ed760cbd05d515d1",
+  "summary": "Test stream fixture-s1 match against sample message (1 field(s))",
+  "preview": {
+    "method": "POST",
+    "path": "/api/streams/fixture-s1/testMatch",
+    "body": {
+      "message": {
+        "source": "anything"
+      }
+    }
+  },
+  "postApplyEstimate": {
+    "matches": "__SERVER_ASSIGNED__",
+    "rules": "__SERVER_ASSIGNED__"
+  },
+  "existingMatches": [],
+  "applyHint": "Re-call with dryRun: false to apply"
+}
+`;
+
+exports[`snapshot: update_stream STRICT_NO_ECHO partial emits ONLY the changed key (D-14) 1`] = `
+{
+  "dryRun": true,
+  "tool": "update_stream",
+  "connection": "fake",
+  "idempotencyKey": "1fc7e3160dad33ab73b97a1e485dfe0b",
+  "summary": "Update stream fixture-s1 (1 change(s))",
+  "preview": {
+    "method": "PUT",
+    "path": "/api/streams/fixture-s1",
+    "body": {
+      "title": "fixture-stream-renamed"
+    }
+  },
+  "postApplyEstimate": {
+    "id": "fixture-s1"
+  },
+  "existingMatches": [],
+  "applyHint": "Re-call with dryRun: false to apply"
+}
+`;
