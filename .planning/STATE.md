@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v2.3
 milestone_name: milestone
-status: Executing Phase 03
-last_updated: "2026-05-15T17:26:40.956Z"
+status: Ready to execute
+last_updated: "2026-05-15T17:42:02.928Z"
 progress:
   total_phases: 8
   completed_phases: 3
   total_plans: 21
-  completed_plans: 16
-  percent: 76
+  completed_plans: 17
+  percent: 81
 ---
 
 # Project Memory: Graylog MCP — Full Admin Surface
@@ -28,12 +28,12 @@ progress:
 ## Current Position
 
 Phase: 03 (streams-stream-rules) — EXECUTING
-Plan: 1 of 5
+Plan: 2 of 5
 
-- **Phase**: 2 — Index sets & retention
-- **Plan**: 4 of 5 complete (02-04 shipped: set_default_index_set INDEX-06 + cycle_deflector INDEX-07 — UPDATED D-13 can_be_default pre-flight refuses with reason default_eligibility_failed BEFORE PUT; UPDATED D-14 SYNCHRONOUS apply envelope { rotated, message, side_effects:{ observable_at, describes } } per 02-U1-SMOKE.md SYNC_OPTION_A; ND3 writable pre-flight refuses with reason non_writable_index_set BEFORE POST; ROADMAP success criterion 3 provably met)
-- **Status**: 335 tests / 18 suites green (+12 net-new over Plan 02-03 baseline of 323); all Phase 0 + Phase 1 + Plan 02-01/02-02/02-03 contracts preserved; module-init contract holds (`assertAllToolsRegistered(toolDefinitions)` → "OK"); tool count 41 → 43 (set_default_index_set + cycle_deflector — all 7 Phase 2 net-new mutating tools shipped); ROADMAP success criteria 1 + 3 provably met
-- **Progress bar**: `[█████████░] 94%` (15 of 16 milestone plans complete: 6 Phase 0 + 5 Phase 1 + 4 Phase 2)
+- **Phase**: 3 — Streams & stream rules
+- **Plan**: 1 of 5 complete (03-01 shipped: STREAM-01 list_streams with wire `is_editable` -> agent `mutable` projection per Pitfall S2; STREAM-02 get_stream returns full StreamResponse DTO with embedded rules; STREAM-07 list_stream_rules narrow projection [id, type, field, value, inverted]; cascade-hash helper promoted to src/tools/_shared/cascade-hash.js with new `computeCascadeHash({streamId, ruleIds, pipelineConnIds, eventDefIds})` D-02 keyed-buckets signature + 2 frozen-fixture hashes pinned; Phase 2 c1-hash.js rewritten to thin re-export with function identity preserved — Phase 2 importers see zero churn; v2.3 listStreamsHandler displaced from src/tools/_register.js (handler retained in src/handlers.js for Phase-7 HARD-03 audit); 03-U1-SMOKE.md records UNREACHABLE_STRICT_NO_ECHO locking STRICT_NO_ECHO for Plan 02 update_stream + Plan 04 update_stream_rule; ROADMAP SC2 provably met)
+- **Status**: 358 tests / 18 suites green (+23 net-new over Plan 02-04 baseline of 335 — 8 cascade-hash + 12 streams + 3 schema-parity); all Phase 0 + Phase 1 + Phase 2 contracts preserved; module-init `assertAllToolsRegistered(toolDefinitions)` passes; tool count 43 → 45 (delta: -1 v2.3 list_streams displaced + 3 net-new = +2; plan frontmatter expected 46 but double-counted the reclaimed list_streams which is already one of the 3 net-new — corrected for Plan 02 baseline); ROADMAP SC2 ("list_streams returns each stream's mutable: boolean") provably met
+- **Progress bar**: `[████████░░] 81%` (17 of 21 milestone plans complete: 6 Phase 0 + 5 Phase 1 + 4 Phase 2 + 1 Phase 3 — Plan 02-05 still pending per Phase 2 polish track; Plan 03-01 ships Phase 3 read tools + cascade-hash promotion independently)
 
 ## Performance Metrics
 
@@ -41,7 +41,7 @@ Plan: 1 of 5
 |--------|-------|
 | v1 requirements | 71 mapped / 71 total |
 | Phases | 0 complete / 8 total |
-| Plans complete | 12 |
+| Plans complete | 17 |
 | Net-new tools target | ~64 (58 CRUD primitives + 6 blueprints) |
 | Total MCP surface at milestone end | ~91 tools |
 | Phase 00-foundation P01 | 2min | 2 tasks | 13 files |
@@ -58,6 +58,7 @@ Plan: 1 of 5
 | Phase 02 P02 | 10min | 3 tasks | 8 files |
 | Phase 02-index-sets-retention P03 | ~10 min | 2 tasks | 9 files |
 | Phase 02-index-sets-retention P04 | ~6 min | 2 tasks | 6 files |
+| Phase 03 P01 | ~14 min | 3 tasks | 13 files |
 
 ## Accumulated Context
 
@@ -221,6 +222,30 @@ Drawn from `PROJECT.md` Key Decisions table — restated here for quick referenc
   - **Commits**: `9b6764f` (Task 1 RED — set_default_index_set tests), `9c601bc` (Task 1 GREEN — set_default_index_set.js + SetDefaultIndexSetSchema + CycleDeflectorSchema + register + tools.js entry), `51ad5f2` (Task 2 RED — cycle_deflector tests), `552dfa1` (Task 2 GREEN — cycle_deflector.js + register + tools.js entry).
   - **Plan 02-05 hand-off**: Schema-parity now covers all 8 Phase-2 mutating tools. Snapshot fixtures for the new dry-run shapes (set_default ineligible refusal, cycle non-writable refusal, both apply envelopes) are pending Plan 02-05. The minimal schema shapes (`{ indexSetId }`) and deterministic envelopes make them trivial to snapshot.
 
+- **Plan 03-01 (Phase 3 read tools + cascade-hash promotion + D-14 U1 smoke)**:
+  - **D-14 UNREACHABLE_STRICT_NO_ECHO**: no API token in `~/.graylog-mcp/config.json` — partial-PUT smoke against `<graylog-host>:9000` skipped per `<u1_smoke_protocol>` "no matching connection" branch (same precedent as `02-U1-SMOKE.md` UNREACHABLE_DEFAULT_MERGE). Locks STRICT_NO_ECHO for Plan 02 `update_stream` and Plan 04 `update_stream_rule`. Safe-default rationale: no encrypted fields on streams or stream rules (C3 not reachable); smaller wire bytes; consistent with Phase 1 D-12 update_input pattern.
+  - **CreateStreamRuleRequest.type non-nullable Java int caveat (Plan 04 hand-off)**: documented in `03-U1-SMOKE.md`. `update_stream_rule`'s strict-no-echo wire-build MUST emit `type: current.type` from the pre-flight GET unconditionally, even when `args.changes.type` is absent. The remaining 4 of 5 fields (value, field, inverted, description) stay strictly no-echo. Plan 04's build() pattern:
+    ```js
+    const current = await client.request("GET", `/api/streams/${args.streamId}/rules/${args.ruleId}`, null);
+    const wireBody = { type: current.type, ...args.changes };
+    ```
+  - **Cascade-hash helper promoted with full Phase 2 back-compat**: `src/tools/_shared/cascade-hash.js` ships `computeC1Hash` + `collectIndexNames` (Phase 2 — verbatim lift; SAME function objects via re-export) AND `computeCascadeHash({streamId, ruleIds, pipelineConnIds, eventDefIds})` (Phase 3 NEW D-02 keyed-buckets canonicalization). `src/tools/index-sets/c1-hash.js` becomes a 14-line back-compat re-export — every Phase 2 importer (`delete-index-set.js` + `test/index-sets.test.js`) sees zero churn. Phase 2 frozen-fixture hashes continue to validate end-to-end. Function-identity invariant pinned via Test 6: `assert.equal(computeC1HashLegacy, computeC1Hash)`.
+  - **D-02 keyed-buckets canonicalization**: `{ streamId, cascades: { rules:[sorted], pipeline_connections:[sorted], event_definitions:[sorted] } }`. Each bucket sorts its own IDs internally; the agent does not pre-sort. Keyed buckets disambiguate type-collision — the same ID string "xyz" placed in three different buckets produces three distinct hashes (Test 2 pins). A flat-sort canonicalization would have collapsed them; D-02 was tightened during planning to lock the keyed shape.
+  - **Frozen-fixture hashes pinned** in `test/cascade-hash.test.js`:
+    - Populated (streamId=5f9d3b1c7e8a4d2b1c3e5f9d, 2 rules + 1 pipeline + 2 event-defs) → `888cfe478f5ef2d421d1cd4e9a00b7e439e07d5d0b03094891542bea8cbaf991`
+    - Empty cascade → `541be7deb65006714cbde5270556b20d80e32e64197c4f5bd9493139f2cacbf6`
+  - These literals detect canonicalization drift across CI runs AND across the inevitable Plan 03-03 delete_stream landing.
+  - **Pitfall S2 mutable projection**: `list_streams` wire `is_editable` -> agent `mutable: boolean` via the fetch callback's destructuring map step (`const {is_editable, ...rest} = s; return {...rest, mutable: is_editable === true}`). `is_editable` is STRIPPED from the projected item — two-name foot-gun avoided. `get_stream` is the rich-shape read and preserves the wire field name verbatim; the projection-to-`mutable` is a `list_streams`-specific ergonomic. Test 4 + Test 12 in `test/streams.test.js` pin the contract. ROADMAP SC2 ("list_streams returns each stream's `mutable: boolean`") provably met.
+  - **Pitfall S5 v2.3 displacement**: `src/tools/_register.js` no longer imports or registers the v2.3 `listStreamsHandler`. The function in `src/handlers.js` STAYS exported (HARD-03 Phase-7 audit reference) but is unregistered from dispatch. The new Phase 3 `list_streams` (registered via `src/tools/streams/index.js`) claims the dispatch name without a rename. Strict-superset back-compat: every old field (id, title, description) is preserved; new fields (mutable, disabled, index_set_id) are additive. Test 12 explicitly pins the strict-superset invariant — agents reading only the v2.3 fields continue to work unchanged.
+  - **Discretion-02 resolution**: `get_stream` AND `list_stream_rules` both exist. `get_stream` returns the FULL StreamResponse DTO with embedded rules (rich read); `list_stream_rules` returns a narrow per-rule projection (id, type, field, value, inverted) for token efficiency on streams with many rules. Either tool can satisfy STREAM-07 alone, but having both lets the agent pick the right shape for the task — narrow for filter/routing, rich for full inspection.
+  - **Tool count**: 43 → 45 (delta: -1 v2.3 list_streams displaced + 3 net-new = +2). Plan frontmatter declared "tool count = 46" via `43 - 1 + 3 + 1 = 46`, double-counting the "reclaimed" list_streams (which is already one of the 3 net-new). Correct math: `43 - 1 + 3 = 45`. `assertAllToolsRegistered(toolDefinitions)` passes for all 45.
+  - **Rule 1 deviations (2)**: both local to `test/streams.test.js` design — no production-code drift from the plan.
+    1. `assertAllToolsRegistered` API mismatch — the plan's Test 11 originally asserted `assert.equal(assertAllToolsRegistered(toolDefinitions), "OK")` but the actual contract is "returns undefined on success, throws on missing". Reshaped Test 11 to call without an equality check (function throwing on failure IS the test contract).
+    2. Dispatch test cache-bust ES-module-cache interaction — Tests 10 + 11 originally tried `_clearForTests()` + cache-bust import of `_register.js`. The nested side-effect imports inside `_register.js` (inputs/index.js, index-sets/index.js, streams/index.js) are NOT cache-busted by the outer cache-bust, so their `register()` calls do NOT re-fire against the cleared Map. Dropped the clear+cache-bust pattern; tests just `import "../src/tools/_register.js"` once (module-level cache ensures one registration per process).
+  - **Test growth**: 335 → 358 (+23 net-new — 8 cascade-hash + 12 streams + 3 schema-parity). Full `npm test` 358/358 pass; zero regressions on Phase 0 + Phase 1 + Phase 2 baselines. Two consecutive `npm test` runs produce byte-identical `.snapshot` md5sums (DETERMINISTIC verified).
+  - **Commits**: `8b4b0e1` (Task 1 docs — U1 smoke artifact), `11f4524` (Task 2 RED — cascade-hash tests), `818adf6` (Task 2 GREEN — _shared/cascade-hash.js + c1-hash.js thin re-export), `326edc8` (Task 3 RED — streams + schema-parity tests), `bf6ac23` (Task 3 GREEN — 5 streams files + _register.js displacement + tools.js entries).
+  - **Plan 03-02 / 03-03 / 03-04 / 03-05 hand-off**: (a) Plan 03-02's `update_stream` ships STRICT_NO_ECHO; `create_stream` consumes `findExistingMatches` streams envelope (already shipped at conflict.js:31). (b) Plan 03-03's `delete_stream` consumes `computeCascadeHash` with the keyed-buckets signature + `_confirmationToken`/`requireConfirm` machinery (Phase 2 Plan 02-01) — same shape as `delete_index_set`. (c) Plan 03-04's `update_stream_rule` ships STRICT_NO_ECHO with the documented `type: current.type` echo caveat; `STREAM_RULE_TYPE_TO_NUMERIC` map lands in streams/schemas.js. (d) Plan 03-05 (Phase 3 polish) — schema-parity already covers the 3 read tools; remaining 9 mutating tools added by Plans 02/03/04 require schema-parity + snapshot fixtures.
+
 ### Foundation Primitives To Be Built In Phase 0
 
 These are the cross-cutting concerns every later phase depends on. They live in `FOUND-01` through `FOUND-13`:
@@ -269,13 +294,13 @@ None.
 
 ## Session Continuity
 
-**Last action**: Completed `02-04-PLAN.md` — set_default_index_set (INDEX-06) + cycle_deflector (INDEX-07). Shipped src/tools/index-sets/schemas.js (appended SetDefaultIndexSetSchema + CycleDeflectorSchema — both `mutatingBase.extend({ indexSetId })`), src/tools/index-sets/set-default-index-set.js (defineMutatingHandler with async build() pre-flighting GET, reading current.can_be_default per UPDATED D-13, throwing GraylogValidationError + reason `default_eligibility_failed` BEFORE PUT when false; apply: PUT /api/system/indices/index_sets/{id}/default with empty body; postApplyEstimate.isDefault: true), and src/tools/index-sets/cycle-deflector.js (defineMutatingHandler with async build() pre-flighting GET, reading current.writable per ND3, throwing GraylogValidationError + reason `non_writable_index_set` BEFORE POST when false; apply: POST /api/system/deflector/{id}/cycle returns SYNC envelope `{ rotated:true, message, side_effects:{ observable_at:'/system/jobs', describes:'closed-index range rebuild...' } }` per UPDATED D-14 SYNC_OPTION_A — NOT the D-15 async envelope). Both tools import GraylogValidationError from src/graylog/errors.js (Phase 0 — already shipped); src/graylog/errors.js NOT modified. Plan 02-03's wrapGraylogError reason surface consumed automatically (renders `[reason: <name>]` suffix in text AND propagates as res.reason on the envelope). ROADMAP success criterion 3 provably met: Task 1 Test 3 asserts an ineligible (can_be_default:false) index set returns isError + reason default_eligibility_failed + PUT call count 0. Test growth 323 → 335 (+12 net-new: 5 set_default handler + 5 cycle handler + 2 schema-parity); full `npm test` 335/335 pass; zero regressions. Tool count 41 → 43 — all 7 Phase-2 net-new mutating tools shipped. Zero deviations from plan. Commits: `9b6764f` (Task 1 RED), `9c601bc` (Task 1 GREEN — set_default_index_set.js + both schemas + register + tools.js), `51ad5f2` (Task 2 RED), `552dfa1` (Task 2 GREEN — cycle_deflector.js + register + tools.js).
+**Last action**: Completed `03-01-PLAN.md` — Phase 3 read tools (STREAM-01 list_streams + STREAM-02 get_stream + STREAM-07 list_stream_rules) + cascade-hash helper promotion + D-14 U1 smoke decision artifact. Shipped `.planning/phases/03-streams-stream-rules/03-U1-SMOKE.md` (UNREACHABLE_STRICT_NO_ECHO — no API token available — locks STRICT_NO_ECHO for Plan 02 update_stream + Plan 04 update_stream_rule; documents CreateStreamRuleRequest.type non-nullable Java int caveat). Promoted `src/tools/_shared/cascade-hash.js` exporting computeC1Hash + collectIndexNames (Phase 2 — verbatim lift, SAME function objects via re-export) AND `computeCascadeHash({streamId, ruleIds, pipelineConnIds, eventDefIds})` (Phase 3 NEW D-02 keyed-buckets canonicalization). Rewrote `src/tools/index-sets/c1-hash.js` to 14-line back-compat re-export with function identity preserved — Phase 2 delete-index-set.js + test/index-sets.test.js see zero churn. Pinned 2 frozen-fixture hashes in test/cascade-hash.test.js (populated `888cfe478f5e...` + empty `541be7deb650...`). Shipped 5 files under `src/tools/streams/`: schemas.js (Plan 01 SUBSET — ListStreamsSchema + GetStreamSchema + ListStreamRulesSchema), list-streams.js (defineListHandler + defaultFields [id,title,description,mutable,disabled,index_set_id]; wire `is_editable` -> agent `mutable: boolean` projection per Pitfall S2; strict-superset of v2.3), get-stream.js (plain async handler returning full StreamResponse DTO with embedded rules; preserves wire is_editable verbatim), list-stream-rules.js (defineListHandler + narrow [id,type,field,value,inverted] projection; envelope unwrap; required streamId), index.js (3 register calls). Pitfall S5 v2.3 displacement: `src/tools/_register.js` no longer imports or registers listStreamsHandler — function STAYS exported in src/handlers.js for HARD-03 Phase-7 audit reference; new Phase 3 list_streams claims dispatch name. `src/tools.js` v2.3 list_streams description replaced + get_stream + list_stream_rules entries added. `test/schema-parity.test.js` extended with 3 new assertSchemaParityForTool calls. 2 Rule-1 deviations (both test-design fixes local to test/streams.test.js — assertAllToolsRegistered API contract correction + dispatch cache-bust ES-module-cache interaction). Tool count 43 → 45 (delta: -1 v2.3 displaced + 3 net-new = +2). Test growth 335 → 358 (+23 net-new — 8 cascade-hash + 12 streams + 3 schema-parity). Full `npm test` 358/358 pass; zero regressions; two consecutive runs produce byte-identical snapshot md5sums. ROADMAP SC2 ("list_streams returns each stream's mutable: boolean") provably met. Commits: `8b4b0e1` (Task 1 docs), `11f4524` (Task 2 RED), `818adf6` (Task 2 GREEN — _shared/cascade-hash.js + c1-hash.js thin re-export), `326edc8` (Task 3 RED), `bf6ac23` (Task 3 GREEN — 5 streams files + _register.js displacement + tools.js entries).
 
-**Previous action**: Completed `02-03-PLAN.md` — delete_index_set (INDEX-05) — the C1 mitigation centerpiece. Shipped c1-hash.js, DeleteIndexSetSchema, delete-index-set.js (ND1 + D-04 + D-05 + UPDATED D-15 no-job_id envelope + D-16 ordering). Rule 2 deviation: wrapGraylogError extended to surface err.reason as `[reason: <name>]` suffix + out.reason property. Tool count 40 → 41; tests 302 → 323. Commits: `21d2b7d`, `37ce96e`, `a4e5fdb`, `6c57864`.
+**Previous action**: Completed `02-04-PLAN.md` — set_default_index_set (INDEX-06) + cycle_deflector (INDEX-07). UPDATED D-13 can_be_default pre-flight + UPDATED D-14 SYNCHRONOUS apply envelope per SYNC_OPTION_A + ND3 writable pre-flight. Tool count 41 → 43; tests 323 → 335. Commits: `9b6764f`, `9c601bc`, `51ad5f2`, `552dfa1`.
 
-**Stopped at**: Completed 02-04-PLAN.md — set_default_index_set INDEX-06 + cycle_deflector INDEX-07 landed; SetDefaultIndexSetSchema + CycleDeflectorSchema + handleSetDefaultIndexSet + handleCycleDeflector; UPDATED D-13 (can_be_default pre-flight; reason default_eligibility_failed) + UPDATED D-14 (SYNC apply envelope with side_effects.observable_at per SYNC_OPTION_A) + ND3 (non_writable_index_set pre-flight); tool count 41 -> 43; 335/335 tests green; all 7 Phase-2 net-new mutating tools shipped; ROADMAP success criteria 1 + 3 provably met.
+**Stopped at**: Completed 03-01-PLAN.md — Phase 3 read tools + cascade-hash promotion + D-14 U1 smoke (UNREACHABLE_STRICT_NO_ECHO). 3 read tools shipped under src/tools/streams/ (list_streams w/ mutable projection, get_stream w/ full DTO, list_stream_rules w/ narrow projection). cascade-hash helper promoted to _shared with keyed-buckets computeCascadeHash signature + 2 frozen-fixture hashes pinned. v2.3 list_streams displaced cleanly. Tool count 43 -> 45; tests 335 -> 358; zero regressions. ROADMAP SC2 provably met.
 
-**Next action**: Execute `02-05-PLAN.md` (Phase 2 polish — schema-parity enrichment + snapshot fixtures). Schema-parity now covers all 8 Phase-2 mutating tools (list_index_sets, get_index_set, await_system_job, create_index_set, update_index_set, delete_index_set, set_default_index_set, cycle_deflector) — Plan 02-05's remaining work is snapshot fixtures for the cross-cutting amendments (confirmationToken context, await_system_job dry-run plan, info_substring discovery envelope, cycle deflector sync envelope with side_effects, set_default eligibility refusal envelope). The minimal schema shapes and deterministic envelopes for Plan 02-04's two new tools make them trivial to snapshot. After Plan 02-05 completes Phase 2 ships at 100% (16/16 milestone plans).
+**Next action**: Execute `03-02-PLAN.md` (create_stream + update_stream — STREAM-03 + STREAM-04). Plan 02 consumes STRICT_NO_ECHO from 03-U1-SMOKE.md for update_stream; appends CreateStreamSchema + UpdateStreamSchema (D-10 index_set_id REQUIRED, no default) + StartStreamSchema + PauseStreamSchema + the 8-variant StreamRuleSchema discriminated union + STREAM_RULE_TYPE_TO_NUMERIC frozen map to src/tools/streams/schemas.js. `findExistingMatches` streams envelope already shipped at src/tools/_shared/conflict.js:31 — Plan 02 wires D-05 + D-06 three-bucket existingMatches without amending the helper.
 
 ---
 *State initialized: 2026-05-13*
