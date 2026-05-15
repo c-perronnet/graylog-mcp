@@ -393,7 +393,7 @@ test("dispatch resolves list_pipelines/get_pipeline/delete_pipeline via the new 
     assert.ok(Array.isArray(payload.items));
 });
 
-test("assertAllToolsRegistered passes after Plan 05-01 S5 displacement (count = 66; v2.3 list_event_* removed)", async () => {
+test("assertAllToolsRegistered passes after Plan 05-02 Task 1 (count = 68; list_event_definitions + get_event_definition added)", async () => {
     const { dispatch, assertAllToolsRegistered } = await import("../src/dispatch.js");
     await import("../src/tools/_register.js");
     const { toolDefinitions } = await import("../src/tools.js");
@@ -407,11 +407,12 @@ test("assertAllToolsRegistered passes after Plan 05-01 S5 displacement (count = 
     // removes the v2.3 list_event_definitions + list_event_notifications
     // entries from tools.js (their handlers stay exported in handlers.js
     // for HARD-03 audit but are no longer wired in dispatch); count drops
-    // to 66 temporarily. Plan 05-02 re-adds list_event_definitions (→ 67);
-    // Plan 05-04 re-adds list_event_notifications + 3 more (→ 71); Plan
-    // 05-02 + 05-03 + 05-04 collectively ship 11 net-new tools by end of
-    // Phase 5 (final phase-end count: 77).
-    assert.equal(toolDefinitions.length, 66, `Expected 66 tools after Plan 05-01 S5 displacement; got ${toolDefinitions.length}`);
+    // to 66 temporarily. Plan 05-02 Task 1 re-adds list_event_definitions
+    // and adds get_event_definition (→ 68); Task 2 adds create (→ 69);
+    // Task 3 adds update (→ 70). Plan 05-04 re-adds list_event_notifications
+    // + 3 more (→ 74? -- in fact 73→77); collectively Phase 5 ships 11
+    // net-new tools by end (phase-end count: 77).
+    assert.equal(toolDefinitions.length, 68, `Expected 68 tools after Plan 05-02 Task 1; got ${toolDefinitions.length}`);
 });
 
 // =====================================================================

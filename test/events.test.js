@@ -457,3 +457,209 @@ test("events/index.js loads as a no-op side-effect barrel (Plan 05-01 stub)", as
     void origRegister;
     void seen;
 });
+
+// =====================================================================
+// Plan 05-02 Task 1 — list_event_definitions + get_event_definition tests
+// =====================================================================
+//
+// Routes per-test capture functions (multiCapture-style) through
+// _setCaptureRequest. Build()-level fetches (GET paginated list for
+// list_event_definitions, GET /api/events/definitions/{id} for
+// get_event_definition) fire as real requests against the mocked client.
+
+import { test as test_p2, beforeEach as beforeEach_p2, afterEach as afterEach_p2 } from "node:test";
+import {
+    _setCaptureRequest as _setCaptureRequest_p2,
+    _clearCaptureRequest as _clearCaptureRequest_p2,
+} from "../src/graylog/client.js";
+import { setActiveConnection as setActiveConnection_p2 } from "../src/config.js";
+import { GraylogNotFoundError as GraylogNotFoundError_p2 } from "../src/graylog/errors.js";
+
+beforeEach_p2(() => {
+    setActiveConnection_p2(null);
+});
+afterEach_p2(() => {
+    _clearCaptureRequest_p2();
+    setActiveConnection_p2(null);
+});
+
+function eventsMultiCapture_p2(routes) {
+    return (req) => {
+        for (const r of routes) {
+            const matches = typeof r.pathPattern === "string"
+                ? req.path === r.pathPattern
+                : r.pathPattern.test(req.path);
+            if (req.method === r.method && matches) {
+                return typeof r.response === "function" ? r.response(req) : r.response;
+            }
+        }
+        throw new Error(`No route matched ${req.method} ${req.path}`);
+    };
+}
+
+// ---------- list_event_definitions tests ----------
+
+test_p2("list_event_definitions HAPPY — projects 6 default keys per element from paginated envelope", async () => {
+    const { handleListEventDefinitions } = await import("../src/tools/events/list-event-definitions.js");
+    _setCaptureRequest_p2(() => ({
+        elements: [
+            { id: "1", title: "Spike Alert", description: "spike", priority: 2, state: "ENABLED", alert: true, scheduler: { is_scheduled: true } },
+            { id: "2", title: "Quota Alert", description: "quota", priority: 3, state: "DISABLED", alert: false, scheduler: { is_scheduled: false } },
+        ],
+        total: 2,
+    }));
+    const res = await handleListEventDefinitions({
+        params: { arguments: { _testConnection: "fake" } },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.tool, "list_event_definitions");
+    assert.equal(payload.count, 2);
+    assert.deepEqual(payload.fields, ["id", "title", "description", "priority", "state", "alert"]);
+    // Each item is the narrow projection — no `scheduler` field.
+    assert.deepEqual(
+        Object.keys(payload.items[0]).sort(),
+        ["alert", "description", "id", "priority", "state", "title"],
+    );
+    assert.equal(payload.items[0].scheduler, undefined);
+});
+
+test_p2("list_event_definitions URL — bare paginated path with default page/per_page (no extra query params)", async () => {
+    const { handleListEventDefinitions } = await import("../src/tools/events/list-event-definitions.js");
+    let captured = null;
+    _setCaptureRequest_p2((req) => {
+        captured = req;
+        return { elements: [], total: 0 };
+    });
+    await handleListEventDefinitions({
+        params: { arguments: { _testConnection: "fake" } },
+    });
+    assert.equal(captured.method, "GET");
+    assert.equal(captured.path, "/api/events/definitions/paginated?page=1&per_page=25");
+});
+
+test_p2("list_event_definitions URL — appends query/sort/order params when set", async () => {
+    const { handleListEventDefinitions } = await import("../src/tools/events/list-event-definitions.js");
+    let captured = null;
+    _setCaptureRequest_p2((req) => {
+        captured = req;
+        return { elements: [], total: 0 };
+    });
+    await handleListEventDefinitions({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                query: "title:Alert",
+                sort: "priority",
+                order: "desc",
+            },
+        },
+    });
+    assert.equal(captured.path,
+        "/api/events/definitions/paginated?page=1&per_page=25&query=title%3AAlert&sort=priority&order=desc");
+});
+
+test_p2("list_event_definitions fields:'all' bypasses the narrow projection", async () => {
+    const { handleListEventDefinitions } = await import("../src/tools/events/list-event-definitions.js");
+    _setCaptureRequest_p2(() => ({
+        elements: [{ id: "1", title: "X", description: "y", priority: 2, state: "ENABLED", alert: true, scheduler: { is_scheduled: false } }],
+        total: 1,
+    }));
+    const res = await handleListEventDefinitions({
+        params: { arguments: { _testConnection: "fake", fields: "all" } },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    // fields:"all" → full item shape including scheduler
+    assert.equal(payload.items[0].scheduler.is_scheduled, false);
+});
+
+// ---------- get_event_definition tests ----------
+
+test_p2("get_event_definition HAPPY — emits {tool, connection, definition} envelope verbatim", async () => {
+    const { handleGetEventDefinition } = await import("../src/tools/events/get-event-definition.js");
+    const FULL_DTO = {
+        id: "abc",
+        title: "Spike Alert",
+        description: "spike alert def",
+        priority: 2,
+        alert: true,
+        config: { type: "aggregation-v1" },
+        field_spec: {},
+        key_spec: [],
+        notification_settings: { grace_period_ms: 0, backlog_size: 0 },
+        notifications: [{ notification_id: "n1" }],
+        storage: [],
+        state: "ENABLED",
+        // Pitfall 5: scheduler is READ_ONLY — agent reads it via get_event_definition,
+        // never echoes it back on update.
+        scheduler: { is_scheduled: true, next_time: "2026-01-01T00:00:00Z" },
+    };
+    _setCaptureRequest_p2(() => FULL_DTO);
+    const res = await handleGetEventDefinition({
+        params: { arguments: { _testConnection: "fake", definitionId: "abc" } },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.tool, "get_event_definition");
+    assert.deepEqual(payload.definition, FULL_DTO);
+    assert.equal(payload.definition.scheduler.is_scheduled, true);
+    assert.equal(payload.definition.notifications[0].notification_id, "n1");
+});
+
+test_p2("get_event_definition URL — /api/events/definitions/{id}", async () => {
+    const { handleGetEventDefinition } = await import("../src/tools/events/get-event-definition.js");
+    let captured = null;
+    _setCaptureRequest_p2((req) => {
+        captured = req;
+        return { id: "abc", title: "x", config: {} };
+    });
+    await handleGetEventDefinition({
+        params: { arguments: { _testConnection: "fake", definitionId: "abc" } },
+    });
+    assert.equal(captured.method, "GET");
+    assert.equal(captured.path, "/api/events/definitions/abc");
+});
+
+test_p2("get_event_definition 404 → wrapGraylogError envelope (isError:true; tool name embedded)", async () => {
+    const { handleGetEventDefinition } = await import("../src/tools/events/get-event-definition.js");
+    _setCaptureRequest_p2(() => {
+        throw new GraylogNotFoundError_p2("not found", {
+            status: 404,
+            method: "GET",
+            path: "/api/events/definitions/missing",
+            body: null,
+        });
+    });
+    const res = await handleGetEventDefinition({
+        params: { arguments: { _testConnection: "fake", definitionId: "missing" } },
+    });
+    assert.equal(res.isError, true);
+    assert.match(res.content[0].text, /404/);
+    assert.match(res.content[0].text, /get_event_definition/);
+});
+
+test_p2("get_event_definition rejects empty definitionId via schema", async () => {
+    const { handleGetEventDefinition } = await import("../src/tools/events/get-event-definition.js");
+    const res = await handleGetEventDefinition({
+        params: { arguments: { _testConnection: "fake", definitionId: "" } },
+    });
+    assert.equal(res.isError, true);
+    assert.match(res.content[0].text, /definitionId/);
+});
+
+// ---------- dispatch + tool-count ----------
+
+test_p2("dispatch resolves list_event_definitions + get_event_definition after Plan 05-02 Task 1 registration", async () => {
+    const { _clearForTests } = await import("../src/dispatch.js");
+    _clearForTests();
+    const { dispatch } = await import("../src/dispatch.js");
+    await import("../src/tools/_register.js");
+    _setCaptureRequest_p2(() => ({ elements: [], total: 0 }));
+    const res = await dispatch({
+        params: {
+            name: "list_event_definitions",
+            arguments: { _testConnection: "fake" },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.tool, "list_event_definitions");
+    assert.equal(Array.isArray(payload.items), true);
+});
