@@ -110,3 +110,34 @@ test("_clearForTests empties the registry", async () => {
         /Tool not found: temp/
     );
 });
+
+// =====================================================================
+// FOUND-07: Snapshot fixtures (Plan 00-06)
+// =====================================================================
+
+// FOUND-07 fixture 9: dispatch — unknown tool error message
+test("snapshot: dispatch unknown tool error message", async (t) => {
+    let errMsg;
+    try {
+        await dispatch({ params: { name: "snapshot_ghost", arguments: {} } });
+    } catch (err) {
+        errMsg = err.message;
+    }
+    t.assert.snapshot({ errorMessage: errMsg });
+});
+
+// FOUND-07 fixture 10: assertAllToolsRegistered — missing-handler error message
+test("snapshot: assertAllToolsRegistered missing-handler error message", (t) => {
+    register("a", async () => ({}));
+    let errMsg;
+    try {
+        assertAllToolsRegistered([
+            { name: "a" },
+            { name: "ghost_x" },
+            { name: "ghost_y" },
+        ]);
+    } catch (err) {
+        errMsg = err.message;
+    }
+    t.assert.snapshot({ errorMessage: errMsg });
+});

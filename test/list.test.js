@@ -144,3 +144,39 @@ test("response envelope includes tool, connection, count, limit, fields, items",
     assert.equal(payload.limit, 25);
     assert.ok(Array.isArray(payload.items));
 });
+
+// =====================================================================
+// FOUND-07: Snapshot fixtures (Plan 00-06)
+// =====================================================================
+
+// FOUND-07 fixture 5: defineListHandler — default projection
+test("snapshot: defineListHandler default projection [id, title, description]", async (t) => {
+    const handler = fixtureList([
+        { id: "S1", title: "Stream 1", description: "first", extra: "a" },
+        { id: "S2", title: "Stream 2", description: "second", extra: "b" },
+    ]);
+    const res = await handler({
+        params: { arguments: { _testConnection: "fixture_conn" } },
+    });
+    t.assert.snapshot(JSON.parse(res.content[0].text));
+});
+
+// FOUND-07 fixture 6: defineListHandler — fields: "all" returns full items
+test("snapshot: defineListHandler fields: 'all' returns unprojected items", async (t) => {
+    const handler = fixtureList([
+        { id: "S1", title: "Stream 1", description: "first", extra: "a" },
+    ]);
+    const res = await handler({
+        params: { arguments: { _testConnection: "fixture_conn", fields: "all" } },
+    });
+    t.assert.snapshot(JSON.parse(res.content[0].text));
+});
+
+// FOUND-07 fixture 7: defineListHandler — limit clamped to MAX_LIMIT
+test("snapshot: defineListHandler limit clamped to MAX_LIMIT", async (t) => {
+    const handler = fixtureList([{ id: "S1", title: "T", description: "d" }]);
+    const res = await handler({
+        params: { arguments: { _testConnection: "fixture_conn", limit: 5000 } },
+    });
+    t.assert.snapshot(JSON.parse(res.content[0].text));
+});

@@ -256,3 +256,75 @@ test("summarize callback surfaces in dry-run preview", async () => {
     const payload = JSON.parse(res.content[0].text);
     assert.equal(payload.summary, `Create stream "Errors"`);
 });
+
+// =====================================================================
+// FOUND-07: Snapshot fixtures (Plan 00-06)
+// =====================================================================
+//
+// These tests assert byte-comparable shapes of the wrapper's emitted
+// payloads. Each fixture uses static, deterministic args — no Date.now(),
+// no random — so the resulting `.snapshot` files are stable across runs
+// and developer machines. Run twice in succession + md5sum to verify.
+
+// FOUND-07 fixture 1: defineMutatingHandler — happy dry-run path
+test("snapshot: defineMutatingHandler dry-run happy path", async (t) => {
+    const handler = fixtureHandler();
+    const res = await handler({
+        params: {
+            arguments: {
+                title: "Snapshot fixture stream",
+                _testConnection: "fixture_conn",
+            },
+        },
+    });
+    t.assert.snapshot(JSON.parse(res.content[0].text));
+});
+
+// FOUND-07 fixture 2: defineMutatingHandler — zod validation failure
+test("snapshot: defineMutatingHandler zod-validation-failure", async (t) => {
+    const handler = fixtureHandler();
+    const res = await handler({
+        params: { arguments: { title: "", _testConnection: "fixture_conn" } },
+    });
+    t.assert.snapshot({
+        isError: res.isError,
+        contentType: res.content[0].type,
+        text: res.content[0].text,
+    });
+});
+
+// FOUND-07 fixture 3: defineMutatingHandler — writable=false short-circuit
+test("snapshot: defineMutatingHandler writable=false short-circuit", async (t) => {
+    _setConnectionsForTests({
+        readonly_fixture: { baseUrl: "_test", apiToken: "_test", writable: false },
+    });
+    try {
+        const handler = fixtureHandler();
+        const res = await handler({
+            params: { arguments: { title: "T", connectionName: "readonly_fixture" } },
+        });
+        t.assert.snapshot({
+            isError: res.isError,
+            reason: res.reason,
+            contentText: res.content[0].text,
+        });
+    } finally {
+        _clearConnectionsForTests();
+    }
+});
+
+// FOUND-07 fixture 4: defineMutatingHandler — idempotency-key determinism
+test("snapshot: defineMutatingHandler idempotency-key is deterministic", async (t) => {
+    const handler = fixtureHandler();
+    const res1 = await handler({
+        params: { arguments: { title: "Deterministic T", _testConnection: "fixture_conn" } },
+    });
+    const res2 = await handler({
+        params: { arguments: { title: "Deterministic T", _testConnection: "fixture_conn" } },
+    });
+    const k1 = JSON.parse(res1.content[0].text).idempotencyKey;
+    const k2 = JSON.parse(res2.content[0].text).idempotencyKey;
+    // Snapshot ONLY the idempotency key and the fact that it matched.
+    // Full payload is already covered by fixture 1.
+    t.assert.snapshot({ idempotencyKey: k1, matched: k1 === k2 });
+});

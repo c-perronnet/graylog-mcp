@@ -57,3 +57,19 @@ test("normalize.toIdBody — tries candidates in order; first match wins", () =>
     assert.equal(result.id, "R1");
     assert.deepEqual(result.body, response);
 });
+
+// =====================================================================
+// FOUND-07: Snapshot fixtures (Plan 00-06)
+// =====================================================================
+
+// FOUND-07 fixture 8: toIdBody across 3 Graylog create-response shape variants
+test("snapshot: toIdBody across 3 Graylog create-response shapes", (t) => {
+    const stream_response = toIdBody({ stream_id: "S1" }, { idFields: ["stream_id"] });
+    const input_response = toIdBody({ id: "I1", title: "input1" }, undefined);
+    const extractor_response = toIdBody({ extractor_id: "E1" }, { idFields: ["extractor_id"] });
+    t.assert.snapshot({
+        stream_response,
+        input_response,
+        extractor_response,
+    });
+});
