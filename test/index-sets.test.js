@@ -1626,3 +1626,207 @@ test("set_default_index_set propagates 404 from the pre-flight GET as a clean MC
     assert.equal(res.isError, true);
     assert.match(res.content[0].text, /Index set not found|404/i);
 });
+
+// =====================================================================
+// Plan 02-04 — Task 2: cycle_deflector handler (INDEX-07)
+// =====================================================================
+//
+// UPDATED D-14 (SYNC_OPTION_A per 02-U1-SMOKE.md) + ND3:
+//
+// cycle_deflector pre-flights GET on the index set and refuses if
+// current.writable === false (ND3 — DeflectorResource.checkCycle throws 400
+// if !indexSet.getConfig().isWritable()). The cycle itself is SYNCHRONOUS
+// in Graylog 7.0.6 — DeflectorResource.cycle calls indexSet.cycle() directly
+// on the JVM thread, NOT via systemJobManager.submit. No system_job_id is
+// returned.
+//
+// Side effect: closed-index range rebuild kicks off as a separate system job
+// observable via /system/jobs. The apply envelope deliberately surfaces this
+// via side_effects.observable_at so the agent can call await_system_job with
+// info_substring on the indexSetId if it cares about the secondary work.
+//
+//   1: CycleDeflectorSchema parses { indexSetId } -> success; required
+//   2: writable index set — dry-run preview with method:POST + side_effects + async:false
+//   3: non-writable (writable:false) — isError reason non_writable_index_set; POST NOT fired
+//   4: apply path — fires POST; returns { rotated:true, message, side_effects }
+//   5: pre-flight GET 404 propagates as MCP error envelope
+
+import { handleCycleDeflector } from "../src/tools/index-sets/cycle-deflector.js";
+import { CycleDeflectorSchema } from "../src/tools/index-sets/schemas.js";
+
+const WRITABLE_INDEX_SET = {
+    id: "iset-app",
+    title: "App errors",
+    description: "App-errors index set — writable",
+    default: false,
+    writable: true,
+    can_be_default: true,
+    index_prefix: "app_errors",
+};
+
+const NON_WRITABLE_INDEX_SET = {
+    id: "iset-archive",
+    title: "Archive Read Only",
+    description: "Archived index set — writable:false",
+    default: false,
+    writable: false, // ND3 fires
+    can_be_default: false,
+    index_prefix: "archive",
+};
+
+// -------- Task 2 Test 1: CycleDeflectorSchema parse contract --------
+
+test("CycleDeflectorSchema parses { indexSetId } and rejects missing indexSetId", () => {
+    const ok = CycleDeflectorSchema.safeParse({ indexSetId: "iset-app" });
+    assert.equal(ok.success, true);
+    assert.equal(ok.data.indexSetId, "iset-app");
+    const bad = CycleDeflectorSchema.safeParse({});
+    assert.equal(bad.success, false);
+});
+
+// -------- Task 2 Test 2: writable index set dry-run preview (UPDATED D-14 sync) --------
+
+test("cycle_deflector against a writable index set emits the POST dry-run preview with UPDATED D-14 sync semantics + side_effects.observable_at", async () => {
+    let postCallCount = 0;
+    _setCaptureRequest((req) => {
+        if (req.method === "POST") {
+            postCallCount += 1;
+            throw new Error(`POST must NOT fire on dry-run; got ${req.path}`);
+        }
+        if (req.method === "GET" && req.path === "/api/system/indices/index_sets/iset-app") {
+            return WRITABLE_INDEX_SET;
+        }
+        throw new Error(`unexpected req: ${req.method} ${req.path}`);
+    });
+    const res = await handleCycleDeflector({
+        params: {
+            arguments: {
+                indexSetId: "iset-app",
+                _testConnection: "fake",
+            },
+        },
+    });
+    assert.notEqual(res.isError, true, `expected success, got: ${res.content?.[0]?.text}`);
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.dryRun, true);
+    assert.equal(payload.preview.method, "POST");
+    assert.equal(payload.preview.path, "/api/system/deflector/iset-app/cycle");
+    assert.equal(payload.preview.body, undefined, "cycle POST carries no body");
+    // postApplyEstimate per UPDATED D-14 — synchronous + side_effects envelope.
+    assert.equal(payload.postApplyEstimate.id, "iset-app");
+    assert.equal(payload.postApplyEstimate.async, false, "UPDATED D-14: cycle is SYNCHRONOUS — async:false");
+    assert.equal(payload.postApplyEstimate.rotated, true);
+    assert.ok(
+        typeof payload.postApplyEstimate.message === "string" &&
+        (payload.postApplyEstimate.message.includes("Cycled index set") ||
+         payload.postApplyEstimate.message.includes("closed previous active index")),
+        `expected sync-rotation message; got: ${payload.postApplyEstimate.message}`,
+    );
+    assert.equal(payload.postApplyEstimate.side_effects.observable_at, "/system/jobs");
+    assert.ok(
+        typeof payload.postApplyEstimate.side_effects.describes === "string" &&
+        (payload.postApplyEstimate.side_effects.describes.includes("range rebuild") ||
+         payload.postApplyEstimate.side_effects.describes.includes("IndexRangesUpdateJob")),
+        `side_effects.describes must name the range rebuild; got: ${payload.postApplyEstimate.side_effects.describes}`,
+    );
+    assert.equal(postCallCount, 0, "POST MUST NOT fire on dry-run");
+});
+
+// -------- Task 2 Test 3: non-writable refused with reason non_writable_index_set (ND3) --------
+
+test("cycle_deflector against a non-writable index set is refused with reason non_writable_index_set — POST never fires (ND3)", async () => {
+    let postCallCount = 0;
+    _setCaptureRequest((req) => {
+        if (req.method === "POST") {
+            postCallCount += 1;
+            return null;
+        }
+        if (req.method === "GET" && req.path === "/api/system/indices/index_sets/iset-archive") {
+            return NON_WRITABLE_INDEX_SET;
+        }
+        throw new Error(`unexpected req: ${req.method} ${req.path}`);
+    });
+    const res = await handleCycleDeflector({
+        params: {
+            arguments: {
+                indexSetId: "iset-archive",
+                _testConnection: "fake",
+            },
+        },
+    });
+    assert.equal(res.isError, true);
+    assert.match(res.content[0].text, /non_writable_index_set/);
+    assert.match(res.content[0].text, /Archive Read Only/);
+    assert.equal(res.reason, "non_writable_index_set");
+    assert.equal(postCallCount, 0, "POST MUST NOT fire when wrapper-side ND3 check refuses");
+});
+
+// -------- Task 2 Test 4: apply path fires POST + returns sync envelope --------
+
+test("cycle_deflector apply with dryRun:false fires POST /cycle and returns the UPDATED D-14 sync envelope { rotated:true, message, side_effects }", async () => {
+    let postPath = null;
+    _setCaptureRequest((req) => {
+        if (req.method === "GET" && req.path === "/api/system/indices/index_sets/iset-app") {
+            return WRITABLE_INDEX_SET;
+        }
+        if (req.method === "POST" && req.path === "/api/system/deflector/iset-app/cycle") {
+            postPath = req.path;
+            return null; // 204 no body — Graylog DeflectorResource.cycle is void
+        }
+        throw new Error(`unexpected req: ${req.method} ${req.path}`);
+    });
+    const res = await handleCycleDeflector({
+        params: {
+            arguments: {
+                indexSetId: "iset-app",
+                dryRun: false,
+                _testConnection: "fake",
+            },
+        },
+    });
+    assert.notEqual(res.isError, true, `expected success, got: ${res.content?.[0]?.text}`);
+    assert.equal(postPath, "/api/system/deflector/iset-app/cycle");
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.applied, true);
+    // UPDATED D-14 apply envelope: rotated:true, message, side_effects (NO async wrapping, NO job_id).
+    const body = payload.result.body;
+    assert.equal(body.rotated, true);
+    assert.ok(
+        typeof body.message === "string" && body.message.includes("iset-app"),
+        `apply message must include indexSetId; got: ${body.message}`,
+    );
+    assert.equal(body.side_effects.observable_at, "/system/jobs");
+    assert.ok(
+        typeof body.side_effects.describes === "string" &&
+        body.side_effects.describes.length > 0,
+        "apply must carry side_effects.describes",
+    );
+    // Critical: no D-15-style async wrapping on the apply envelope.
+    assert.equal(body.async, undefined, "UPDATED D-14 sync envelope: no async:true wrapping");
+    assert.equal(body.job_id, undefined, "no job_id — cycle is synchronous");
+});
+
+// -------- Task 2 Test 5: pre-flight GET 404 propagates as MCP error --------
+
+test("cycle_deflector propagates 404 from the pre-flight GET as a clean MCP error envelope", async () => {
+    _setCaptureRequest((req) => {
+        if (req.method === "GET") {
+            throw new GraylogNotFoundError("Index set not found", {
+                status: 404,
+                method: "GET",
+                path: req.path,
+            });
+        }
+        throw new Error(`unexpected req: ${req.method} ${req.path}`);
+    });
+    const res = await handleCycleDeflector({
+        params: {
+            arguments: {
+                indexSetId: "missing",
+                _testConnection: "fake",
+            },
+        },
+    });
+    assert.equal(res.isError, true);
+    assert.match(res.content[0].text, /Index set not found|404/i);
+});
