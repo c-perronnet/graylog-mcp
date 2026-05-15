@@ -763,4 +763,78 @@ export const toolDefinitions = [
             required: ["inputId"],
         },
     },
+    // ----- Phase 1 extractor CRUD (INPUT-08, INPUT-09, INPUT-10, INPUT-11) -----
+    {
+        name: "list_extractors",
+        description: "List extractors configured for one Graylog input. Default narrow projection [id, title, description]; pass fields:'all' for full extractor DTOs (extractor_type, source_field, target_field, extractor_config, condition_*, order, ...). Required arg: inputId.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                connectionName: { type: "string", description: "Optional per-call connection override" },
+                inputId: { type: "string", description: "The Graylog input ID whose extractors to list" },
+                limit: { type: "number", description: "Max items to return. Default 25, max 200." },
+                fields: { description: "Field projection: 'all' for full DTOs, array of field names for custom projection. Default narrow [id, title, description]." },
+            },
+            required: ["inputId"],
+        },
+    },
+    {
+        name: "create_extractor",
+        description: "Create an extractor on a Graylog input. Supported extractor_type values (all 8 Graylog 7.0.6 primitives — D-07): grok, regex, regex_replace, split_and_index, substring, copy_input, json, lookup_table. Each type has a strict extractor_config shape (grok: {grok_pattern, named_captures_only?}; regex: {regex_value}; regex_replace: {regex, replacement, replace_all?}; split_and_index: {split_by, index}; substring: {begin_index, end_index}; copy_input: {}; json: {list_separator?, key_separator?, kv_separator?, key_prefix?, key_whitespace_replacement?, replace_key_whitespace?, flatten?}; lookup_table: {lookup_table_name}). IMPORTANT: there is NO 'key_value' extractor primitive in Graylog 7.0.6 — for key-value flattening, use extractor_type='json' with extractor_config={kv_separator: '=', key_separator: ',', flatten: true} (or your chosen separators). postApplyEstimate.id is __SERVER_ASSIGNED__ — DO NOT reuse it; use the real id from the apply response.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                connectionName: { type: "string", description: "Optional per-call connection override" },
+                dryRun: { type: "boolean", description: "Default true. Set to false to apply." },
+                idempotencyKey: { type: "string", description: "Optional agent-supplied idempotency key" },
+                inputId: { type: "string", description: "The Graylog input ID to attach the extractor to" },
+                title: { type: "string", description: "Human-readable extractor title" },
+                source_field: { type: "string", description: "Field to extract FROM (typically 'message')" },
+                target_field: { type: "string", description: "Field to write the extracted value INTO" },
+                extractor_type: {
+                    type: "string",
+                    enum: ["grok", "regex", "regex_replace", "split_and_index", "substring", "copy_input", "json", "lookup_table"],
+                    description: "One of the 8 Graylog 7.0.6 extractor primitives (D-07). NO 'key_value' — use 'json' with kv_separator + flatten:true for key-value flattening",
+                },
+                extractor_config: { type: "object", description: "Type-specific configuration (validated per extractor_type)" },
+                cursor_strategy: { type: "string", enum: ["copy", "cut"], description: "Whether to copy or cut the matched value from source_field. Default 'copy'." },
+                converters: { type: "array", description: "Optional list of { type, config } converter pairs applied after extraction" },
+                condition_type: { type: "string", enum: ["none", "string", "regex"], description: "Optional pre-extract condition. Default 'none'." },
+                condition_value: { type: "string", description: "Condition value when condition_type is 'string' or 'regex'" },
+                order: { type: "number", description: "Execution order among the input's extractors (default 0)" },
+            },
+            required: ["inputId", "title", "source_field", "target_field", "extractor_type", "extractor_config"],
+        },
+    },
+    {
+        name: "update_extractor",
+        description: "Partial-update an extractor — the wrapper fetches the current extractor state and merges your `changes` onto it. extractor_type is IMMUTABLE on update (delete + recreate to switch types). Schema: { inputId, extractorId, changes: { title?, source_field?, target_field?, extractor_config?, cursor_strategy?, converters?, condition_type?, condition_value?, order? } }. Reuses the partial-update pattern from update_input (D-09); extractors carry no encrypted fields so the strict no-echo wire-build from update_input is not needed here.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                connectionName: { type: "string", description: "Optional per-call connection override" },
+                dryRun: { type: "boolean", description: "Default true. Set to false to apply." },
+                idempotencyKey: { type: "string", description: "Optional agent-supplied idempotency key" },
+                inputId: { type: "string", description: "The Graylog input ID owning the extractor" },
+                extractorId: { type: "string", description: "The Graylog extractor ID to update" },
+                changes: { type: "object", description: "Partial-update subset: { title?, source_field?, target_field?, extractor_config?, cursor_strategy?, converters?, condition_type?, condition_value?, order? }" },
+            },
+            required: ["inputId", "extractorId", "changes"],
+        },
+    },
+    {
+        name: "delete_extractor",
+        description: "Delete one extractor from one input. Single-target — NO cascade enumeration (extractors carry no child resources, per D-09). To delete every extractor on an input, list them with list_extractors and delete each one. To delete an extractor AND the input that owns it, call delete_input instead — delete_input cascade-removes its extractors automatically.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                connectionName: { type: "string", description: "Optional per-call connection override" },
+                dryRun: { type: "boolean", description: "Default true. Set to false to apply." },
+                idempotencyKey: { type: "string", description: "Optional agent-supplied idempotency key" },
+                inputId: { type: "string", description: "The Graylog input ID owning the extractor" },
+                extractorId: { type: "string", description: "The Graylog extractor ID to delete" },
+            },
+            required: ["inputId", "extractorId"],
+        },
+    },
 ];

@@ -12,6 +12,10 @@ import { handleUpdateInput } from "./update-input.js";
 import { handleDeleteInput } from "./delete-input.js";
 import { handleStartInput } from "./start-input.js";
 import { handleStopInput } from "./stop-input.js";
+import { handleListExtractors } from "./list-extractors.js";
+import { handleCreateExtractor } from "./create-extractor.js";
+import { handleUpdateExtractor } from "./update-extractor.js";
+import { handleDeleteExtractor } from "./delete-extractor.js";
 
 register("list_input_types", handleListInputTypes);
 register("list_inputs", handleListInputs);
@@ -21,3 +25,7 @@ register("update_input", handleUpdateInput);
 register("delete_input", handleDeleteInput);
 register("start_input", handleStartInput);
 register("stop_input", handleStopInput);
+register("list_extractors", handleListExtractors);
+register("create_extractor", handleCreateExtractor);
+register("update_extractor", handleUpdateExtractor);
+register("delete_extractor", handleDeleteExtractor);

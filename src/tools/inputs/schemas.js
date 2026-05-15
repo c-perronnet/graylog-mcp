@@ -190,3 +190,174 @@ export const StartInputSchema = mutatingBase.extend({
 export const StopInputSchema = mutatingBase.extend({
     inputId: z.string().min(1, "inputId is required"),
 });
+
+// =====================================================================
+// INPUT-08 / INPUT-09 / INPUT-10 / INPUT-11 — Plan 01-04 extractor schemas
+// =====================================================================
+//
+// D-07 reconfirmation: strict zod schemas for all 8 Graylog 7.0.6 primitive
+// extractor types — grok, regex, regex_replace, split_and_index, substring,
+// copy_input, json, lookup_table. The original 01-CONTEXT.md draft listed
+// "key-value" as a separate primitive; the live Graylog 7.0.6 Extractor.Type
+// enum has no such entry — agents wanting key-value flattening configure the
+// `json` extractor with kv_separator + key_separator + flatten:true (see the
+// note above ExtractorConfigJson below; also documented in the
+// create_extractor tool description in src/tools.js).
+//
+// Per-type extractor_config shapes verified against:
+//   source-code/.../inputs/extractors/{Grok,Regex,RegexReplace,
+//   SplitAndIndex,Substring,CopyInput,Json,LookupTable}Extractor.java
+// See 01-RESEARCH.md §"Extractor JSON Shapes" Example 5 lines 548-559.
+
+const ExtractorConfigGrok = z.object({
+    grok_pattern: z.string().min(1, "grok_pattern is required"),
+    named_captures_only: z.boolean().optional(),
+});
+
+const ExtractorConfigRegex = z.object({
+    regex_value: z.string().min(1, "regex_value is required"),
+});
+
+const ExtractorConfigRegexReplace = z.object({
+    regex: z.string().min(1, "regex is required"),
+    replacement: z.string(),
+    replace_all: z.boolean().optional(),
+});
+
+const ExtractorConfigSplitAndIndex = z.object({
+    split_by: z.string().min(1, "split_by is required"),
+    index: z.number().int(),
+});
+
+const ExtractorConfigSubstring = z.object({
+    begin_index: z.number().int().min(0),
+    end_index: z.number().int().min(0),
+});
+
+// copy_input takes no per-type config; the empty object is the canonical shape.
+const ExtractorConfigCopyInput = z.object({}).strict();
+
+// NOTE (D-07 reconfirmation): the "key-value" name from the original
+// CONTEXT.md draft is NOT a separate Graylog primitive. Agents wanting
+// key-value flattening configure THIS `json` extractor with kv_separator
+// + key_separator + flatten:true. See 01-04-PLAN.md BLOCKER #4 narrative
+// and 01-RESEARCH.md §"Extractor JSON Shapes" Example 5 line 558.
+const ExtractorConfigJson = z.object({
+    list_separator: z.string().optional(),
+    key_separator: z.string().optional(),
+    kv_separator: z.string().optional(),
+    key_prefix: z.string().optional(),
+    key_whitespace_replacement: z.string().optional(),
+    replace_key_whitespace: z.boolean().optional(),
+    flatten: z.boolean().optional(),
+});
+
+const ExtractorConfigLookupTable = z.object({
+    lookup_table_name: z.string().min(1, "lookup_table_name is required"),
+});
+
+// Map keyed by extractor_type — drives the superRefine dispatch on
+// CreateExtractorSchema. Adding a new strict variant (if Graylog adds a 9th
+// primitive in a future version) is a one-line registration here.
+const EXTRACTOR_TYPE_TO_CONFIG = {
+    grok: ExtractorConfigGrok,
+    regex: ExtractorConfigRegex,
+    regex_replace: ExtractorConfigRegexReplace,
+    split_and_index: ExtractorConfigSplitAndIndex,
+    substring: ExtractorConfigSubstring,
+    copy_input: ExtractorConfigCopyInput,
+    json: ExtractorConfigJson,
+    lookup_table: ExtractorConfigLookupTable,
+};
+
+// Closed enum — zod's z.enum rejects "key_value", "bogus_type", and any other
+// non-Graylog primitive at parse time before the wrapper even touches build().
+const ExtractorTypeEnum = z.enum([
+    "grok",
+    "regex",
+    "regex_replace",
+    "split_and_index",
+    "substring",
+    "copy_input",
+    "json",
+    "lookup_table",
+]);
+
+// INPUT-08: list_extractors — per-input GET. inputId is required (path
+// segment); the schema also extends listBase via field-merging so the
+// standard `connectionName / limit / fields` projection knobs are honored.
+export const ListExtractorsSchema = listBase.extend({
+    inputId: z.string().min(1, "inputId is required"),
+});
+
+// INPUT-09: create_extractor. Top-level structure mirrors Graylog's
+// CreateExtractorRequest envelope (RESEARCH.md §Example 5 lines 532-545):
+//   { title, cursor_strategy, source_field, target_field,
+//     extractor_type, extractor_config, converters?, condition_type,
+//     condition_value, order }
+//
+// The base shape accepts a generic extractor_config record; the superRefine
+// dispatches to the strict per-type variant. Errors from the variant
+// validation are re-pathed under "extractor_config.*" so the agent sees a
+// single error tree (same pattern as CreateInputSchema's superRefine for
+// per-FQCN configuration variants — Plan 02 §"variant-map dispatch").
+export const CreateExtractorSchema = mutatingBase.extend({
+    inputId: z.string().min(1, "inputId is required"),
+    title: z.string().min(1, "title is required"),
+    source_field: z.string().min(1, "source_field is required"),
+    target_field: z.string().min(1, "target_field is required"),
+    extractor_type: ExtractorTypeEnum,
+    extractor_config: z.record(z.unknown()),
+    cursor_strategy: z.enum(["copy", "cut"]).default("copy"),
+    converters: z.array(z.object({
+        type: z.string(),
+        config: z.record(z.unknown()).optional(),
+    })).optional(),
+    condition_type: z.enum(["none", "string", "regex"]).default("none"),
+    condition_value: z.string().default(""),
+    order: z.number().int().min(0).default(0),
+}).superRefine((args, ctx) => {
+    const strict = EXTRACTOR_TYPE_TO_CONFIG[args.extractor_type];
+    if (!strict) return; // Defensive — ExtractorTypeEnum should already gate.
+    const result = strict.safeParse(args.extractor_config);
+    if (!result.success) {
+        for (const issue of result.error.issues) {
+            ctx.addIssue({ ...issue, path: ["extractor_config", ...issue.path] });
+        }
+    }
+});
+
+// INPUT-10: update_extractor. D-09 partial-update — same shape as
+// UpdateInputSchema (BFL { inputId, extractorId, changes: {...} }).
+// extractor_type is immutable on update (Graylog rejects type changes); the
+// agent must delete + recreate to switch types. extractor_config IS in the
+// changes set because mutating the config in-place is a common operation
+// (e.g. tweaking a grok pattern).
+export const UpdateExtractorSchema = mutatingBase.extend({
+    inputId: z.string().min(1, "inputId is required"),
+    extractorId: z.string().min(1, "extractorId is required"),
+    changes: z.object({
+        title: z.string().optional(),
+        source_field: z.string().optional(),
+        target_field: z.string().optional(),
+        extractor_config: z.record(z.unknown()).optional(),
+        cursor_strategy: z.enum(["copy", "cut"]).optional(),
+        converters: z.array(z.object({
+            type: z.string(),
+            config: z.record(z.unknown()).optional(),
+        })).optional(),
+        condition_type: z.enum(["none", "string", "regex"]).optional(),
+        condition_value: z.string().optional(),
+        order: z.number().int().min(0).optional(),
+    }).refine((c) => Object.keys(c).length > 0, {
+        message: "changes must be non-empty",
+    }),
+});
+
+// INPUT-11: delete_extractor. D-09 single-target — no cascade enumeration
+// (extractors carry no child resources). Compared to delete_input (which
+// pre-flights extractor enumeration), this is structurally simpler.
+export const DeleteExtractorSchema = mutatingBase.extend({
+    inputId: z.string().min(1, "inputId is required"),
+    extractorId: z.string().min(1, "extractorId is required"),
+});
