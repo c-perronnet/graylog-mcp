@@ -301,3 +301,34 @@ test("schema-parity: test_stream_match", async () => {
     const { TestStreamMatchSchema } = await import("../src/tools/streams/schemas.js");
     await assertSchemaParityForTool("test_stream_match", TestStreamMatchSchema);
 });
+
+// ---------------------------------------------------------------------------
+// Plan 04-02 enrichment — 5 new pipeline CRUD tools (PIPE-01..PIPE-05). All five
+// schemas are plain mutatingBase.extend()/listBase/z.object without superRefine
+// wrapping, so .shape is direct; getShape handles them without extra plumbing.
+// ---------------------------------------------------------------------------
+
+test("schema-parity: list_pipelines", async () => {
+    const { ListPipelinesSchema } = await import("../src/tools/pipelines/schemas.js");
+    await assertSchemaParityForTool("list_pipelines", ListPipelinesSchema);
+});
+
+test("schema-parity: get_pipeline", async () => {
+    const { GetPipelineSchema } = await import("../src/tools/pipelines/schemas.js");
+    await assertSchemaParityForTool("get_pipeline", GetPipelineSchema);
+});
+
+test("schema-parity: create_pipeline", async () => {
+    const { CreatePipelineSchema } = await import("../src/tools/pipelines/schemas.js");
+    await assertSchemaParityForTool("create_pipeline", CreatePipelineSchema);
+});
+
+test("schema-parity: update_pipeline", async () => {
+    const { UpdatePipelineSchema } = await import("../src/tools/pipelines/schemas.js");
+    await assertSchemaParityForTool("update_pipeline", UpdatePipelineSchema);
+});
+
+test("schema-parity: delete_pipeline", async () => {
+    const { DeletePipelineSchema } = await import("../src/tools/pipelines/schemas.js");
+    await assertSchemaParityForTool("delete_pipeline", DeletePipelineSchema);
+});
