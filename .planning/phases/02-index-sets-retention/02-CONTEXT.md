@@ -59,7 +59,7 @@ Out of scope: streams (Phase 3), pipelines, dashboards, event definitions, bluep
 
 ### set_default_index_set invariant (INDEX-06, pitfall m2)
 
-- **D-13:** `set_default_index_set` pre-flights `GET /system/indices/index_sets/{id}` and reads the `regular: boolean` field. If `regular: false` (events-style index set), the dry-run returns a structured error with `reason: "non_regular_index_set"` and an explanatory message — the 409 surfaces in dry-run, before any apply. Mitigates pitfall m2.
+- **D-13:** `set_default_index_set` pre-flights `GET /system/indices/index_sets/{id}` and reads the `can_be_default: boolean` field — the server's authoritative "may this be default?" answer (covers the `regular: true` invariant today AND naturally absorbs any future eligibility rules Graylog adds without a wrapper-side update). If `can_be_default: false`, the dry-run returns a structured error with `reason: "default_eligibility_failed"` and a message naming the target index set — the 409 surfaces in dry-run, before any apply. Mitigates pitfall m2. (Updated 2026-05-15 after research surfaced that `IndexSetResponse` exposes both `regular` and the derived `can_be_default`; the user reconfirmed `can_be_default` as the more durable gate.)
 
 ### cycle_deflector behavior (INDEX-07)
 
@@ -67,7 +67,7 @@ Out of scope: streams (Phase 3), pipelines, dashboards, event definitions, bluep
 
 ### Async response shape (m5 mitigation, cross-cutting)
 
-- **D-15:** Every Phase 2 mutating tool that triggers a Graylog system job (today: `delete_index_set` with `deleteIndices: true`) returns a uniform async envelope: `{ async: true, job_id: "<id>", job_id_observable_at: "/system/jobs", message: "<one-line summary>" }`. The HTTP 204 from Graylog does NOT mean the work is done. Tool descriptions warn the agent and point at `await_system_job`. `cycle_deflector` does NOT use this envelope — see D-14 (it's synchronous; the range-rebuild side effect is documented under `side_effects.observable_at`).
+- **D-15:** Every Phase 2 mutating tool that triggers a Graylog system job (today: `delete_index_set` with `deleteIndices: true`) returns a uniform async envelope: `{ async: true, job_id_observable_at: "/system/jobs", message: "<one-line summary including the target id so the agent can find the matching job via info>" }`. Note: `job_id` is **deliberately absent** because Graylog's DELETE returns 204 with no body — there is no server-supplied id to forward. The agent discovers the cleanup job by polling `/system/jobs` and matching the `info` field (which carries the index-set id Graylog spawned the cleanup for); tool description must spell this out, and `await_system_job` accepts either a `job_id` OR an `info_substring` for discovery convenience. The HTTP 204 from Graylog does NOT mean the work is done. `cycle_deflector` does NOT use this envelope — see D-14 (it's synchronous; the range-rebuild side effect is documented under `side_effects.observable_at`). (Updated 2026-05-15 after research surfaced the 204-no-body reality; the user reconfirmed dropping `job_id` over the alternatives of nullable-id and wrapper-probe.)
 
 ### Defense-in-depth carried forward
 

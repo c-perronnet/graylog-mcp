@@ -1254,27 +1254,27 @@ Snapshot determinism (FOUND-07 contract) carries forward — two consecutive `np
 | A7 | Index-set configs carry NO encrypted fields (so C3 is not reachable on update_index_set) | §Pitfall U1 mitigation rationale | If a future Graylog plugin adds an encrypted field to an index-set config, merge-from-current would zero it out. **Mitigation: the wrapper inspects the IndexSetResponse for any field shaped `{ is_set, set_value, keep_value, ...}` — empty in practice for the OSS index-set DTO; Phase 2 ships the merge-from-current pattern without C3 protection, with a comment in the source noting the assumption.** |
 | A8 | `await_system_job` blocking apply-time is acceptable for the MCP server's request loop | §Pattern 4 | If `apply()` blocks for 60s by default, the MCP request hangs the agent's tool-call. **Documented behavior** — the agent CHOSE to call `await_system_job`, knowing it blocks. The MCP server itself is request-per-call; nothing else queues behind this single invocation. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **U1: does Graylog 7.0.6 accept a partial `PUT /system/indices/index_sets/{id}` body?**
    - What we know: AutoValue + Jackson + `@JsonPOJOBuilder(withPrefix="")` on `IndexSetUpdateRequest.Builder`; getters declared via mixin interfaces; no `@Nullable` on the strategy getters.
    - What's unclear: Whether Jackson's default deserializer treats absent strategy keys as 400 vs. null-and-the-Builder-tolerates-it.
-   - Recommendation: **Plan-1 first task is a smoke test.** If 400, fall back to merge-from-current with a Pitfall U1 mitigation comment.
+   - **RESOLVED:** Plan 01 Task 1 runs a live smoke test against `<graylog-host>` and writes the decision (STRICT_NO_ECHO / MERGE_FROM_CURRENT / UNREACHABLE_DEFAULT_MERGE) to `02-U1-SMOKE.md`. Plan 02 Task 3 branches on that artifact. If unreachable, the conservative default is merge-from-current (Phase 1 `update_extractor` pattern). Acceptable since index-set configs carry no encrypted fields (C3 not reachable).
 
 2. **Cycle endpoint actually-async vs. nominally-sync.**
    - What we know: `DeflectorResource.cycle` is `void` and calls `indexSet.cycle()` directly. No `systemJobManager.submit`. Index-range rebuild on the closed index DOES happen via a separate system job.
    - What's unclear: Whether some Graylog plugin or 7.0.6-specific code path replaces the sync call with an async submit.
-   - Recommendation: **Default to Option A (strip the async envelope from `cycle_deflector`).** Document the index-range rebuild as a separate observable side-effect in the tool description. If a smoke test reveals a job_id is returned, flip to Option B in a follow-up.
+   - **RESOLVED:** D-14 updated 2026-05-15 — `cycle_deflector` ships synchronous semantics. Returns `{ rotated, message, side_effects.observable_at: "/system/jobs", side_effects.describes: "closed-index range rebuild" }`. Agent optionally awaits the side-effect job. If a future smoke surfaces an async path, flip via follow-up CONTEXT.md amendment.
 
-3. **Default-index-set-discovery semantics for `delete_index_set` pre-flight.**
+3. **Default-index-set-discovery semantics for `set_default_index_set` (D-13) pre-flight.**
    - What we know: `GET /system/indices/index_sets/{id}` returns `default: boolean` and `can_be_default: boolean` (both on the same response).
    - What's unclear: None — the response shape is fully verified.
-   - Recommendation: Use `current.default` for ND1 check (refuse default-deletion) and `current.can_be_default` for ND2 / D-13 (`set_default_index_set` invariant).
+   - **RESOLVED:** D-13 updated 2026-05-15 — wrapper reads `can_be_default: boolean` (the server's derived eligibility answer; absorbs future Graylog invariants without wrapper update). ND1 (`delete_index_set` refuses default) uses `current.default === true` separately — that's a different gate.
 
 4. **`await_system_job` jobId discovery for `delete_index_set`.**
    - What we know: The DELETE response is 204 with no body; the system job is observable via `GET /system/jobs` but the wrapper cannot extract the job_id from the DELETE response.
    - What's unclear: How the agent finds the right job_id to pass to `await_system_job`.
-   - Recommendation: Tool description for `delete_index_set` says: "After apply, call `GET /system/jobs` (or a future `list_system_jobs` tool, deferred to Phase 7) and look for `name: 'org.graylog2.indexer.indices.jobs.IndexSetCleanupJob'` with `info` mentioning your indexSetId. Pass that job's `id` to `await_system_job`." This is friction; a future enhancement could have the wrapper poll `/system/jobs` after apply to find the just-submitted job — out of scope this phase.
+   - **RESOLVED:** D-15 updated 2026-05-15 — `job_id` is deliberately ABSENT from the async envelope (envelope shape is `{ async, job_id_observable_at, message }`). `message` includes the target index-set id so the agent can match the cleanup job's `info` field. `await_system_job` accepts either `job_id` OR an `info_substring` for discovery convenience. Plan 01 must implement the `info_substring` path; tool description for `delete_index_set` spells out the discovery flow.
 
 ## Environment Availability
 
