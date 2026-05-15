@@ -68,11 +68,11 @@ Cross-cutting infrastructure that every domain phase depends on. Cannot be folde
 
 The DSL subsystem is the hardest part of this milestone.
 
-- [ ] **PIPE-01**: `list_pipelines`
-- [ ] **PIPE-02**: `get_pipeline`
-- [ ] **PIPE-03**: `create_pipeline` — pipeline source (stage definitions referencing rule names)
-- [ ] **PIPE-04**: `update_pipeline`
-- [ ] **PIPE-05**: `delete_pipeline`
+- [x] **PIPE-01**: `list_pipelines`
+- [x] **PIPE-02**: `get_pipeline`
+- [x] **PIPE-03**: `create_pipeline` — pipeline source (stage definitions referencing rule names)
+- [x] **PIPE-04**: `update_pipeline`
+- [x] **PIPE-05**: `delete_pipeline`
 - [ ] **PIPE-06**: `list_pipeline_rules`
 - [ ] **PIPE-07**: `get_pipeline_rule`
 - [ ] **PIPE-08**: `create_pipeline_rule` — accepts structured intent (when/then specs) AND raw DSL source; generates DSL via `src/pipeline-dsl/`; **every dry-run calls `POST /system/pipelines/rule/parse` for server-authoritative validation** (C4)
@@ -248,11 +248,11 @@ Populated by the roadmapper on 2026-05-13. Every v1 requirement maps to exactly 
 | STREAM-09 | Phase 3 | Complete |
 | STREAM-10 | Phase 3 | Complete |
 | STREAM-11 | Phase 3 | Complete |
-| PIPE-01 | Phase 4 | Pending |
-| PIPE-02 | Phase 4 | Pending |
-| PIPE-03 | Phase 4 | Pending |
-| PIPE-04 | Phase 4 | Pending |
-| PIPE-05 | Phase 4 | Pending |
+| PIPE-01 | Phase 4 | Complete |
+| PIPE-02 | Phase 4 | Complete |
+| PIPE-03 | Phase 4 | Complete |
+| PIPE-04 | Phase 4 | Complete |
+| PIPE-05 | Phase 4 | Complete |
 | PIPE-06 | Phase 4 | Pending |
 | PIPE-07 | Phase 4 | Pending |
 | PIPE-08 | Phase 4 | Pending |
