@@ -2441,3 +2441,480 @@ test("test_stream_match summarize line includes stream id and sample-message fie
     assert.match(payload.summary, /2\s*field/);
 });
 
+// =====================================================================
+// Plan 03-05 Task 1 — 12 snapshot fixtures per RESEARCH §"Snapshot Fixture Design"
+// =====================================================================
+//
+// Each fixture pins one Phase 3 tool's dry-run preview shape OR refusal envelope.
+// Static args ensure byte-determinism across runs (idempotencyKey is derived from
+// hash(connection, tool, args); Date.now() / randomUUID() are NOT invoked anywhere
+// in the wrapper or build paths). The snapshot serializer (node:test default)
+// normalises indentation + key order — the resulting .snapshot file is byte-stable
+// across machines and CI runs.
+//
+// Coverage:
+//   - Fixtures 1-4: create_stream dry-run with 4 existingMatches cases (empty,
+//     exact, case_insensitive, prefix) — ROADMAP SC4 (Plan 02 work pinned).
+//   - Fixtures 5-6: delete_stream cascade preview (populated + empty) with
+//     frozen 64-hex confirmationToken — ROADMAP SC1 + D-02 canonicalization
+//     drift detector.
+//   - Fixture 7: delete_stream apply with WRONG confirm → confirmation_mismatch
+//     refusal envelope; DELETE never sent — ROADMAP SC1 apply-time gate.
+//   - Fixture 8: delete_stream mutable:false refusal; ZERO cascade GETs fire —
+//     D-09 cross-cutting defense-in-depth.
+//   - Fixtures 9-10: test_stream_match with literal-outer-key { message: ... }
+//     wire body — ROADMAP SC3 + D-11 always_match variant.
+//   - Fixture 11: update_stream STRICT_NO_ECHO partial — wire body has ONLY the
+//     changed key (D-14 / U1 smoke result).
+//   - Fixture 12 (bonus per Discretion-05): list_stream_rules narrow projection
+//     — items array has exactly the 5 default fields [id, type, field, value,
+//     inverted]; description/stream_id stripped.
+
+// ---------- Fixture 1 — create_stream dry-run, empty cluster, happy path ----------
+
+test("snapshot: create_stream dry-run on empty cluster emits CreateEntityRequest envelope with __SERVER_ASSIGNED__", async (t) => {
+    _setCaptureRequest(streamsMultiCapture([
+        { method: "GET", pathPattern: "/api/streams", response: { total: 0, streams: [] } },
+    ]));
+    const res = await handleCreateStream({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                title: "fixture-stream",
+                index_set_id: "fixture-ix1",
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.dryRun, true);
+    assert.equal(payload.preview.body.entity.title, "fixture-stream");
+    assert.equal(payload.preview.body.share_request, null);
+    assert.deepEqual(payload.existingMatches, []);
+    assert.equal(payload.postApplyEstimate.id, "__SERVER_ASSIGNED__");
+    t.assert.snapshot(payload);
+});
+
+// ---------- Fixture 2 — create_stream dry-run with EXACT existingMatch ----------
+
+test("snapshot: create_stream dry-run with exact-title existingMatch (similarity_reason exact)", async (t) => {
+    _setCaptureRequest(streamsMultiCapture([
+        {
+            method: "GET",
+            pathPattern: "/api/streams",
+            response: {
+                total: 1,
+                streams: [{ id: "s_exact", title: "fixture-stream", is_editable: true }],
+            },
+        },
+    ]));
+    const res = await handleCreateStream({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                title: "fixture-stream",
+                index_set_id: "fixture-ix1",
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.existingMatches.length, 1);
+    assert.equal(payload.existingMatches[0].similarity_reason, "exact");
+    t.assert.snapshot(payload);
+});
+
+// ---------- Fixture 3 — create_stream dry-run with CASE_INSENSITIVE existingMatch ----------
+
+test("snapshot: create_stream dry-run with case-insensitive existingMatch (similarity_reason case_insensitive)", async (t) => {
+    _setCaptureRequest(streamsMultiCapture([
+        {
+            method: "GET",
+            pathPattern: "/api/streams",
+            response: {
+                total: 1,
+                streams: [{ id: "s_case", title: "fixturestream", is_editable: true }],
+            },
+        },
+    ]));
+    const res = await handleCreateStream({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                title: "FixtureStream",
+                index_set_id: "fixture-ix1",
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.existingMatches.length, 1);
+    assert.equal(payload.existingMatches[0].similarity_reason, "case_insensitive");
+    t.assert.snapshot(payload);
+});
+
+// ---------- Fixture 4 — create_stream dry-run with PREFIX existingMatch ----------
+
+test("snapshot: create_stream dry-run with prefix existingMatch (similarity_reason prefix)", async (t) => {
+    _setCaptureRequest(streamsMultiCapture([
+        {
+            method: "GET",
+            pathPattern: "/api/streams",
+            response: {
+                total: 1,
+                streams: [{ id: "s_prefix", title: "fixture-stream", is_editable: true }],
+            },
+        },
+    ]));
+    const res = await handleCreateStream({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                title: "fixture-stream-long",
+                index_set_id: "fixture-ix1",
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.existingMatches.length, 1);
+    assert.equal(payload.existingMatches[0].similarity_reason, "prefix");
+    t.assert.snapshot(payload);
+});
+
+// ---------- Fixture 5 — delete_stream cascade preview, ALL 3 dependent types populated ----------
+//
+// The 64-hex confirmationToken is computed at runtime by computeCascadeHash and
+// snapshotted verbatim — drift detection for D-02 keyed-buckets canonicalization.
+// Any future change to the canonicalization that produces a different hash for
+// the same cascade input → loud snapshot mismatch in CI.
+
+test("snapshot: delete_stream cascade preview with rules+pipelines+events populated (D-02 hash + ROADMAP SC1)", async (t) => {
+    _setCaptureRequest(streamsMultiCapture([
+        {
+            method: "GET",
+            pathPattern: "/api/streams/fixture-s1",
+            response: () => ({ id: "fixture-s1", title: "FixtureStream", is_editable: true }),
+        },
+        {
+            method: "GET",
+            pathPattern: "/api/streams/fixture-s1/rules",
+            response: () => ({
+                total: 2,
+                stream_rules: [
+                    { id: "fixture-r1", type: 1, field: "source", value: "host" },
+                    { id: "fixture-r2", type: 6, field: "msg", value: "warn" },
+                ],
+            }),
+        },
+        {
+            method: "GET",
+            pathPattern: "/api/streams/fixture-s1/pipelines",
+            response: () => [{ id: "fixture-p1", title: "FixturePipeline" }],
+        },
+        {
+            method: "GET",
+            pathPattern: /\/api\/events\/definitions\/paginated/,
+            response: () => ({
+                elements: [
+                    { id: "fixture-e1", title: "FixtureAlert", config: { streams: ["fixture-s1"] } },
+                ],
+                pagination: { page: 1, per_page: 50, count: 1 },
+                total: 1,
+            }),
+        },
+    ]));
+    const res = await handleDeleteStream({
+        params: { arguments: { _testConnection: "fake", streamId: "fixture-s1" } },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.cascades.stream_rules.length, 2);
+    assert.equal(payload.cascades.pipeline_connections.length, 1);
+    assert.equal(payload.cascades.event_definitions.length, 1);
+    const expectedToken = computeCascadeHash({
+        streamId: "fixture-s1",
+        ruleIds: ["fixture-r1", "fixture-r2"],
+        pipelineConnIds: ["fixture-p1"],
+        eventDefIds: ["fixture-e1"],
+    });
+    assert.equal(payload.confirmationToken, expectedToken);
+    assert.match(payload.confirmationToken, /^[0-9a-f]{64}$/);
+    t.assert.snapshot(payload);
+});
+
+// ---------- Fixture 6 — delete_stream cascade preview with all 3 dependent types EMPTY ----------
+//
+// Empty-cascade hash MUST be structurally different from the populated case
+// (D-02 keyed-buckets canonicalization treats empty arrays as a distinct input).
+// The .snapshot file captures BOTH hash literals — any future change to
+// computeCascadeHash that flattens the two cases would show up as a snapshot
+// diff in BOTH fixtures simultaneously.
+
+test("snapshot: delete_stream cascade preview with EMPTY rules+pipelines+events (D-02 empty-buckets hash)", async (t) => {
+    _setCaptureRequest(streamsMultiCapture([
+        {
+            method: "GET",
+            pathPattern: "/api/streams/fixture-s1",
+            response: () => ({ id: "fixture-s1", title: "FixtureStream", is_editable: true }),
+        },
+        {
+            method: "GET",
+            pathPattern: "/api/streams/fixture-s1/rules",
+            response: () => ({ total: 0, stream_rules: [] }),
+        },
+        {
+            method: "GET",
+            pathPattern: "/api/streams/fixture-s1/pipelines",
+            response: () => [],
+        },
+        {
+            method: "GET",
+            pathPattern: /\/api\/events\/definitions\/paginated/,
+            response: () => ({ elements: [], pagination: { page: 1, per_page: 50, count: 0 }, total: 0 }),
+        },
+    ]));
+    const res = await handleDeleteStream({
+        params: { arguments: { _testConnection: "fake", streamId: "fixture-s1" } },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.deepEqual(payload.cascades.stream_rules, []);
+    assert.deepEqual(payload.cascades.pipeline_connections, []);
+    assert.deepEqual(payload.cascades.event_definitions, []);
+    const expectedToken = computeCascadeHash({
+        streamId: "fixture-s1",
+        ruleIds: [],
+        pipelineConnIds: [],
+        eventDefIds: [],
+    });
+    assert.equal(payload.confirmationToken, expectedToken);
+    assert.match(payload.confirmationToken, /^[0-9a-f]{64}$/);
+    t.assert.snapshot(payload);
+});
+
+// ---------- Fixture 7 — delete_stream apply with mismatched confirm → confirmation_mismatch ----------
+//
+// Pins the C2 apply-time refusal envelope: when the agent echoes back a confirm
+// token that does NOT match the freshly-computed apply-time hash, the wrapper
+// refuses BEFORE sending DELETE. The DELETE route below throws if invoked —
+// the test fails RED with that error if the gate doesn't fire.
+
+test("snapshot: delete_stream apply with WRONG confirm refuses with confirmation_mismatch (C2 apply gate)", async (t) => {
+    _setCaptureRequest(streamsMultiCapture([
+        {
+            method: "GET",
+            pathPattern: "/api/streams/fixture-s1",
+            response: () => ({ id: "fixture-s1", title: "FixtureStream", is_editable: true }),
+        },
+        {
+            method: "GET",
+            pathPattern: "/api/streams/fixture-s1/rules",
+            response: () => ({
+                total: 1,
+                stream_rules: [{ id: "fixture-r1", type: 1, field: "source", value: "host" }],
+            }),
+        },
+        {
+            method: "GET",
+            pathPattern: "/api/streams/fixture-s1/pipelines",
+            response: () => [],
+        },
+        {
+            method: "GET",
+            pathPattern: /\/api\/events\/definitions\/paginated/,
+            response: () => ({ elements: [], pagination: { page: 1, per_page: 50, count: 0 }, total: 0 }),
+        },
+        {
+            method: "DELETE",
+            pathPattern: "/api/streams/fixture-s1",
+            response: () => {
+                throw new Error("DELETE MUST NOT fire when confirm mismatches");
+            },
+        },
+    ]));
+    const res = await handleDeleteStream({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                streamId: "fixture-s1",
+                dryRun: false,
+                confirm: "definitely-wrong-hash",
+            },
+        },
+    });
+    assert.equal(res.isError, true);
+    assert.equal(res.reason, "confirmation_mismatch");
+    // Snapshot the parsed error-content text (it's JSON-stringified in
+    // content[0].text). The reason + isError shape is captured for drift
+    // detection on the C2 refusal envelope.
+    const payload = JSON.parse(res.content[0].text);
+    t.assert.snapshot(payload);
+});
+
+// ---------- Fixture 8 — delete_stream mutable:false refusal; ZERO cascade GETs fire ----------
+//
+// D-09 cross-cutting: the parent-mutable pre-flight is the FIRST round-trip
+// in delete_stream's build(). If is_editable:false comes back, the cascade
+// GETs MUST NOT fire (a real defense-in-depth bypass would attempt them anyway).
+// The cascade-route mocks below throw on invocation — the test fails RED if
+// any cascade GET fires.
+
+test("snapshot: delete_stream on immutable stream refuses with stream_immutable; cascade GETs skipped (D-09)", async (t) => {
+    let cascadeFired = false;
+    _setCaptureRequest(streamsMultiCapture([
+        {
+            method: "GET",
+            pathPattern: "/api/streams/fixture-s-immutable",
+            response: () => ({ id: "fixture-s-immutable", title: "FixtureSystem", is_editable: false }),
+        },
+        {
+            method: "GET",
+            pathPattern: "/api/streams/fixture-s-immutable/rules",
+            response: () => {
+                cascadeFired = true;
+                throw new Error("rules cascade GET MUST NOT fire on stream_immutable");
+            },
+        },
+        {
+            method: "GET",
+            pathPattern: "/api/streams/fixture-s-immutable/pipelines",
+            response: () => {
+                cascadeFired = true;
+                throw new Error("pipelines cascade GET MUST NOT fire on stream_immutable");
+            },
+        },
+        {
+            method: "GET",
+            pathPattern: /\/api\/events\/definitions\/paginated/,
+            response: () => {
+                cascadeFired = true;
+                throw new Error("event-defs cascade GET MUST NOT fire on stream_immutable");
+            },
+        },
+    ]));
+    const res = await handleDeleteStream({
+        params: { arguments: { _testConnection: "fake", streamId: "fixture-s-immutable" } },
+    });
+    // Assert the cascade-skip BEFORE the snapshot — the snapshot then captures
+    // the refusal envelope (isError + reason text).
+    assert.equal(cascadeFired, false, "no cascade GET should fire when D-09 refuses");
+    assert.equal(res.isError, true);
+    assert.match(res.content[0].text, /stream_immutable|non-editable/i);
+    const payload = JSON.parse(res.content[0].text);
+    t.assert.snapshot(payload);
+});
+
+// ---------- Fixture 9 — test_stream_match dry-run with one match + one miss (ROADMAP SC3) ----------
+//
+// Pins the literal-outer-key `{ message: <field-map> }` wire body shape per
+// StreamResource.java:561-564. The outer "message" is the resource-method
+// envelope constant; the inner field-map sits one level deeper. Snapshot
+// captures the apply preview (dry-run path) so the wire body is visible.
+
+test("snapshot: test_stream_match dry-run emits literal-outer-key { message: ... } body (ROADMAP SC3)", async (t) => {
+    _setCaptureRequest(() => ({}));  // D-07 wrapper — no upstream GETs on dry-run
+    const res = await handleTestStreamMatch({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                streamId: "fixture-s1",
+                message: { source: "host-1", message: "hello world", level: 6 },
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.dryRun, true);
+    assert.equal(payload.preview.method, "POST");
+    assert.equal(payload.preview.path, "/api/streams/fixture-s1/testMatch");
+    assert.deepEqual(Object.keys(payload.preview.body), ["message"]);
+    t.assert.snapshot(payload);
+});
+
+// ---------- Fixture 10 — test_stream_match dry-run with always_match-style message (D-11 universal-true) ----------
+//
+// Pins the wire body for a minimal sample-message field-map. The fixture
+// covers D-11's always_match variant indirectly — a real always_match rule
+// would always return matches:true; in the wrapper, that's purely a Graylog-
+// side decision (D-07 server-side wrapper). The snapshot pins the wrapper's
+// portion: the literal outer key and the verbatim agent field-map.
+
+test("snapshot: test_stream_match dry-run with minimal sample message (D-11 always_match coverage)", async (t) => {
+    _setCaptureRequest(() => ({}));
+    const res = await handleTestStreamMatch({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                streamId: "fixture-s1",
+                message: { source: "anything" },
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.dryRun, true);
+    assert.deepEqual(payload.preview.body.message, { source: "anything" });
+    t.assert.snapshot(payload);
+});
+
+// ---------- Fixture 11 — update_stream partial STRICT_NO_ECHO ----------
+//
+// Pins the STRICT_NO_ECHO wire body: when args.changes.title is the only key,
+// the PUT body has ONLY { title: "..." }. No echoed current.* fields, no
+// elided keys with explicit nulls — clean partial update per Plan 02 U1 smoke.
+
+test("snapshot: update_stream STRICT_NO_ECHO partial emits ONLY the changed key (D-14)", async (t) => {
+    _setCaptureRequest(streamsMultiCapture([
+        {
+            method: "GET",
+            pathPattern: "/api/streams/fixture-s1",
+            response: () => ({
+                id: "fixture-s1",
+                title: "FixtureStream",
+                description: "fixture description",
+                matching_type: "AND",
+                is_editable: true,
+                index_set_id: "fixture-ix1",
+            }),
+        },
+    ]));
+    const res = await handleUpdateStream({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                streamId: "fixture-s1",
+                changes: { title: "fixture-stream-renamed" },
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.dryRun, true);
+    assert.equal(payload.preview.method, "PUT");
+    assert.equal(payload.preview.path, "/api/streams/fixture-s1");
+    // STRICT_NO_ECHO contract — wire body has ONLY the changed key.
+    assert.deepEqual(Object.keys(payload.preview.body).sort(), ["title"]);
+    assert.equal(payload.preview.body.title, "fixture-stream-renamed");
+    t.assert.snapshot(payload);
+});
+
+// ---------- Fixture 12 (bonus, Discretion-05) — list_stream_rules narrow projection ----------
+//
+// Pins the 5-field default projection [id, type, field, value, inverted].
+// description + stream_id are stripped under the narrow projection (per
+// 03-01-SUMMARY.md). Static rule fixtures ensure byte-determinism.
+
+test("snapshot: list_stream_rules narrow projection items have exactly [id, type, field, value, inverted]", async (t) => {
+    _setCaptureRequest(() => ({
+        total: 2,
+        stream_rules: [
+            { id: "fixture-r1", type: 1, value: "host", field: "source", inverted: false, description: "match host", stream_id: "fixture-s1" },
+            { id: "fixture-r2", type: 6, value: "warn", field: "msg", inverted: false, description: "contains warn", stream_id: "fixture-s1" },
+        ],
+    }));
+    const res = await handleListStreamRules({
+        params: { arguments: { _testConnection: "fake", streamId: "fixture-s1" } },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.count, 2);
+    // description + stream_id MUST be absent from each item (narrow projection).
+    for (const item of payload.items) {
+        assert.deepEqual(Object.keys(item).sort(), ["field", "id", "inverted", "type", "value"]);
+        assert.equal(item.description, undefined);
+        assert.equal(item.stream_id, undefined);
+    }
+    t.assert.snapshot(payload);
+});
+
