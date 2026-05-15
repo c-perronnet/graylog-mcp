@@ -15,6 +15,7 @@ import { handleCreateIndexSet } from "./create-index-set.js";
 import { handleUpdateIndexSet } from "./update-index-set.js";
 import { handleDeleteIndexSet } from "./delete-index-set.js";
 import { handleSetDefaultIndexSet } from "./set-default-index-set.js";
+import { handleCycleDeflector } from "./cycle-deflector.js";
 import { handleAwaitSystemJob } from "../_shared/system-job.js";
 
 register("list_index_sets", handleListIndexSets);
@@ -23,4 +24,5 @@ register("create_index_set", handleCreateIndexSet);
 register("update_index_set", handleUpdateIndexSet);
 register("delete_index_set", handleDeleteIndexSet);
 register("set_default_index_set", handleSetDefaultIndexSet);
+register("cycle_deflector", handleCycleDeflector);
 register("await_system_job", handleAwaitSystemJob);

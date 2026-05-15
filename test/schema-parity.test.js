@@ -183,3 +183,8 @@ test("schema-parity: set_default_index_set", async () => {
     const { SetDefaultIndexSetSchema } = await import("../src/tools/index-sets/schemas.js");
     await assertSchemaParityForTool("set_default_index_set", SetDefaultIndexSetSchema);
 });
+
+test("schema-parity: cycle_deflector", async () => {
+    const { CycleDeflectorSchema } = await import("../src/tools/index-sets/schemas.js");
+    await assertSchemaParityForTool("cycle_deflector", CycleDeflectorSchema);
+});

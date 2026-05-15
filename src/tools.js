@@ -954,6 +954,23 @@ export const toolDefinitions = [
         },
     },
     // ====================================================================
+    // Phase 2 — cycle_deflector (Plan 02-04; INDEX-07)
+    // ====================================================================
+    {
+        name: "cycle_deflector",
+        description: "Cycle the deflector — close the current active write index and open the next one. The cycle is SYNCHRONOUS in Graylog 7.0.6 — when the apply response returns, the rotation is complete. In-flight writes may briefly buffer until the new index is ready (m3). The closed index's message ranges are rebuilt asynchronously as a separate system job observable at /system/jobs; call await_system_job on that job ID if you need to wait for the rebuild before searching the just-closed index by time range. Refuses non-writable index sets (ND3) AND refuses writable: false connections (D-07/D-16). The apply envelope is { rotated: true, message: '...<indexSetId>...', side_effects: { observable_at: '/system/jobs', describes: '...range rebuild...' } } — NOT the D-15 async envelope (cycle itself is synchronous; only the side-effect range rebuild is async).",
+        inputSchema: {
+            type: "object",
+            properties: {
+                connectionName: { type: "string", description: "Optional per-call connection override" },
+                dryRun: { type: "boolean", description: "Default true. Set to false to apply." },
+                idempotencyKey: { type: "string", description: "Optional agent-supplied idempotency key" },
+                indexSetId: { type: "string", description: "The Graylog index-set ID whose deflector to cycle" },
+            },
+            required: ["indexSetId"],
+        },
+    },
+    // ====================================================================
     // Phase 2 — set_default_index_set (Plan 02-04; INDEX-06)
     // ====================================================================
     {
