@@ -19,6 +19,8 @@ import "./snapshot-config.js";
 import { handleListStreams } from "../src/tools/streams/list-streams.js";
 import { handleGetStream } from "../src/tools/streams/get-stream.js";
 import { handleListStreamRules } from "../src/tools/streams/list-stream-rules.js";
+import { handleCreateStream } from "../src/tools/streams/create-stream.js";
+import { handleUpdateStream } from "../src/tools/streams/update-stream.js";
 import {
     ListStreamsSchema,
     GetStreamSchema,
@@ -525,4 +527,323 @@ test("SimilarityReasonEnum accepts exact|case_insensitive|prefix; rejects anythi
     assert.equal(SimilarityReasonEnum.parse("prefix"), "prefix");
     assert.throws(() => SimilarityReasonEnum.parse("fuzzy"), /Invalid enum value|fuzzy/);
     assert.throws(() => SimilarityReasonEnum.parse(""), /Invalid enum value/);
+});
+
+// =====================================================================
+// Plan 03-02 Task 2 — create_stream + update_stream handler tests
+// =====================================================================
+//
+// Routes a per-test capture function (multiCapture-style) through
+// _setCaptureRequest. Build()-level pre-flights (GET /api/streams for
+// existingMatches; GET /api/streams/{id} for D-09 mutable) fire as real
+// requests against the mocked client.
+
+function streamsMultiCapture(routes) {
+    return (req) => {
+        for (const r of routes) {
+            const matches = typeof r.pathPattern === "string"
+                ? req.path === r.pathPattern
+                : r.pathPattern.test(req.path);
+            if (req.method === r.method && matches) {
+                return typeof r.response === "function" ? r.response(req) : r.response;
+            }
+        }
+        throw new Error(`No route matched ${req.method} ${req.path}`);
+    };
+}
+
+// ---------- create_stream tests ----------
+
+test("create_stream dry-run emits CreateEntityRequest envelope with required fields filled and defaults", async () => {
+    _setCaptureRequest(streamsMultiCapture([
+        { method: "GET", pathPattern: "/api/streams", response: { total: 0, streams: [] } },
+    ]));
+    const res = await handleCreateStream({
+        params: { arguments: { _testConnection: "fake", title: "X", index_set_id: "ix1" } },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.dryRun, true);
+    assert.equal(payload.tool, "create_stream");
+    assert.equal(payload.preview.method, "POST");
+    assert.equal(payload.preview.path, "/api/streams");
+    // CreateEntityRequest envelope (verified at StreamResource.java:229-230)
+    assert.equal(payload.preview.body.share_request, null);
+    assert.equal(payload.preview.body.entity.title, "X");
+    assert.equal(payload.preview.body.entity.index_set_id, "ix1");
+    assert.equal(payload.preview.body.entity.description, null);
+    assert.deepEqual(payload.preview.body.entity.rules, []);
+    assert.equal(payload.preview.body.entity.matching_type, "AND");
+    assert.equal(payload.preview.body.entity.remove_matches_from_default_stream, false);
+    assert.equal(payload.preview.body.entity.content_pack, null);
+    // D-13: __SERVER_ASSIGNED__ sentinel for postApplyEstimate.id
+    assert.equal(payload.postApplyEstimate.id, "__SERVER_ASSIGNED__");
+    // existingMatches default to empty array when no GET-list match.
+    assert.deepEqual(payload.existingMatches, []);
+});
+
+test("create_stream dry-run translates inline regex rule to numeric wire format (S9)", async () => {
+    _setCaptureRequest(streamsMultiCapture([
+        { method: "GET", pathPattern: "/api/streams", response: { total: 0, streams: [] } },
+    ]));
+    const res = await handleCreateStream({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                title: "X",
+                index_set_id: "ix1",
+                rules: [{ type: "regex", field: "msg", value: ".*" }],
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.preview.body.entity.rules.length, 1);
+    const wireRule = payload.preview.body.entity.rules[0];
+    assert.equal(wireRule.type, 2);  // STREAM_RULE_TYPE_TO_NUMERIC.regex = 2
+    assert.equal(wireRule.value, ".*");
+    assert.equal(wireRule.field, "msg");
+    assert.equal(wireRule.inverted, false);
+    assert.equal(wireRule.description, null);
+});
+
+test("create_stream dry-run emits always_match wire rule with empty value+field (S10)", async () => {
+    _setCaptureRequest(streamsMultiCapture([
+        { method: "GET", pathPattern: "/api/streams", response: { total: 0, streams: [] } },
+    ]));
+    const res = await handleCreateStream({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                title: "X",
+                index_set_id: "ix1",
+                rules: [{ type: "always_match" }],
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    const wireRule = payload.preview.body.entity.rules[0];
+    assert.equal(wireRule.type, 7);  // STREAM_RULE_TYPE_TO_NUMERIC.always_match = 7
+    assert.equal(wireRule.value, "");
+    assert.equal(wireRule.field, "");
+    assert.equal(wireRule.inverted, false);
+    assert.equal(wireRule.description, null);
+});
+
+test("create_stream dry-run flags exact-title existingMatch (D-05/D-06 strictest bucket)", async () => {
+    _setCaptureRequest(streamsMultiCapture([
+        {
+            method: "GET",
+            pathPattern: "/api/streams",
+            response: { total: 1, streams: [{ id: "s_existing", title: "X" }] },
+        },
+    ]));
+    const res = await handleCreateStream({
+        params: { arguments: { _testConnection: "fake", title: "X", index_set_id: "ix1" } },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.existingMatches.length, 1);
+    assert.equal(payload.existingMatches[0].id, "s_existing");
+    assert.equal(payload.existingMatches[0].title, "X");
+    assert.equal(payload.existingMatches[0].similarity_reason, "exact");
+});
+
+test("create_stream dry-run flags case-insensitive existingMatch (D-06 strictest-wins)", async () => {
+    _setCaptureRequest(streamsMultiCapture([
+        {
+            method: "GET",
+            pathPattern: "/api/streams",
+            response: { total: 1, streams: [{ id: "s_existing", title: "x" }] },
+        },
+    ]));
+    const res = await handleCreateStream({
+        params: { arguments: { _testConnection: "fake", title: "X", index_set_id: "ix1" } },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.existingMatches.length, 1);
+    assert.equal(payload.existingMatches[0].similarity_reason, "case_insensitive");
+});
+
+test("create_stream dry-run flags prefix existingMatch (D-06)", async () => {
+    _setCaptureRequest(streamsMultiCapture([
+        {
+            method: "GET",
+            pathPattern: "/api/streams",
+            response: { total: 1, streams: [{ id: "s_existing", title: "App" }] },
+        },
+    ]));
+    const res = await handleCreateStream({
+        params: { arguments: { _testConnection: "fake", title: "App Errors", index_set_id: "ix1" } },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.existingMatches.length, 1);
+    assert.equal(payload.existingMatches[0].similarity_reason, "prefix");
+});
+
+test("create_stream apply path posts CreateEntityRequest envelope and normalizes stream_id", async () => {
+    const captured = [];
+    _setCaptureRequest(streamsMultiCapture([
+        { method: "GET", pathPattern: "/api/streams", response: { total: 0, streams: [] } },
+        {
+            method: "POST",
+            pathPattern: "/api/streams",
+            response: (req) => {
+                captured.push(req);
+                return { stream_id: "s_new_123" };
+            },
+        },
+    ]));
+    const res = await handleCreateStream({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                title: "X",
+                index_set_id: "ix1",
+                dryRun: false,
+            },
+        },
+    });
+    assert.equal(captured.length, 1);
+    assert.equal(captured[0].body.share_request, null);
+    assert.equal(captured[0].body.entity.title, "X");
+    assert.equal(captured[0].body.entity.index_set_id, "ix1");
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.applied, true);
+    assert.equal(payload.result.id, "s_new_123");
+});
+
+test("create_stream zod-rejects missing index_set_id at the handler boundary", async () => {
+    const res = await handleCreateStream({
+        params: { arguments: { _testConnection: "fake", title: "X" } },
+    });
+    assert.equal(res.isError, true);
+    assert.match(res.content[0].text, /index_set_id/);
+});
+
+// ---------- update_stream tests (STRICT_NO_ECHO branch per U1 smoke) ----------
+
+test("update_stream D-09 mutable pre-flight refuses with stream_immutable when is_editable:false", async () => {
+    const captured = [];
+    _setCaptureRequest(streamsMultiCapture([
+        {
+            method: "GET",
+            pathPattern: "/api/streams/s1",
+            response: (req) => {
+                captured.push(req);
+                return { id: "s1", title: "Builtin", is_editable: false };
+            },
+        },
+        {
+            method: "PUT",
+            pathPattern: "/api/streams/s1",
+            response: () => {
+                throw new Error("PUT must NOT fire when D-09 refuses");
+            },
+        },
+    ]));
+    const res = await handleUpdateStream({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                streamId: "s1",
+                changes: { title: "new" },
+            },
+        },
+    });
+    assert.equal(res.isError, true);
+    assert.match(res.content[0].text, /stream_immutable|non-editable/i);
+    // Verify only the GET ran — no PUT against the immutable stream.
+    assert.equal(captured.length, 1);
+    assert.equal(captured[0].method, "GET");
+});
+
+test("update_stream STRICT_NO_ECHO emits only the changed field on the wire body", async () => {
+    _setCaptureRequest(streamsMultiCapture([
+        {
+            method: "GET",
+            pathPattern: "/api/streams/s1",
+            response: () => ({
+                id: "s1",
+                title: "Old Title",
+                description: "old description",
+                matching_type: "AND",
+                is_editable: true,
+                index_set_id: "ix1",
+            }),
+        },
+    ]));
+    const res = await handleUpdateStream({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                streamId: "s1",
+                changes: { title: "new" },
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.dryRun, true);
+    assert.equal(payload.preview.method, "PUT");
+    assert.equal(payload.preview.path, "/api/streams/s1");
+    // STRICT_NO_ECHO: ONLY title is on the wire — no echoed current.* fields.
+    assert.deepEqual(Object.keys(payload.preview.body).sort(), ["title"]);
+    assert.equal(payload.preview.body.title, "new");
+    assert.equal(payload.postApplyEstimate.id, "s1");
+});
+
+test("update_stream apply on a mutable stream emits the STRICT_NO_ECHO body", async () => {
+    const captured = [];
+    _setCaptureRequest(streamsMultiCapture([
+        {
+            method: "GET",
+            pathPattern: "/api/streams/s1",
+            response: () => ({
+                id: "s1", title: "Old", is_editable: true, matching_type: "AND",
+            }),
+        },
+        {
+            method: "PUT",
+            pathPattern: "/api/streams/s1",
+            response: (req) => {
+                captured.push(req);
+                return { id: "s1" };
+            },
+        },
+    ]));
+    const res = await handleUpdateStream({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                streamId: "s1",
+                changes: { matching_type: "OR" },
+                dryRun: false,
+            },
+        },
+    });
+    assert.equal(captured.length, 1);
+    assert.deepEqual(captured[0].body, { matching_type: "OR" });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.applied, true);
+    assert.equal(payload.result.id, "s1");
+});
+
+test("update_stream refuses on writable:false connection BEFORE pre-flight GET fires", async () => {
+    _setConnectionsForTests({
+        readonly: { baseUrl: "x", apiToken: "x", writable: false },
+    });
+    let getFired = false;
+    _setCaptureRequest(() => {
+        getFired = true;
+        return { id: "s1", is_editable: true };
+    });
+    const res = await handleUpdateStream({
+        params: {
+            arguments: {
+                connectionName: "readonly",
+                streamId: "s1",
+                changes: { title: "new" },
+            },
+        },
+    });
+    assert.equal(res.isError, true);
+    assert.equal(res.reason, "connection_read_only");
+    assert.equal(getFired, false, "no GET should fire when writable gate refuses");
 });

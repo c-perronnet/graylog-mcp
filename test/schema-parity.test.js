@@ -209,3 +209,20 @@ test("schema-parity: list_stream_rules", async () => {
     const { ListStreamRulesSchema } = await import("../src/tools/streams/schemas.js");
     await assertSchemaParityForTool("list_stream_rules", ListStreamRulesSchema);
 });
+
+// ---------------------------------------------------------------------------
+// Plan 03-02 enrichment — 4 new mutating tools (create_stream, update_stream,
+// start_stream, pause_stream). All four schemas are plain mutatingBase.extend()
+// without superRefine wrapping so .shape is direct; getShape handles them
+// without extra plumbing.
+// ---------------------------------------------------------------------------
+
+test("schema-parity: create_stream", async () => {
+    const { CreateStreamSchema } = await import("../src/tools/streams/schemas.js");
+    await assertSchemaParityForTool("create_stream", CreateStreamSchema);
+});
+
+test("schema-parity: update_stream", async () => {
+    const { UpdateStreamSchema } = await import("../src/tools/streams/schemas.js");
+    await assertSchemaParityForTool("update_stream", UpdateStreamSchema);
+});
