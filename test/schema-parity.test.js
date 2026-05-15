@@ -117,3 +117,26 @@ test("schema-parity: delete_extractor", async () => {
     const { DeleteExtractorSchema } = await import("../src/tools/inputs/schemas.js");
     await assertSchemaParityForTool("delete_extractor", DeleteExtractorSchema);
 });
+
+// ---------------------------------------------------------------------------
+// Plan 02-01 enrichment — 3 new tools (list/get/await)
+//
+// list_index_sets + get_index_set use plain ZodObject; await_system_job uses
+// mutatingBase.extend(...).refine(...) which wraps the inner object in a
+// ZodEffects. getShape handles both shapes.
+// ---------------------------------------------------------------------------
+
+test("schema-parity: list_index_sets", async () => {
+    const { ListIndexSetsSchema } = await import("../src/tools/index-sets/schemas.js");
+    await assertSchemaParityForTool("list_index_sets", ListIndexSetsSchema);
+});
+
+test("schema-parity: get_index_set", async () => {
+    const { GetIndexSetSchema } = await import("../src/tools/index-sets/schemas.js");
+    await assertSchemaParityForTool("get_index_set", GetIndexSetSchema);
+});
+
+test("schema-parity: await_system_job", async () => {
+    const { AwaitSystemJobSchema } = await import("../src/tools/_shared/system-job.js");
+    await assertSchemaParityForTool("await_system_job", AwaitSystemJobSchema);
+});
