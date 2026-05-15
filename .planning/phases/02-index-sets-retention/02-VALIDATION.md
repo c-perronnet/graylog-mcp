@@ -1,10 +1,11 @@
 ---
 phase: 02
 slug: index-sets-retention
-status: draft
-nyquist_compliant: false
-wave_0_complete: false
+status: approved
+nyquist_compliant: true
+wave_0_complete: true
 created: 2026-05-15
+approved: 2026-05-15
 ---
 
 # Phase 02 — Validation Strategy
@@ -99,4 +100,4 @@ created: 2026-05-15
 - [ ] Feedback latency < 12 s
 - [ ] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending (planner attaches task IDs; final plan flips `wave_0_complete: true` and `nyquist_compliant: true`)
+**Approval:** approved 2026-05-15 — wave_0_complete + nyquist_compliant flipped after Plan 02-05 closure (335/335 tests pass, snapshots byte-identical across consecutive runs, C1 acceptance gate proven with two distinct frozen hashes, UPDATED D-13/D-14/D-15 acceptance gates all surfaced in fixtures, 8 schema-parity assertions for Phase 2 tools all green).
