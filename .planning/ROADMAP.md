@@ -44,7 +44,12 @@
   2. An agent can call `update_input` to change an input's port and receive a dry-run payload that contains **only** the changed field — encrypted config fields (TLS cert password, AWS credentials) are absent from the emitted payload regardless of what the agent passed in.
   3. An agent can list inputs filtered by type via `list_input_types` (dynamic discovery against `GET /system/inputs/types/all`) and list extractors per input with the partial-update pattern reused for extractor mutations.
   4. `delete_input` dry-run output enumerates the affected extractors and warns the operator before message-handling impact is applied.
-**Plans**: TBD
+**Plans**: 5 plans
+  - [ ] 01-01-PLAN.md — Foundation amendments (A4 async build, A2 conflict pre-check, D-06 type-catalogue cache) + INPUT-01/02/03 read tools
+  - [ ] 01-02-PLAN.md — Input CRUD: create_input (D-04 redaction), update_input (C3 mitigation centerpiece — INPUT-05), delete_input (D-05 cascade enumeration)
+  - [ ] 01-03-PLAN.md — Input lifecycle: start_input (PUT) + stop_input (DELETE) (INPUT-07)
+  - [ ] 01-04-PLAN.md — Extractor CRUD: list_extractors + create_extractor (all 8 Graylog types per A1) + update_extractor + delete_extractor (INPUT-08..11)
+  - [ ] 01-05-PLAN.md — Snapshot fixtures (incl. C3 acceptance gate) + schema-parity enrichment + 01-VALIDATION.md flip
 
 ### Phase 2: Index Sets & Retention
 **Goal**: An agent can configure where Graylog stores messages — including rotation/retention strategies — without ever silently destroying Elasticsearch data through a defaulted query parameter.
@@ -122,7 +127,7 @@
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 0. Foundation | 6/6 | Complete | 2026-05-15 |
-| 1. Inputs & Extractors | 0/? | Not started | - |
+| 1. Inputs & Extractors | 0/5 | Planned | - |
 | 2. Index Sets & Retention | 0/? | Not started | - |
 | 3. Streams & Stream Rules | 0/? | Not started | - |
 | 4. Pipelines, Pipeline Rules & Connections | 0/? | Not started | - |
