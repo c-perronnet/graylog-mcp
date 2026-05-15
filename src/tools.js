@@ -837,4 +837,50 @@ export const toolDefinitions = [
             required: ["inputId", "extractorId"],
         },
     },
+    // ====================================================================
+    // Phase 2 — Index sets & retention (Plan 02-01)
+    // ====================================================================
+    {
+        name: "list_index_sets",
+        description: "List Graylog index sets with narrow projection (id, title, description, default, writable, can_be_default, index_prefix). Use fields:'all' to fetch the full IndexSetResponse DTOs. NOTE: stats (messageCount, sizeBytes) are NOT included — use get_index_set or wait for delete_index_set's dry-run preview if you need per-index-set stats.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                connectionName: { type: "string", description: "Optional per-call connection override" },
+                limit: { type: "number", description: "Max results (default 25, max 200)" },
+                fields: {
+                    description: "Either 'all' for full DTOs OR an array of field names to project. Default is [id, title, description, default, writable, can_be_default, index_prefix].",
+                },
+            },
+        },
+    },
+    {
+        name: "get_index_set",
+        description: "Fetch the full IndexSetResponse DTO for one index set: id, title, description, default, writable, can_be_default, index_prefix, shards, replicas, rotation_strategy_class, rotation_strategy{type,...}, retention_strategy_class, retention_strategy{type,...}, creation_date, field_type_refresh_interval, ...",
+        inputSchema: {
+            type: "object",
+            properties: {
+                connectionName: { type: "string", description: "Optional per-call connection override" },
+                indexSetId: { type: "string", description: "The Graylog index-set ID (e.g. from list_index_sets)" },
+            },
+            required: ["indexSetId"],
+        },
+    },
+    {
+        name: "await_system_job",
+        description: "Poll GET /api/system/jobs/{jobId} with exponential backoff (500ms → 1s → 2s → 4s → 5s cap) until the job completes, errors, is cancelled, or timeoutMs elapses (default 60s, max 600s). Accepts EXACTLY ONE of: (a) `jobId: string` — the bare job ID; (b) `jobIdOrEnvelope` — bare string OR object with job_id/jobId/id from an upstream async envelope; (c) `info_substring: string` — discovery path: the wrapper GETs /api/system/jobs, matches the entry whose `info` field contains the substring, then polls that entry's id. Use info_substring when an upstream tool's async envelope deliberately omits job_id (e.g. delete_index_set per UPDATED D-15 — Graylog DELETE returns 204 with no body; the agent passes `info_substring: <indexSetId>` to discover the IndexSetCleanupJob). 0 matches → isError reason:'job_not_found'. 2+ matches → isError reason:'ambiguous_info_substring' with the list of candidate ids so the agent can re-call with a specific jobId. dryRun:true returns the polling plan WITHOUT issuing GETs. 404 from /system/jobs/{id} means the job has finished and been pruned from Graylog's running-jobs map — interpreted as completed:true with a synthetic finalStatus.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                connectionName: { type: "string", description: "Optional per-call connection override" },
+                dryRun: { type: "boolean", description: "Default true. Set to false to actually poll." },
+                idempotencyKey: { type: "string", description: "Optional agent-supplied idempotency key" },
+                jobId: { type: "string", description: "The system-job ID to wait for (bare string form). Mutually exclusive with jobIdOrEnvelope and info_substring." },
+                jobIdOrEnvelope: { description: "Alternative: the full async envelope returned by an earlier mutating tool (object with job_id / jobId / id). Mutually exclusive with jobId and info_substring." },
+                info_substring: { type: "string", description: "Alternative discovery path (UPDATED D-15): substring to match against SystemJobSummary.info. The wrapper lists /system/jobs and resolves to the single matching job. Mutually exclusive with jobId and jobIdOrEnvelope. Use this when an upstream tool's async envelope deliberately omits job_id (e.g. delete_index_set with deleteIndices:true — pass info_substring:<indexSetId>)." },
+                timeoutMs: { type: "number", description: "Wait ceiling in milliseconds (default 60000, max 600000)" },
+                confirm: { type: "string", description: "Reserved — unused by await_system_job; kept for shape parity with confirmation-gated tools." },
+            },
+        },
+    },
 ];

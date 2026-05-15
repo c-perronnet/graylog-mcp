@@ -43,6 +43,9 @@ import {
 // Phase 1 domain barrels — each module side-effect-registers its handlers.
 // Import here so a single `import "./tools/_register.js"` wires everything.
 import "./inputs/index.js";
+// Phase 2 domain barrel — registers list_index_sets, get_index_set,
+// and await_system_job (the cross-domain polling primitive).
+import "./index-sets/index.js";
 
 // Names that already fit `<verb>_<domain>_<noun>` (11 of 23)
 register("list_connections", listConnectionsHandler);
