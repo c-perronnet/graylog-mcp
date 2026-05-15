@@ -151,3 +151,55 @@ test("findExistingMatches back-compat: inputs envelope still works (regression g
     assert.equal(matches.length, 1);
     assert.equal(matches[0].id, "in1");
 });
+
+// =====================================================================
+// Plan 05-01 Test 9 — elements envelope normalization (paginated endpoints)
+// =====================================================================
+//
+// Graylog's /paginated list endpoints return PageListResponse<T> which serializes
+// as { elements, pagination, attributes, defaults, total }. Phase 5
+// list_event_definitions and list_event_notifications hit /paginated; without
+// the elements envelope amendment, find-by-title pre-checks return [] for any
+// non-empty cluster. Pitfall 1 of 05-RESEARCH.md.
+
+test("findExistingMatches normalizes elements envelope (Plan 05-01 — /paginated PageListResponse)", async () => {
+    _setCaptureRequest(() => ({
+        elements: [
+            { id: "ed1", title: "App Error Spike" },
+            { id: "ed2", title: "Slow Queries" },
+        ],
+        pagination: { page: 1, per_page: 50, total: 2, count: 2 },
+        total: 2,
+    }));
+    const client = makeClient(FAKE_CONN);
+    const matches = await findExistingMatches(client, {
+        listPath: "/api/events/definitions/paginated",
+        matchFn: (it) => it.title === "App Error Spike",
+    });
+    assert.equal(matches.length, 1);
+    assert.equal(matches[0].id, "ed1");
+    assert.equal(matches[0].title, "App Error Spike");
+    assert.equal(matches[0].similarity_reason, "exact");
+});
+
+// =====================================================================
+// Plan 05-01 Test 10 — elements wins over items when both present
+// =====================================================================
+//
+// Position MATTERS: elements MUST be consulted BEFORE items in the fallback
+// chain so the /paginated PageListResponse shape wins over the rare endpoint
+// that uses a generic items wrapper. If the order ever flips, this test fires.
+
+test("findExistingMatches picks elements before items when both are present (chain position guard)", async () => {
+    _setCaptureRequest(() => ({
+        elements: [{ id: "e1", title: "real" }],
+        items: [{ id: "i1", title: "real" }],
+    }));
+    const client = makeClient(FAKE_CONN);
+    const matches = await findExistingMatches(client, {
+        listPath: "/api/test/paginated",
+        matchFn: (it) => it.title === "real",
+    });
+    assert.equal(matches.length, 1);
+    assert.equal(matches[0].id, "e1", "elements MUST win over items");
+});

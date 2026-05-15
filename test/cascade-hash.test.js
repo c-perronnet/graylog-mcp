@@ -24,6 +24,7 @@ import {
     computeC1Hash,
     collectIndexNames,
     computeRuleCascadeHash,
+    computeNotificationCascadeHash,
 } from "../src/tools/_shared/cascade-hash.js";
 
 // Phase 2 back-compat: the original c1-hash.js path is preserved as a thin
@@ -302,5 +303,131 @@ test("computeRuleCascadeHash rejects malformed inputs", () => {
     assert.throws(
         () => computeRuleCascadeHash({ ruleId: "r1", pipelineIds: "p1" }),
         /pipelineIds/,
+    );
+});
+
+// =====================================================================
+// Phase 5 D-09 — computeNotificationCascadeHash (thin semantic wrapper)
+// =====================================================================
+//
+// Plan 05-01 Task 1 adds a semantic wrapper around computeCascadeHash so
+// delete_event_notification's call-site reads naturally:
+//
+//   computeNotificationCascadeHash({ notificationId, eventDefIds })
+//
+// instead of mis-titled
+//
+//   computeCascadeHash({ streamId: notificationId, eventDefIds: [...] })
+//
+// The wrapper forwards into the underlying helper unchanged, so the output
+// is BYTE-IDENTICAL to the equivalent computeCascadeHash call. The frozen
+// 64-hex literals below pin the canonical-form output — any future drift
+// in computeCascadeHash canonicalization that breaks Phase 5 hashes will
+// break these tests loudly (T-05-01-07 threat-model anchor).
+
+test("computeNotificationCascadeHash returns a 64-hex string", () => {
+    const h = computeNotificationCascadeHash({
+        notificationId: "66e8aaaaaaaaaaaaaaaaaaaa",
+        eventDefIds: ["66e8bbbbbbbbbbbbbbbbbbbb"],
+    });
+    assert.match(h, /^[0-9a-f]{64}$/);
+});
+
+test("computeNotificationCascadeHash is BYTE-IDENTICAL to the equivalent computeCascadeHash call (forwarding semantics)", () => {
+    const a = computeNotificationCascadeHash({
+        notificationId: "66e8aaaaaaaaaaaaaaaaaaaa",
+        eventDefIds: ["66e8bbbbbbbbbbbbbbbbbbbb", "66e8cccccccccccccccccccc"],
+    });
+    const b = computeCascadeHash({
+        streamId: "66e8aaaaaaaaaaaaaaaaaaaa",
+        ruleIds: [],
+        pipelineConnIds: [],
+        eventDefIds: ["66e8bbbbbbbbbbbbbbbbbbbb", "66e8cccccccccccccccccccc"],
+    });
+    assert.equal(a, b);
+});
+
+test("computeNotificationCascadeHash returns the pinned hash for the empty-cascade frozen fixture (Plan 05-04 anchor)", () => {
+    // Frozen literal pinned after first implementation; Plan 05-04's
+    // delete_event_notification snapshot fixture reuses this anchor.
+    // Recompute via:
+    //   node -e 'import("./src/tools/_shared/cascade-hash.js").then(m =>
+    //     console.log(m.computeNotificationCascadeHash({
+    //       notificationId:"66e8aaaaaaaaaaaaaaaaaaaa",
+    //       eventDefIds:[]
+    //     })))'
+    const hash = computeNotificationCascadeHash({
+        notificationId: "66e8aaaaaaaaaaaaaaaaaaaa",
+        eventDefIds: [],
+    });
+    assert.equal(
+        hash,
+        "__PINNED_EMPTY_NOTIFICATION_CASCADE_HASH__",
+    );
+    assert.match(hash, /^[0-9a-f]{64}$/);
+});
+
+test("computeNotificationCascadeHash returns the pinned hash for the 2-cascade frozen fixture (Plan 05-04 anchor)", () => {
+    const hash = computeNotificationCascadeHash({
+        notificationId: "66e8aaaaaaaaaaaaaaaaaaaa",
+        eventDefIds: ["66e8bbbbbbbbbbbbbbbbbbbb", "66e8cccccccccccccccccccc"],
+    });
+    assert.equal(
+        hash,
+        "__PINNED_TWO_CASCADE_NOTIFICATION_HASH__",
+    );
+    assert.match(hash, /^[0-9a-f]{64}$/);
+    // Empty vs populated must differ.
+    const empty = computeNotificationCascadeHash({
+        notificationId: "66e8aaaaaaaaaaaaaaaaaaaa",
+        eventDefIds: [],
+    });
+    assert.notEqual(hash, empty);
+});
+
+test("computeNotificationCascadeHash sorts eventDefIds canonically (sort-order independent)", () => {
+    // Reverse-sorted input MUST hash identically to sorted input — proves
+    // the sort happens inside computeCascadeHash, not at the call site.
+    const h1 = computeNotificationCascadeHash({
+        notificationId: "66e8aaaaaaaaaaaaaaaaaaaa",
+        eventDefIds: ["66e8cccccccccccccccccccc", "66e8bbbbbbbbbbbbbbbbbbbb"],
+    });
+    const h2 = computeNotificationCascadeHash({
+        notificationId: "66e8aaaaaaaaaaaaaaaaaaaa",
+        eventDefIds: ["66e8bbbbbbbbbbbbbbbbbbbb", "66e8cccccccccccccccccccc"],
+    });
+    assert.equal(h1, h2);
+});
+
+test("computeNotificationCascadeHash differs when notificationId differs", () => {
+    const h1 = computeNotificationCascadeHash({
+        notificationId: "66e8aaaaaaaaaaaaaaaaaaaa",
+        eventDefIds: ["66e8bbbbbbbbbbbbbbbbbbbb"],
+    });
+    const h2 = computeNotificationCascadeHash({
+        notificationId: "66e8aaaaaaaaaaaaaaaaaaab",
+        eventDefIds: ["66e8bbbbbbbbbbbbbbbbbbbb"],
+    });
+    assert.notEqual(h1, h2);
+});
+
+test("computeNotificationCascadeHash rejects malformed inputs", () => {
+    // Missing notificationId
+    assert.throws(
+        () => computeNotificationCascadeHash({ eventDefIds: [] }),
+        /notificationId/,
+    );
+    // Empty notificationId
+    assert.throws(
+        () => computeNotificationCascadeHash({ notificationId: "", eventDefIds: [] }),
+        /notificationId/,
+    );
+    // eventDefIds not an array
+    assert.throws(
+        () => computeNotificationCascadeHash({
+            notificationId: "66e8aaaaaaaaaaaaaaaaaaaa",
+            eventDefIds: "not-an-array",
+        }),
+        /eventDefIds/,
     );
 });
