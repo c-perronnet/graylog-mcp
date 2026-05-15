@@ -25,6 +25,14 @@ import "./snapshot-config.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const SNAPSHOTS_DIR = join(__dirname, "__snapshots__");
+// Plan 04-06: Phase 4 snapshot fixtures live under test/snapshots/ (a NEW
+// per-domain layout for the closing plan). The node:test snapshot resolver
+// puts the .snapshot file in a sibling `__snapshots__/` directory, so the
+// Phase 4 fixtures land at test/snapshots/__snapshots__/. The auth-redaction
+// scan must cover both directories so the lint inherits automatically.
+const ADDITIONAL_SNAPSHOT_DIRS = [
+    join(__dirname, "snapshots", "__snapshots__"),
+];
 
 // Password-literal regex. The value is captured in group 1 so a structural
 // "is this a `<...>` placeholder?" check can be applied without growing a
@@ -86,29 +94,32 @@ function isAllowedMatch(content, match, regex, matchIndex) {
 }
 
 test("no snapshot fixture contains Authorization header, apiToken-like strings, or password literals", () => {
-    let entries;
-    try {
-        entries = readdirSync(SNAPSHOTS_DIR);
-    } catch (err) {
-        // Directory doesn't exist yet — nothing to scan. The test re-runs on
-        // every npm test invocation; once snapshots land, scanning begins.
-        return;
-    }
-
-    const snapshotFiles = entries.filter((name) => name.endsWith(".snapshot"));
+    const dirsToScan = [SNAPSHOTS_DIR, ...ADDITIONAL_SNAPSHOT_DIRS];
     const violations = [];
 
-    for (const file of snapshotFiles) {
-        const fullPath = join(SNAPSHOTS_DIR, file);
-        if (!statSync(fullPath).isFile()) continue;
-        const content = readFileSync(fullPath, "utf8");
-        for (const { name, regex } of DENY_PATTERNS) {
-            const flags = regex.flags.includes("g") ? regex.flags : regex.flags + "g";
-            const globalRegex = new RegExp(regex.source, flags);
-            let m;
-            while ((m = globalRegex.exec(content)) !== null) {
-                if (!isAllowedMatch(content, m[0], regex, m.index)) {
-                    violations.push(`${file}: matches "${name}" → "${m[0].slice(0, 60)}..."`);
+    for (const dir of dirsToScan) {
+        let entries;
+        try {
+            entries = readdirSync(dir);
+        } catch (err) {
+            // Directory doesn't exist yet — nothing to scan. The test re-runs
+            // on every npm test invocation; once snapshots land, scanning begins.
+            continue;
+        }
+
+        const snapshotFiles = entries.filter((name) => name.endsWith(".snapshot"));
+        for (const file of snapshotFiles) {
+            const fullPath = join(dir, file);
+            if (!statSync(fullPath).isFile()) continue;
+            const content = readFileSync(fullPath, "utf8");
+            for (const { name, regex } of DENY_PATTERNS) {
+                const flags = regex.flags.includes("g") ? regex.flags : regex.flags + "g";
+                const globalRegex = new RegExp(regex.source, flags);
+                let m;
+                while ((m = globalRegex.exec(content)) !== null) {
+                    if (!isAllowedMatch(content, m[0], regex, m.index)) {
+                        violations.push(`${file}: matches "${name}" → "${m[0].slice(0, 60)}..."`);
+                    }
                 }
             }
         }

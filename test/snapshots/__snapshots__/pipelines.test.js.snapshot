@@ -1,0 +1,365 @@
+exports[`snapshot: connect_pipelines_to_stream Pitfall 2 GATE — current=[a,b] + args=[new] → body=[a,b,new] (PIPE-13 + Pitfall 2) 1`] = `
+{
+  "dryRun": true,
+  "tool": "connect_pipelines_to_stream",
+  "connection": "fake",
+  "idempotencyKey": "b25caa745e069128bbb9103ae0bb126d",
+  "summary": "Connect 1 pipeline(s) to stream fixture-s1",
+  "preview": {
+    "method": "POST",
+    "path": "/api/system/pipelines/connections/to_stream",
+    "body": {
+      "stream_id": "fixture-s1",
+      "pipeline_ids": [
+        "a",
+        "b",
+        "new"
+      ]
+    }
+  },
+  "postApplyEstimate": {
+    "stream_id": "fixture-s1",
+    "pipeline_ids": [
+      "a",
+      "b",
+      "new"
+    ]
+  },
+  "existingMatches": [],
+  "applyHint": "Re-call with dryRun: false to apply"
+}
+`;
+
+exports[`snapshot: create_pipeline dry-run with 2-stage source emits parseResult.ok + __SERVER_ASSIGNED__ (PIPE-03 + D-06 + D-17) 1`] = `
+{
+  "dryRun": true,
+  "tool": "create_pipeline",
+  "connection": "fake",
+  "idempotencyKey": "a59614e90abbc85e1d28e14714dd6ca0",
+  "summary": "Create pipeline \\"FixturePipelineNew\\"",
+  "preview": {
+    "method": "POST",
+    "path": "/api/system/pipelines/pipeline",
+    "body": {
+      "title": "FixturePipelineNew",
+      "description": "Two-stage routing pipeline",
+      "source": "pipeline \\"FixturePipelineNew\\"\\nstage 0 match either\\n  rule \\"stage0-rule\\"\\nend\\nstage 1 match all\\n  rule \\"stage1-rule\\"\\nend"
+    }
+  },
+  "postApplyEstimate": {
+    "id": "__SERVER_ASSIGNED__"
+  },
+  "existingMatches": [],
+  "parseResult": {
+    "ok": true
+  },
+  "applyHint": "Re-call with dryRun: false to apply"
+}
+`;
+
+exports[`snapshot: create_pipeline_rule C4 SERVER-PARSE GATE — isError + reason:rule_parse_failed + snake_case position_in_line (PIPE-08 + D-05 + Pitfall 6) 1`] = `
+{
+  "isError": true,
+  "content": [
+    {
+      "type": "text",
+      "text": "[create_pipeline_rule] 400 POST /api/system/pipelines/rule/parse: Server rule parse failed: [L3:5] UndeclaredFunction [reason: rule_parse_failed]"
+    }
+  ],
+  "reason": "rule_parse_failed"
+}
+`;
+
+exports[`snapshot: create_pipeline_rule structured intent emits byte-stable DSL with parseResult.ok (PIPE-08 + D-11) 1`] = `
+{
+  "dryRun": true,
+  "tool": "create_pipeline_rule",
+  "connection": "fake",
+  "idempotencyKey": "ad18b4e9658fc036728a2a2a4170416a",
+  "summary": "Create pipeline rule \\"fixture-uppercase-source\\" (from structured intent)",
+  "preview": {
+    "method": "POST",
+    "path": "/api/system/pipelines/rule",
+    "body": {
+      "source": "rule \\"fixture-uppercase-source\\"\\nwhen\\n    has_field(\\"source\\")\\nthen\\n    uppercase($message.source);\\nend"
+    }
+  },
+  "postApplyEstimate": {
+    "id": "__SERVER_ASSIGNED__"
+  },
+  "existingMatches": [],
+  "parseResult": {
+    "ok": true
+  },
+  "applyHint": "Re-call with dryRun: false to apply"
+}
+`;
+
+exports[`snapshot: delete_pipeline dry-run is LEAF — NO cascades, NO confirmationToken (PIPE-05 + D-15) 1`] = `
+{
+  "dryRun": true,
+  "tool": "delete_pipeline",
+  "connection": "fake",
+  "idempotencyKey": "08fe1ecb5bd5e10941dbc4aafd9e148e",
+  "summary": "Delete pipeline fixture-p1",
+  "preview": {
+    "method": "DELETE",
+    "path": "/api/system/pipelines/pipeline/fixture-p1"
+  },
+  "postApplyEstimate": {
+    "id": "fixture-p1",
+    "deleted": true
+  },
+  "existingMatches": [],
+  "applyHint": "Re-call with dryRun: false to apply"
+}
+`;
+
+exports[`snapshot: delete_pipeline_rule empty cascade (r1 + []) pins frozen hash 9541cfc2…5b1 — DIFFERS from F8 (PIPE-10 + D-14 disambiguation) 1`] = `
+{
+  "dryRun": true,
+  "tool": "delete_pipeline_rule",
+  "connection": "fake",
+  "idempotencyKey": "59d1ac3af5381d7d4c06dc1fd513bd94",
+  "summary": "Delete pipeline rule r1",
+  "preview": {
+    "method": "DELETE",
+    "path": "/api/system/pipelines/rule/r1"
+  },
+  "postApplyEstimate": {
+    "id": "r1",
+    "deleted": true
+  },
+  "existingMatches": [],
+  "confirmationToken": "9541cfc2cf6b92acde474f487f3e824942c1e0df4ae4308a60fa645afe1155b1",
+  "cascades": {
+    "pipelines": []
+  },
+  "applyHint": "Re-call with dryRun: false to apply"
+}
+`;
+
+exports[`snapshot: delete_pipeline_rule populated cascade (r1 + [p1,p2]) pins frozen hash 66267019…3a1 (PIPE-10 + D-14) 1`] = `
+{
+  "dryRun": true,
+  "tool": "delete_pipeline_rule",
+  "connection": "fake",
+  "idempotencyKey": "59d1ac3af5381d7d4c06dc1fd513bd94",
+  "summary": "Delete pipeline rule r1",
+  "preview": {
+    "method": "DELETE",
+    "path": "/api/system/pipelines/rule/r1"
+  },
+  "postApplyEstimate": {
+    "id": "r1",
+    "deleted": true
+  },
+  "existingMatches": [],
+  "confirmationToken": "66267019f60955ff99686f3dbf343f40580996e22d5ead79045743f1d075e3a1",
+  "cascades": {
+    "pipelines": [
+      {
+        "id": "p1",
+        "title": "FixturePipelineP1"
+      },
+      {
+        "id": "p2",
+        "title": "FixturePipelineP2"
+      }
+    ]
+  },
+  "applyHint": "Re-call with dryRun: false to apply"
+}
+`;
+
+exports[`snapshot: disconnect_pipelines_from_stream Pitfall 2 GATE — current=[a,b,c] + args=[b] → body=[a,c] (PIPE-14 + Pitfall 2 mirror) 1`] = `
+{
+  "dryRun": true,
+  "tool": "disconnect_pipelines_from_stream",
+  "connection": "fake",
+  "idempotencyKey": "edda57201a8820dc8a93806b0a7095bf",
+  "summary": "Disconnect 1 pipeline(s) from stream fixture-s1",
+  "preview": {
+    "method": "POST",
+    "path": "/api/system/pipelines/connections/to_stream",
+    "body": {
+      "stream_id": "fixture-s1",
+      "pipeline_ids": [
+        "a",
+        "c"
+      ]
+    }
+  },
+  "postApplyEstimate": {
+    "stream_id": "fixture-s1",
+    "pipeline_ids": [
+      "a",
+      "c"
+    ]
+  },
+  "existingMatches": [],
+  "applyHint": "Re-call with dryRun: false to apply"
+}
+`;
+
+exports[`snapshot: list_pipeline_functions overlay collision — debug category; live wins on \`debug\` (PIPE-11 + D-03 + Pitfall 5) 1`] = `
+{
+  "tool": "list_pipeline_functions",
+  "connection": "fake",
+  "count": 2,
+  "limit": 200,
+  "fields": "all",
+  "items": [
+    {
+      "name": "debug",
+      "signature": "debug(value: Object): Void",
+      "oneLineDescription": "LIVE DESC: Logs the value at DEBUG level (Phase 4 fixture)",
+      "category": "debug",
+      "source": "live",
+      "deprecated": false,
+      "returnType": "Void",
+      "sourceRef": "debug/Debug.java:35"
+    },
+    {
+      "name": "metric_counter_inc",
+      "category": "debug",
+      "signature": "metric_counter_inc(name: string, value?: long): void",
+      "oneLineDescription": "Increment a Graylog metric counter",
+      "sourceRef": "debug/MetricCounterIncrement.java:32",
+      "source": "static"
+    }
+  ]
+}
+`;
+
+exports[`snapshot: list_pipelines narrow projection of 2-pipeline cluster (PIPE-01 + stages_count synthetic field) 1`] = `
+{
+  "tool": "list_pipelines",
+  "connection": "fake",
+  "count": 2,
+  "limit": 25,
+  "fields": [
+    "id",
+    "title",
+    "description",
+    "stages_count",
+    "created_at",
+    "modified_at"
+  ],
+  "items": [
+    {
+      "id": "fixture-p1",
+      "title": "FixturePipelineA",
+      "description": "Routes app traffic through enrichment stages",
+      "stages_count": 1,
+      "created_at": "2026-01-01T00:00:00.000Z",
+      "modified_at": "2026-01-15T00:00:00.000Z"
+    },
+    {
+      "id": "fixture-p2",
+      "title": "FixturePipelineB",
+      "description": "System enrichment two-stage",
+      "stages_count": 2,
+      "created_at": "2026-01-01T00:00:00.000Z",
+      "modified_at": "2026-01-01T00:00:00.000Z"
+    }
+  ]
+}
+`;
+
+exports[`snapshot: simulate_pipeline_rule M3 GATE — apply surfaces post-rule field change in result.body (PIPE-12 + M3 acceptance) 1`] = `
+{
+  "dryRun": false,
+  "applied": true,
+  "tool": "simulate_pipeline_rule",
+  "connection": "fake",
+  "idempotencyKey": "151e54f3d0c37b87e4e990305d0cbb7e",
+  "result": {
+    "body": {
+      "message": {
+        "fields": {
+          "level": 5,
+          "source": "host",
+          "alert": true
+        },
+        "timestamp": "2026-05-15T12:00:00.000Z"
+      },
+      "simulator_state": {
+        "rule_fired": true
+      }
+    }
+  }
+}
+`;
+
+exports[`snapshot: simulate_pipeline_rule M3 GATE — dry-run body.message is JSON-STRING (PIPE-12 + Pitfall 1) 1`] = `
+{
+  "dryRun": true,
+  "tool": "simulate_pipeline_rule",
+  "connection": "fake",
+  "idempotencyKey": "0fc21f142d0c5bc7037247931920de76",
+  "summary": "Simulate pipeline rule against 2 field(s)",
+  "preview": {
+    "method": "POST",
+    "path": "/api/system/pipelines/rule/simulate",
+    "body": {
+      "message": "{\\"source\\":\\"host\\",\\"level\\":6}",
+      "rule_source": {
+        "source": "rule \\"fixture-simulate-noop\\"\\nwhen has_field(\\"source\\")\\nthen\\n    set_field(\\"alert\\", true);\\nend"
+      }
+    }
+  },
+  "postApplyEstimate": {
+    "message": "__SERVER_ASSIGNED__"
+  },
+  "existingMatches": [],
+  "parseResult": {
+    "ok": true
+  },
+  "applyHint": "Re-call with dryRun: false to apply"
+}
+`;
+
+exports[`snapshot: update_pipeline STRICT_NO_ECHO partial — title-only change emits ONLY title in wire body (PIPE-04 + D-16) 1`] = `
+{
+  "dryRun": true,
+  "tool": "update_pipeline",
+  "connection": "fake",
+  "idempotencyKey": "7c500908360491242087975975773f6b",
+  "summary": "Update pipeline fixture-p1 (1 change(s))",
+  "preview": {
+    "method": "PUT",
+    "path": "/api/system/pipelines/pipeline/fixture-p1",
+    "body": {
+      "title": "FixturePipelineA-renamed"
+    }
+  },
+  "postApplyEstimate": {
+    "id": "fixture-p1"
+  },
+  "existingMatches": [],
+  "applyHint": "Re-call with dryRun: false to apply"
+}
+`;
+
+exports[`snapshot: update_pipeline_rule STRICT_NO_ECHO — description-only change emits ONLY description (PIPE-09 + D-16) 1`] = `
+{
+  "dryRun": true,
+  "tool": "update_pipeline_rule",
+  "connection": "fake",
+  "idempotencyKey": "1fddae8e4e76152fd98f972ac89df772",
+  "summary": "Update pipeline rule fixture-r1 (1 change(s))",
+  "preview": {
+    "method": "PUT",
+    "path": "/api/system/pipelines/rule/fixture-r1",
+    "body": {
+      "description": "fixture-updated-description"
+    }
+  },
+  "postApplyEstimate": {
+    "id": "fixture-r1"
+  },
+  "existingMatches": [],
+  "applyHint": "Re-call with dryRun: false to apply"
+}
+`;
