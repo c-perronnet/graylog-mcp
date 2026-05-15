@@ -1192,4 +1192,78 @@ export const toolDefinitions = [
             required: ["indexSetId"],
         },
     },
+    // ====================================================================
+    // Phase 4 Plan 02 — pipeline CRUD (PIPE-01..PIPE-05). All paths use the
+    // literal `/api/system/pipelines/pipeline/{id}` segment (Pitfall 3 —
+    // bare /api/system/pipelines/{id} returns 404).
+    // ====================================================================
+    {
+        name: "list_pipelines",
+        description: "List Graylog pipelines (narrow projection [id, title, description, stages_count, created_at, modified_at]). `stages_count` is a synthetic projection (length of the wire `stages` array) — agents see card-stages-N without the byte cost of the raw `source` DSL. Use get_pipeline for the full DTO including source text and embedded stages.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                connectionName: { type: "string" },
+                fields: { type: "array", items: { type: "string" } },
+                limit: { type: "number" },
+            },
+        },
+    },
+    {
+        name: "get_pipeline",
+        description: "Get the full PipelineSource DTO for one Graylog pipeline (id, title, description, source DSL, stages, created_at, modified_at). Use list_pipelines first for narrow listing. Path uses the literal `pipeline` segment (Pitfall 3).",
+        inputSchema: {
+            type: "object",
+            properties: {
+                connectionName: { type: "string" },
+                pipelineId: { type: "string", description: "Pipeline ID (from list_pipelines)" },
+            },
+            required: ["pipelineId"],
+        },
+    },
+    {
+        name: "create_pipeline",
+        description: "Create a Graylog pipeline. Dry-run pre-flights POST /api/system/pipelines/pipeline/parse with the agent's `source` (D-06 server-authoritative parse gate); on parse error returns isError with reason `pipeline_parse_failed` and `parseResult.error` carrying `[{line, position_in_line, type, message}]` (Pitfall 6: wire `positionInLine` camelCase translates to `position_in_line` snake_case). Apply NEVER fires when parse fails (C4 mitigation). Dry-run also surfaces existingMatches when a pipeline with the same title already exists (informational). postApplyEstimate.id is __SERVER_ASSIGNED__ — DO NOT reuse it; use the real id from the apply response. Pipelines accept raw DSL source only; use the rule-level tools (Plan 04-03) for structured-intent emission.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                connectionName: { type: "string", description: "Optional per-call connection override" },
+                dryRun: { type: "boolean", description: "Default true. Set to false to apply." },
+                idempotencyKey: { type: "string", description: "Optional agent-supplied idempotency key" },
+                title: { type: "string", description: "Human-readable pipeline title (REQUIRED)" },
+                description: { type: "string", description: "Optional pipeline description" },
+                source: { type: "string", description: "REQUIRED — full pipeline DSL text. The wrapper POSTs it to /api/system/pipelines/pipeline/parse BEFORE the create POST; parse failures refuse apply with reason `pipeline_parse_failed`." },
+            },
+            required: ["title", "source"],
+        },
+    },
+    {
+        name: "update_pipeline",
+        description: "Partial-update a Graylog pipeline's mutable fields. STRICT_NO_ECHO wire-build (per 04-U1-SMOKE.md): only the fields you pass in `changes` are sent on the wire — unchanged fields stay server-side. Parse pre-flight (POST /api/system/pipelines/pipeline/parse) fires ONLY when changes.source is set; refuses apply with reason `pipeline_parse_failed` on parse error (Pitfall 6 camelCase→snake_case). Pre-flights GET on the current pipeline; 404 surfaces a clean MCP error envelope. NO mutable defense (D-15 — pipelines have no is_editable field on the wire). Schema: { pipelineId, changes: { title?, description?, source? } }.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                connectionName: { type: "string", description: "Optional per-call connection override" },
+                dryRun: { type: "boolean", description: "Default true. Set to false to apply." },
+                idempotencyKey: { type: "string", description: "Optional agent-supplied idempotency key" },
+                pipelineId: { type: "string", description: "Pipeline ID (from list_pipelines)" },
+                changes: { type: "object", description: "Partial-update subset: { title?, description?, source? }. Pass `description: null` to explicitly clear; omit to leave unchanged." },
+            },
+            required: ["pipelineId", "changes"],
+        },
+    },
+    {
+        name: "delete_pipeline",
+        description: "Delete a Graylog pipeline. LEAF DELETE (D-15) — pipelines have no mutable flag and no cascade pre-flight. NO confirmation token, NO requireConfirm gate. Stream connections referencing this pipeline become ORPHANED but RECOVERABLE — the orphan rows survive in the connection table, and the agent can re-connect any pipeline after recreating it via connect_pipelines_to_stream (Plan 04-05). Apply envelope is sync `{deleted: true, pipelineId}` (no async/job_id). Path uses the literal `pipeline` segment (Pitfall 3).",
+        inputSchema: {
+            type: "object",
+            properties: {
+                connectionName: { type: "string", description: "Optional per-call connection override" },
+                dryRun: { type: "boolean", description: "Default true. Set to false to apply." },
+                idempotencyKey: { type: "string", description: "Optional agent-supplied idempotency key" },
+                pipelineId: { type: "string", description: "Pipeline ID to delete (from list_pipelines)" },
+            },
+            required: ["pipelineId"],
+        },
+    },
 ];

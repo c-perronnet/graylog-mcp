@@ -55,6 +55,11 @@ import "./index-sets/index.js";
 // and list_stream_rules. Plans 03-02 / 03-03 / 03-04 will extend this barrel
 // with the 9 remaining mutating tools.
 import "./streams/index.js";
+// Phase 4 domain barrel — registers list_pipelines, get_pipeline,
+// create_pipeline, update_pipeline, delete_pipeline (Plan 04-02 ships
+// PIPE-01..PIPE-05). Plans 04-03/04/05 will extend with the 9 remaining
+// pipeline-rule + connection tools.
+import "./pipelines/index.js";
 
 // Names that already fit `<verb>_<domain>_<noun>` (10 of 23 — list_streams
 // displaced; the new Phase 3 handler is registered via ./streams/index.js

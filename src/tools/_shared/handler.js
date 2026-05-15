@@ -156,6 +156,13 @@ export function defineMutatingHandler(spec) {
                         // server-side side-effects (e.g. delete_input cascade-deletes
                         // extractors). Opt-in only — absent when build() didn't set it.
                         ...(req.cascades ? { cascades: req.cascades } : {}),
+                        // Plan 04-02 / D-06: build() may populate parseResult to
+                        // surface the server-authoritative parse pre-flight outcome
+                        // for create_pipeline / update_pipeline (and Plan 04-03's
+                        // create_pipeline_rule / update_pipeline_rule). Opt-in only —
+                        // absent when build() didn't set it (e.g. update_pipeline
+                        // with title-only changes that skip the parse round-trip).
+                        ...(req.parseResult ? { parseResult: req.parseResult } : {}),
                         applyHint: "Re-call with dryRun: false to apply",
                     }),
                 }],
