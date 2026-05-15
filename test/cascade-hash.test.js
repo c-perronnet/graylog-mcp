@@ -23,6 +23,7 @@ import {
     computeCascadeHash,
     computeC1Hash,
     collectIndexNames,
+    computeRuleCascadeHash,
 } from "../src/tools/_shared/cascade-hash.js";
 
 // Phase 2 back-compat: the original c1-hash.js path is preserved as a thin
@@ -228,5 +229,78 @@ test("computeCascadeHash throws on missing or malformed required keys", () => {
     assert.throws(
         () => computeCascadeHash({ streamId: "s1", ruleIds: [], pipelineConnIds: [] }),
         /ruleIds|pipelineConnIds|eventDefIds/,
+    );
+});
+
+// =====================================================================
+// Phase 4 D-14 — computeRuleCascadeHash (thin semantic wrapper)
+// =====================================================================
+//
+// Plan 04-01 Task 1 adds a semantic wrapper around computeCascadeHash so
+// delete_pipeline_rule's call-site reads naturally:
+//
+//   computeRuleCascadeHash({ ruleId, pipelineIds })
+//
+// instead of mis-titled
+//
+//   computeCascadeHash({ streamId: ruleId, pipelineConnIds: pipelineIds, ... })
+//
+// The wrapper forwards into the underlying helper unchanged, so the output
+// is BYTE-IDENTICAL to the equivalent computeCascadeHash call. Tests below
+// pin that forwarding contract so a future refactor cannot drift the hash.
+
+test("computeRuleCascadeHash returns a 64-hex string", () => {
+    const h = computeRuleCascadeHash({ ruleId: "r1", pipelineIds: ["p1", "p2"] });
+    assert.match(h, /^[0-9a-f]{64}$/);
+});
+
+test("computeRuleCascadeHash is BYTE-IDENTICAL to the equivalent computeCascadeHash call (forwarding semantics)", () => {
+    const a = computeRuleCascadeHash({ ruleId: "r1", pipelineIds: ["p1", "p2"] });
+    const b = computeCascadeHash({
+        streamId: "r1",
+        ruleIds: [],
+        pipelineConnIds: ["p1", "p2"],
+        eventDefIds: [],
+    });
+    assert.equal(a, b);
+});
+
+test("computeRuleCascadeHash sorts pipelineIds canonically (sort-order independent)", () => {
+    const h1 = computeRuleCascadeHash({ ruleId: "r1", pipelineIds: ["p2", "p1"] });
+    const h2 = computeRuleCascadeHash({ ruleId: "r1", pipelineIds: ["p1", "p2"] });
+    assert.equal(h1, h2);
+});
+
+test("computeRuleCascadeHash differs when ruleId differs", () => {
+    const h1 = computeRuleCascadeHash({ ruleId: "r1", pipelineIds: ["p1"] });
+    const h2 = computeRuleCascadeHash({ ruleId: "r2", pipelineIds: ["p1"] });
+    assert.notEqual(h1, h2);
+});
+
+test("computeRuleCascadeHash with empty pipelineIds produces a deterministic distinct hash", () => {
+    const empty = computeRuleCascadeHash({ ruleId: "r1", pipelineIds: [] });
+    const populated = computeRuleCascadeHash({ ruleId: "r1", pipelineIds: ["p1"] });
+    assert.match(empty, /^[0-9a-f]{64}$/);
+    assert.notEqual(empty, populated);
+    // Determinism: same inputs → same hash.
+    const again = computeRuleCascadeHash({ ruleId: "r1", pipelineIds: [] });
+    assert.equal(empty, again);
+});
+
+test("computeRuleCascadeHash rejects malformed inputs", () => {
+    // Missing ruleId
+    assert.throws(
+        () => computeRuleCascadeHash({ pipelineIds: ["p1"] }),
+        /ruleId/,
+    );
+    // Empty ruleId
+    assert.throws(
+        () => computeRuleCascadeHash({ ruleId: "", pipelineIds: ["p1"] }),
+        /ruleId/,
+    );
+    // pipelineIds not an array
+    assert.throws(
+        () => computeRuleCascadeHash({ ruleId: "r1", pipelineIds: "p1" }),
+        /pipelineIds/,
     );
 });
