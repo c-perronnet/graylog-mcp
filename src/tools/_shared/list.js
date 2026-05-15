@@ -33,10 +33,11 @@ export const MAX_LIMIT = 200;
  * @param {string} spec.name
  * @param {import("zod").ZodObject} spec.schema  Zod schema extending listBase
  * @param {(client: object, args: object) => Promise<Array<object>>} spec.fetch
+ * @param {string[]} [spec.defaultFields]  Optional per-tool projection when args.fields is absent. Falls back to DEFAULT_FIELDS.
  * @returns {(request: { params?: { arguments?: object } }) => Promise<object>}
  */
 export function defineListHandler(spec) {
-    const { name, schema, fetch } = spec;
+    const { name, schema, fetch, defaultFields } = spec;
 
     return async function handler(request) {
         const rawArgs = request?.params?.arguments ?? {};
@@ -61,15 +62,29 @@ export function defineListHandler(spec) {
         // 3. Limit clamp (Pitfall M6 — agent context bloat protection)
         const limit = Math.min(args.limit ?? DEFAULT_LIMIT, MAX_LIMIT);
 
-        // 4. Field projection: "all" → no projection; array → custom; absent → default narrow.
+        // 4. Field projection: "all" → no projection; array → custom; absent → per-tool
+        //    default (spec.defaultFields) when provided, else module DEFAULT_FIELDS.
+        //    Plan 01-01 BLOCKER #3 fix: list_inputs needs [id, title, type, global]
+        //    instead of [id, title, description] — per-tool override avoids a bespoke
+        //    projection bypass at the handler site.
         const fields = args.fields === "all"
             ? null
-            : (Array.isArray(args.fields) ? args.fields : DEFAULT_FIELDS);
+            : (Array.isArray(args.fields)
+                ? args.fields
+                : (defaultFields ?? DEFAULT_FIELDS));
 
         // 5. Fetch + project
         try {
             const client = makeClient(conn);
-            const items = await fetch(client, { ...args, limit });
+            // Pass connectionName + conn through to fetch — tools that depend on
+            // per-connection caches (e.g. list_input_types → type-catalogue cache)
+            // need a stable identifier without re-resolving the connection.
+            const items = await fetch(client, {
+                ...args,
+                limit,
+                _connectionName: connectionName,
+                _conn: conn,
+            });
             const projected = fields ? items.map((it) => projectItem(it, fields)) : items;
             return {
                 content: [{

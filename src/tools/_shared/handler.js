@@ -47,7 +47,9 @@ import { makeClient } from "../../graylog/client.js";
  * @param {object} spec
  * @param {string} spec.name              snake_case tool name (used in hash + error context)
  * @param {import("zod").ZodObject} spec.schema  Zod schema extending mutatingBase
- * @param {(args: object) => RequestDescriptor} spec.build  Pure: args → request descriptor
+ * @param {(args: object) => RequestDescriptor | Promise<RequestDescriptor>} spec.build
+ *   Pure: args → request descriptor. May be async (A4) so update_input can pre-flight
+ *   a GET on the current input and the cached type catalogue inside build().
  * @param {(client: object, req: RequestDescriptor) => Promise<unknown>} spec.apply
  * @param {(args: object, req: RequestDescriptor) => string} [spec.summarize]
  * @returns {(request: { params?: { arguments?: object } }) => Promise<object>}
@@ -101,7 +103,16 @@ export function defineMutatingHandler(spec) {
             ?? deriveIdempotencyKey({ connectionName, toolName: name, args });
 
         // 5. Build request descriptor (pure — guarantees preview ≡ apply payload).
-        const req = build(args);
+        // build() may be async (A4) — update_input needs pre-flight GET inside build
+        // (current input fetch + cached type catalogue lookup for is_encrypted
+        // detection). Awaiting a synchronous return is a no-op, so existing callers
+        // see no behavioural change.
+        let req;
+        try {
+            req = await build(args);
+        } catch (err) {
+            return wrapGraylogError(err, name);
+        }
 
         // 6. Dry-run-or-apply branch (FOUND-03 + FOUND-04)
         const dryRun = args.dryRun ?? true; // default-true enforced ONCE, here

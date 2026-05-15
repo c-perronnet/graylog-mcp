@@ -40,6 +40,10 @@ import {
     handleImportTemplates,
 } from "./template-mgmt.js";
 
+// Phase 1 domain barrels — each module side-effect-registers its handlers.
+// Import here so a single `import "./tools/_register.js"` wires everything.
+import "./inputs/index.js";
+
 // Names that already fit `<verb>_<domain>_<noun>` (11 of 23)
 register("list_connections", listConnectionsHandler);
 register("list_streams", listStreamsHandler);

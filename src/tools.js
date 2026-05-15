@@ -649,4 +649,41 @@ export const toolDefinitions = [
             required: ["templates"],
         },
     },
+    // ----- Phase 1 inputs (INPUT-01, INPUT-02, INPUT-03) -----
+    {
+        name: "list_input_types",
+        description: "List dynamically-discovered Graylog input types (e.g. GELF UDP, Beats2, Syslog TCP) — surfaces the type FQCN, display name, description, and requested_configuration. Cached per connection for the server process lifetime. Use this BEFORE create_input to discover available type FQCNs.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                connectionName: { type: "string", description: "Optional per-call connection override; otherwise the active connection is used" },
+                limit: { type: "number", description: "Max items to return. Default 25, max 200." },
+                fields: { description: "Field projection: 'all' for full DTOs, array of field names for custom projection. Default narrow [id, title, description]." },
+            },
+        },
+    },
+    {
+        name: "list_inputs",
+        description: "List configured Graylog inputs on the connected cluster. Default narrow projection [id, title, type, global]; pass fields:\"all\" for full DTOs (configuration map included). Encrypted configuration fields in the full DTO are server-masked (<value hidden>, <password set>) — the MCP NEVER unmasks.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                connectionName: { type: "string", description: "Optional per-call connection override" },
+                limit: { type: "number", description: "Max items to return. Default 25, max 200." },
+                fields: { description: "Field projection: 'all' for full DTOs, array of field names for custom projection. Default narrow [id, title, type, global]." },
+            },
+        },
+    },
+    {
+        name: "get_input",
+        description: "Fetch the full configuration of one Graylog input by ID. Returns the complete InputSummary (id, title, type, configuration map, global, node, created_at, ...). Encrypted fields surface as server-masked placeholders (<value hidden>, <password set>) — never the actual secret. Use list_inputs to discover IDs.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                connectionName: { type: "string", description: "Optional per-call connection override" },
+                inputId: { type: "string", description: "The Graylog input ID (e.g. from list_inputs)" },
+            },
+            required: ["inputId"],
+        },
+    },
 ];
