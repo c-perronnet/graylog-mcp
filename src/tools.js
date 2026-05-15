@@ -123,10 +123,40 @@ export const toolDefinitions = [
     },
     {
         name: "list_streams",
-        description: "List all available Graylog streams in the active connection.",
+        description: "List Graylog streams in the active connection. Returns narrow projection [id, title, description, mutable, disabled, index_set_id]; pass `fields:[...]` to customize. Filter `mutable:true` for editable candidates.",
         inputSchema: {
             type: "object",
-            properties: {},
+            properties: {
+                connectionName: { type: "string" },
+                fields: { type: "array", items: { type: "string" } },
+                limit: { type: "number" },
+            },
+        },
+    },
+    {
+        name: "get_stream",
+        description: "Get the full StreamResponse DTO for one Graylog stream (id, title, rules embedded, matching_type, index_set_id, is_editable, disabled, ...). Use list_streams first for narrow listing.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                connectionName: { type: "string" },
+                streamId: { type: "string", description: "Stream ID (from list_streams)" },
+            },
+            required: ["streamId"],
+        },
+    },
+    {
+        name: "list_stream_rules",
+        description: "List the rules attached to one Graylog stream. Narrow projection [id, type, field, value, inverted]; type is the numeric StreamRuleType (1=EXACT, 2=REGEX, 3=GREATER, 4=SMALLER, 5=PRESENCE, 6=CONTAINS, 7=ALWAYS_MATCH, 8=MATCH_INPUT).",
+        inputSchema: {
+            type: "object",
+            properties: {
+                connectionName: { type: "string" },
+                streamId: { type: "string" },
+                fields: { type: "array", items: { type: "string" } },
+                limit: { type: "number" },
+            },
+            required: ["streamId"],
         },
     },
     {

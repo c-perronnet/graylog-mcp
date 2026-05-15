@@ -16,7 +16,12 @@ import {
     useConnectionHandler,
     fetchGraylogMessagesHandler,
     getSurroundingMessagesHandler,
-    listStreamsHandler,
+    // Phase 3 Plan 01 (Pitfall S5 displacement): the v2.3 listStreamsHandler
+    // export in ../handlers.js is intentionally NOT imported here. The new
+    // Phase 3 list_streams (registered via ./streams/index.js below) claims
+    // the dispatch name; the v2.3 function in ../handlers.js stays exported
+    // for HARD-03 audit reference (Phase 7) but is no longer wired into
+    // dispatch.
     listFieldValuesHandler,
     getLogHistogramHandler,
     getFieldAggregationHandler,
@@ -46,10 +51,15 @@ import "./inputs/index.js";
 // Phase 2 domain barrel — registers list_index_sets, get_index_set,
 // and await_system_job (the cross-domain polling primitive).
 import "./index-sets/index.js";
+// Phase 3 domain barrel — registers list_streams (replaces v2.3), get_stream,
+// and list_stream_rules. Plans 03-02 / 03-03 / 03-04 will extend this barrel
+// with the 9 remaining mutating tools.
+import "./streams/index.js";
 
-// Names that already fit `<verb>_<domain>_<noun>` (11 of 23)
+// Names that already fit `<verb>_<domain>_<noun>` (10 of 23 — list_streams
+// displaced; the new Phase 3 handler is registered via ./streams/index.js
+// above, before this section's register() calls fire).
 register("list_connections", listConnectionsHandler);
-register("list_streams", listStreamsHandler);
 register("list_field_values", listFieldValuesHandler);
 register("list_saved_searches", listSavedSearchesHandler);
 register("get_saved_search", getSavedSearchHandler);

@@ -282,11 +282,12 @@ test("get_stream propagates 404 via wrapGraylogError", async () => {
 // =====================================================================
 
 test("dispatch resolves list_streams to the new Phase 3 handler (v2.3 displaced)", async () => {
-    const { dispatch, _clearForTests } = await import("../src/dispatch.js");
-    _clearForTests();
-    // Re-import _register.js via dynamic import + cache-bust so its side
-    // effects fire fresh against the cleared dispatch Map.
-    await import(`../src/tools/_register.js?cacheBust=${Math.random()}`);
+    // Side-effect import wires every tool — the registry persists across
+    // tests in the same node:test process. We do NOT call _clearForTests
+    // here because that would unregister every Phase 0-3 handler and the
+    // re-import would not re-trigger the side-effects (ES module cache).
+    const { dispatch } = await import("../src/dispatch.js");
+    await import("../src/tools/_register.js");
 
     // The new Phase 3 handler talks to /api/streams via makeClient. Stub the
     // request so we can confirm WHICH handler runs by inspecting the response
@@ -306,16 +307,22 @@ test("dispatch resolves list_streams to the new Phase 3 handler (v2.3 displaced)
 });
 
 // =====================================================================
-// Test 11 — module-init assertAllToolsRegistered returns OK after Plan 03-01
+// Test 11 — module-init assertAllToolsRegistered passes after Plan 03-01
 // =====================================================================
 
-test("assertAllToolsRegistered returns OK after Phase 3 Plan 01 registers list_streams/get_stream/list_stream_rules", async () => {
-    const { dispatch, _clearForTests, assertAllToolsRegistered } = await import("../src/dispatch.js");
-    _clearForTests();
-    await import(`../src/tools/_register.js?cacheBust=${Math.random()}`);
+test("assertAllToolsRegistered passes after Phase 3 Plan 01 registers list_streams/get_stream/list_stream_rules", async () => {
+    const { dispatch, assertAllToolsRegistered } = await import("../src/dispatch.js");
+    // Side-effect import: register every production handler. Module cache
+    // ensures this only fires once per process even across test files; if
+    // earlier tests in this file ran their dispatch dance, those register
+    // calls already populated the Map.
+    await import("../src/tools/_register.js");
     const { toolDefinitions } = await import("../src/tools.js");
-    const result = assertAllToolsRegistered(toolDefinitions);
-    assert.equal(result, "OK", `assertAllToolsRegistered failed: ${result}`);
+    // assertAllToolsRegistered returns undefined on success and throws on
+    // missing handlers (src/dispatch.js:28). Either we reach the next line or
+    // the test fails with the thrown error message — which is exactly the
+    // contract we want.
+    assertAllToolsRegistered(toolDefinitions);
     // dispatch is imported just to anchor the dispatch module so it's already
     // initialised in this test context.
     assert.equal(typeof dispatch, "function");
