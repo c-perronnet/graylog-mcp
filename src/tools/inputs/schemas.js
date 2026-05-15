@@ -171,3 +171,22 @@ export const UpdateInputSchema = mutatingBase.extend({
 export const DeleteInputSchema = mutatingBase.extend({
     inputId: z.string().min(1, "inputId is required"),
 });
+
+// =====================================================================
+// INPUT-07 — Plan 01-03 lifecycle schemas
+// =====================================================================
+//
+// start_input  → PUT    /api/system/inputstates/{inputId}
+// stop_input   → DELETE /api/system/inputstates/{inputId}
+//
+// D-08: lifecycle is a uniform mutation — no special-cased runtime path.
+// Both schemas accept ONLY { inputId } on top of mutatingBase (no body, no
+// state arg). The verb asymmetry (PUT vs DELETE) is documented in tools.js.
+
+export const StartInputSchema = mutatingBase.extend({
+    inputId: z.string().min(1, "inputId is required"),
+});
+
+export const StopInputSchema = mutatingBase.extend({
+    inputId: z.string().min(1, "inputId is required"),
+});

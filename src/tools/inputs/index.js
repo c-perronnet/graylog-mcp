@@ -10,6 +10,8 @@ import { handleGetInput } from "./get-input.js";
 import { handleCreateInput } from "./create-input.js";
 import { handleUpdateInput } from "./update-input.js";
 import { handleDeleteInput } from "./delete-input.js";
+import { handleStartInput } from "./start-input.js";
+import { handleStopInput } from "./stop-input.js";
 
 register("list_input_types", handleListInputTypes);
 register("list_inputs", handleListInputs);
@@ -17,3 +19,5 @@ register("get_input", handleGetInput);
 register("create_input", handleCreateInput);
 register("update_input", handleUpdateInput);
 register("delete_input", handleDeleteInput);
+register("start_input", handleStartInput);
+register("stop_input", handleStopInput);

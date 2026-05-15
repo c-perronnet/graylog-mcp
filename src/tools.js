@@ -734,4 +734,33 @@ export const toolDefinitions = [
             required: ["inputId"],
         },
     },
+    // ----- Phase 1 input lifecycle (INPUT-07) -----
+    {
+        name: "start_input",
+        description: "Start a Graylog input (set desired state to RUNNING). Maps to PUT /api/system/inputstates/{inputId} — no request body required. NOTE: This sets the DESIRED state; actual state may briefly remain STARTING until Graylog's input registry converges. Poll get_input if you need to wait for RUNNING.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                connectionName: { type: "string", description: "Optional per-call connection override" },
+                dryRun: { type: "boolean", description: "Default true. Set to false to apply." },
+                idempotencyKey: { type: "string", description: "Optional agent-supplied idempotency key" },
+                inputId: { type: "string", description: "The Graylog input ID to start" },
+            },
+            required: ["inputId"],
+        },
+    },
+    {
+        name: "stop_input",
+        description: "Stop a Graylog input (set desired state to STOPPED). Maps to DELETE /api/system/inputstates/{inputId} — the verb is DELETE (not PUT) due to Graylog's REST semantics; the input itself is NOT deleted, only its running state. NOTE: This sets the DESIRED state; actual state may briefly remain STOPPING until Graylog's input registry converges. Poll get_input if you need to wait for STOPPED.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                connectionName: { type: "string", description: "Optional per-call connection override" },
+                dryRun: { type: "boolean", description: "Default true. Set to false to apply." },
+                idempotencyKey: { type: "string", description: "Optional agent-supplied idempotency key" },
+                inputId: { type: "string", description: "The Graylog input ID to stop" },
+            },
+            required: ["inputId"],
+        },
+    },
 ];
