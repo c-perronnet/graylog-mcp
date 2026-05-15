@@ -52,12 +52,18 @@ import {
 beforeEach(() => {
     _clearConnectionsForTests();
     setActiveConnection(null);
+    // Plan 04-03 — the per-connection function catalogue is process-lifetime
+    // cached (D-03); reset between tests so each create_pipeline_rule /
+    // update_pipeline_rule case sees a clean fetch under the captured-request
+    // seam. Safe no-op when the catalogue hasn't been populated yet.
+    _clearFunctionCatalogueForTests();
 });
 
 afterEach(() => {
     _clearCaptureRequest();
     _clearConnectionsForTests();
     setActiveConnection(null);
+    _clearFunctionCatalogueForTests();
 });
 
 // =====================================================================
@@ -387,16 +393,16 @@ test("dispatch resolves list_pipelines/get_pipeline/delete_pipeline via the new 
     assert.ok(Array.isArray(payload.items));
 });
 
-test("assertAllToolsRegistered passes after Plan 04-03 Task 1 registers PIPE-06+PIPE-07 (count = 61)", async () => {
+test("assertAllToolsRegistered passes after Plan 04-03 Task 2 registers PIPE-06..PIPE-09 (count = 63)", async () => {
     const { dispatch, assertAllToolsRegistered } = await import("../src/dispatch.js");
     await import("../src/tools/_register.js");
     const { toolDefinitions } = await import("../src/tools.js");
     assertAllToolsRegistered(toolDefinitions);
     assert.equal(typeof dispatch, "function");
-    // Plan 04-02 left 59 (PIPE-01..PIPE-05); Plan 04-03 Task 1 adds
-    // list_pipeline_rules + get_pipeline_rule → 61. Task 2 grows to 63 once
-    // create + update land; the test below at the end of Task 2 enforces 63.
-    assert.equal(toolDefinitions.length, 61, `Expected 61 tools after Plan 04-03 Task 1; got ${toolDefinitions.length}`);
+    // Plan 04-02 left 59 (PIPE-01..PIPE-05); Plan 04-03 Task 2 finishes the
+    // pipeline-rule CRUD quartet → 63. If the count drifts, this test fails
+    // loudly and we know to update the plan.
+    assert.equal(toolDefinitions.length, 63, `Expected 63 tools after Plan 04-03; got ${toolDefinitions.length}`);
 });
 
 // =====================================================================
@@ -907,10 +913,8 @@ test("update_pipeline has NO is_editable / mutable check (D-15 — pipelines hav
 
 import { handleListPipelineRules } from "../src/tools/pipelines/list-pipeline-rules.js";
 import { handleGetPipelineRule } from "../src/tools/pipelines/get-pipeline-rule.js";
-// Task 2 imports — create/update_pipeline_rule handlers — landed in Plan 04-03
-// Task 2 GREEN gate (added alongside the corresponding tests, keeping the
-// Task 1 RED gate parseable when the Task 2 production modules don't yet
-// exist).
+import { handleCreatePipelineRule } from "../src/tools/pipelines/create-pipeline-rule.js";
+import { handleUpdatePipelineRule } from "../src/tools/pipelines/update-pipeline-rule.js";
 import {
     ListPipelineRulesSchema,
     GetPipelineRuleSchema,
@@ -920,6 +924,7 @@ import {
     ConditionSchema,
     ActionSchema,
 } from "../src/tools/pipelines/schemas.js";
+import { _clearFunctionCatalogueForTests } from "../src/pipeline-dsl/function-catalogue.js";
 
 // =====================================================================
 // Fixtures — RuleSource DTO and structured-intent helpers
@@ -1243,4 +1248,702 @@ test("dispatch resolves list_pipeline_rules/get_pipeline_rule via the pipelines 
     const payload = JSON.parse(res.content[0].text);
     assert.equal(payload.tool, "list_pipeline_rules");
     assert.ok(Array.isArray(payload.items));
+});
+
+// =====================================================================
+// Task 2 — create_pipeline_rule (PIPE-08) — D-05 parse pre-flight +
+// D-04 client-side lint + D-10 mutual exclusion + D-17 sentinel.
+// C4 ACCEPTANCE GATE is proven across 3 distinct fail paths plus the
+// happy structured + happy raw paths.
+// =====================================================================
+
+// Reusable multi-route for the standard happy-path create call:
+//   1. GET /api/system/pipelines/rule/functions → live function catalogue
+//      (empty array — merged map equals staticBuiltins)
+//   2. POST /api/system/pipelines/rule/parse → 200 (parse ok)
+//   3. GET /api/system/pipelines/rule → [] (no existing rules to collide)
+//   4. POST /api/system/pipelines/rule → returns created RuleSource
+function createPipelineRuleHappyRoutes(extraOverrides = {}) {
+    return pipelinesMultiCapture([
+        {
+            method: "GET",
+            pathPattern: "/api/system/pipelines/rule/functions",
+            response: extraOverrides.functions ?? EMPTY_LIVE_FUNCTIONS,
+        },
+        {
+            method: "POST",
+            pathPattern: "/api/system/pipelines/rule/parse",
+            response: extraOverrides.parse ?? (() => ({ source: "ok" })),
+        },
+        {
+            method: "GET",
+            pathPattern: "/api/system/pipelines/rule",
+            response: extraOverrides.list ?? [],
+        },
+        {
+            method: "POST",
+            pathPattern: "/api/system/pipelines/rule",
+            response: extraOverrides.create ?? (() => ({ ...FULL_RULE_A, id: "r_new" })),
+        },
+    ]);
+}
+
+test("create_pipeline_rule HAPPY structured: parseResult.ok:true; emit produces DSL with expected fragments; __SERVER_ASSIGNED__ sentinel", async () => {
+    _setCaptureRequest(createPipelineRuleHappyRoutes());
+    const res = await handleCreatePipelineRule({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                structured: VALID_STRUCTURED,
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.dryRun, true);
+    assert.equal(payload.tool, "create_pipeline_rule");
+    assert.equal(payload.preview.method, "POST");
+    assert.equal(payload.preview.path, "/api/system/pipelines/rule");  // Pitfall 3 rule variant
+    // Emitted DSL contains expected fragments: rule "uppercase-source",
+    // has_field("source"), uppercase(...).
+    const emitted = payload.preview.body.source;
+    assert.match(emitted, /rule "uppercase-source"/);
+    assert.match(emitted, /has_field\("source"\)/);
+    assert.match(emitted, /uppercase\(/);
+    assert.match(emitted, /\$message\.source/);
+    // D-17 server-assigned sentinel.
+    assert.equal(payload.postApplyEstimate.id, "__SERVER_ASSIGNED__");
+    // parseResult surfaces on dry-run.
+    assert.equal(payload.parseResult.ok, true);
+});
+
+test("create_pipeline_rule HAPPY raw DSL: source forwards VERBATIM (no emit transformation)", async () => {
+    const rawSource = 'rule "raw-rule"\nwhen has_field("x")\nthen\n    set_field("y", "z");\nend';
+    _setCaptureRequest(createPipelineRuleHappyRoutes());
+    const res = await handleCreatePipelineRule({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                ruleSource: rawSource,
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.preview.body.source, rawSource);
+    assert.equal(payload.parseResult.ok, true);
+});
+
+test("create_pipeline_rule C4 CLIENT-SIDE LINT FAIL (toUpperCase): reason rule_validation_failed; parse pre-flight NEVER fires", async () => {
+    const seenPaths = [];
+    _setCaptureRequest((req) => {
+        seenPaths.push({ method: req.method, path: req.path });
+        if (req.method === "GET" && req.path === "/api/system/pipelines/rule/functions") {
+            return EMPTY_LIVE_FUNCTIONS;
+        }
+        if (req.method === "POST" && req.path === "/api/system/pipelines/rule/parse") {
+            return { source: "should not be reached" };
+        }
+        return [];
+    });
+    const res = await handleCreatePipelineRule({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                structured: INVALID_STRUCTURED_TOUPPERCASE,
+                dryRun: false,
+            },
+        },
+    });
+    assert.equal(res.isError, true);
+    assert.equal(res.reason, "rule_validation_failed");
+    // The agent-visible envelope must surface the offending camelCase function name.
+    assert.match(res.content[0].text, /toUpperCase/);
+    // Parse pre-flight MUST NOT have been called.
+    const parseCalls = seenPaths.filter(
+        (p) => p.method === "POST" && p.path === "/api/system/pipelines/rule/parse",
+    );
+    assert.equal(parseCalls.length, 0, "parse pre-flight must NOT fire when client-side lint catches the error first");
+});
+
+test("create_pipeline_rule C4 SERVER-PARSE FAIL (structured): reason rule_parse_failed; apply NEVER fires", async () => {
+    let postBodyFired = false;
+    _setCaptureRequest((req) => {
+        if (req.method === "GET" && req.path === "/api/system/pipelines/rule/functions") {
+            return EMPTY_LIVE_FUNCTIONS;
+        }
+        if (req.method === "POST" && req.path === "/api/system/pipelines/rule/parse") {
+            // Synthetic ParseException — 400 + Set<ParseError> body. The
+            // structured intent passes the client-side lint (uppercase IS in
+            // the catalogue) but Graylog's server-side grammar fails because
+            // (e.g.) the action arg shape was wrong.
+            throw new GraylogValidationError("parse failed", {
+                status: 400,
+                method: "POST",
+                path: "/api/system/pipelines/rule/parse",
+                body: [{ type: "SyntaxError", line: 3, positionInLine: 7, message: "unexpected token" }],
+            });
+        }
+        if (req.method === "POST" && req.path === "/api/system/pipelines/rule") {
+            postBodyFired = true;
+            return { ...FULL_RULE_A };
+        }
+        return [];
+    });
+    const res = await handleCreatePipelineRule({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                structured: VALID_STRUCTURED,
+                dryRun: false,
+            },
+        },
+    });
+    assert.equal(res.isError, true);
+    assert.equal(res.reason, "rule_parse_failed");
+    assert.equal(postBodyFired, false, "POST /rule must NOT fire when server parse pre-flight 400s");
+});
+
+test("create_pipeline_rule C4 SERVER-PARSE FAIL (raw DSL): reason rule_parse_failed; apply NEVER fires", async () => {
+    let postBodyFired = false;
+    _setCaptureRequest((req) => {
+        if (req.method === "GET" && req.path === "/api/system/pipelines/rule/functions") {
+            return EMPTY_LIVE_FUNCTIONS;
+        }
+        if (req.method === "POST" && req.path === "/api/system/pipelines/rule/parse") {
+            throw new GraylogValidationError("parse failed", {
+                status: 400,
+                method: "POST",
+                path: "/api/system/pipelines/rule/parse",
+                body: [{ type: "SyntaxError", line: 1, positionInLine: 5, message: "missing end" }],
+            });
+        }
+        if (req.method === "POST" && req.path === "/api/system/pipelines/rule") {
+            postBodyFired = true;
+            return { ...FULL_RULE_A };
+        }
+        return [];
+    });
+    const res = await handleCreatePipelineRule({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                ruleSource: 'rule "broken" when has_field("x") then',  // truncated
+                dryRun: false,
+            },
+        },
+    });
+    assert.equal(res.isError, true);
+    assert.equal(res.reason, "rule_parse_failed");
+    assert.equal(postBodyFired, false);
+});
+
+test("create_pipeline_rule Pitfall 6: wire positionInLine (camelCase) emits as position_in_line (snake_case)", async () => {
+    _setCaptureRequest((req) => {
+        if (req.method === "GET" && req.path === "/api/system/pipelines/rule/functions") {
+            return EMPTY_LIVE_FUNCTIONS;
+        }
+        if (req.method === "POST" && req.path === "/api/system/pipelines/rule/parse") {
+            throw new GraylogValidationError("parse failed", {
+                status: 400,
+                method: "POST",
+                path: "/api/system/pipelines/rule/parse",
+                body: [{ type: "SyntaxError", line: 3, positionInLine: 7, message: "boom" }],
+            });
+        }
+        return [];
+    });
+    const res = await handleCreatePipelineRule({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                ruleSource: 'rule "x" when has_field("y") then end',
+            },
+        },
+    });
+    assert.equal(res.isError, true);
+    // The wrapper's emitted text must surface the snake_case projection of
+    // positionInLine. The L:position rendering encodes it directly.
+    assert.match(res.content[0].text, /L3:7/);
+    assert.match(res.content[0].text, /SyntaxError/);
+});
+
+test("create_pipeline_rule Pitfall 5: live-only function name in merged catalogue is ACCEPTED by client-side lint", async () => {
+    // Synthetic live function NOT present in static builtins. Wrapper should
+    // accept it through the merged map (live-wins-on-collision semantics —
+    // here live-only entry is the only path).
+    const LIVE_ONLY_FUNCTIONS = [
+        {
+            name: "__phase4_test_function__",
+            pure: true,
+            return_type: "boolean",
+            params: [{ name: "v", type: "any", optional: false }],
+            description: "synthetic live-only function",
+        },
+    ];
+    _setCaptureRequest(createPipelineRuleHappyRoutes({ functions: LIVE_ONLY_FUNCTIONS }));
+    const res = await handleCreatePipelineRule({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                structured: {
+                    name: "live-only-test",
+                    when: { type: "has_field", field: "source" },
+                    then: [
+                        {
+                            type: "function_call_statement",
+                            name: "__phase4_test_function__",
+                            args: { positional: [{ type: "literal", value: "x" }] },
+                        },
+                    ],
+                },
+            },
+        },
+    });
+    assert.equal(res.isError, undefined, `expected success but got isError=${res.isError}: ${res.content?.[0]?.text}`);
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.parseResult.ok, true);
+    assert.match(payload.preview.body.source, /__phase4_test_function__/);
+});
+
+test("create_pipeline_rule path: POST URL is /api/system/pipelines/rule; parse path is /api/system/pipelines/rule/parse (literal `rule` segment)", async () => {
+    const seenPaths = [];
+    _setCaptureRequest((req) => {
+        seenPaths.push({ method: req.method, path: req.path });
+        if (req.method === "GET" && req.path === "/api/system/pipelines/rule/functions") return EMPTY_LIVE_FUNCTIONS;
+        if (req.method === "POST" && req.path === "/api/system/pipelines/rule/parse") return {};
+        if (req.method === "GET" && req.path === "/api/system/pipelines/rule") return [];
+        if (req.method === "POST" && req.path === "/api/system/pipelines/rule") return { ...FULL_RULE_A, id: "r_new" };
+        throw new Error(`Unexpected ${req.method} ${req.path}`);
+    });
+    await handleCreatePipelineRule({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                structured: VALID_STRUCTURED,
+                dryRun: false,
+            },
+        },
+    });
+    assert.ok(
+        seenPaths.some((p) => p.method === "POST" && p.path === "/api/system/pipelines/rule/parse"),
+        `Expected POST /api/system/pipelines/rule/parse; saw ${JSON.stringify(seenPaths)}`,
+    );
+    assert.ok(
+        seenPaths.some((p) => p.method === "POST" && p.path === "/api/system/pipelines/rule"),
+        `Expected POST /api/system/pipelines/rule; saw ${JSON.stringify(seenPaths)}`,
+    );
+});
+
+test("create_pipeline_rule M5: existingMatches populated when structured.name collides with an existing rule's title", async () => {
+    _setCaptureRequest(createPipelineRuleHappyRoutes({
+        list: [{ id: "r_existing", title: "uppercase-source", description: "" }],
+    }));
+    const res = await handleCreatePipelineRule({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                structured: VALID_STRUCTURED,
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.existingMatches.length, 1);
+    assert.equal(payload.existingMatches[0].id, "r_existing");
+    assert.equal(payload.existingMatches[0].title, "uppercase-source");
+});
+
+test("create_pipeline_rule M5: existingMatches populated when raw DSL title (regex-extracted) collides", async () => {
+    _setCaptureRequest(createPipelineRuleHappyRoutes({
+        list: [{ id: "r_existing", title: "tag-error", description: "" }],
+    }));
+    const res = await handleCreatePipelineRule({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                ruleSource: 'rule "tag-error"\nwhen has_field("x") then end',
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.existingMatches.length, 1);
+    assert.equal(payload.existingMatches[0].title, "tag-error");
+});
+
+test("create_pipeline_rule M5: existingMatches EMPTY when raw DSL has no extractable title regex", async () => {
+    _setCaptureRequest(createPipelineRuleHappyRoutes({
+        list: [{ id: "r_existing", title: "any-rule", description: "" }],
+    }));
+    const res = await handleCreatePipelineRule({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                // No `rule "..."` prefix — best-effort regex fails.
+                ruleSource: 'when has_field("x") then end',
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.existingMatches.length, 0);
+});
+
+test("create_pipeline_rule idempotency-key is present in dry-run JSON and deterministic", async () => {
+    _setCaptureRequest(createPipelineRuleHappyRoutes());
+    const args = {
+        _testConnection: "fake",
+        structured: VALID_STRUCTURED,
+    };
+    const res1 = await handleCreatePipelineRule({ params: { arguments: args } });
+    _clearFunctionCatalogueForTests();
+    _setCaptureRequest(createPipelineRuleHappyRoutes());
+    const res2 = await handleCreatePipelineRule({ params: { arguments: args } });
+    const payload1 = JSON.parse(res1.content[0].text);
+    const payload2 = JSON.parse(res2.content[0].text);
+    assert.equal(typeof payload1.idempotencyKey, "string");
+    assert.equal(payload1.idempotencyKey.length > 0, true);
+    assert.equal(payload1.idempotencyKey, payload2.idempotencyKey);
+});
+
+test("create_pipeline_rule writable:false short-circuits BEFORE any network call", async () => {
+    const captured = [];
+    _setCaptureRequest((req) => {
+        captured.push(req);
+        return [];
+    });
+    _setConnectionsForTests({
+        readonly: { baseUrl: "http://fake.example", apiToken: "tok", writable: false },
+    });
+    const res = await handleCreatePipelineRule({
+        params: {
+            arguments: {
+                connectionName: "readonly",
+                structured: VALID_STRUCTURED,
+            },
+        },
+    });
+    assert.equal(res.isError, true);
+    assert.equal(res.reason, "connection_read_only");
+    assert.equal(captured.length, 0);
+});
+
+test("create_pipeline_rule apply on dryRun:false fires POST /rule with {source, ...} after successful parse + lint", async () => {
+    const captured = [];
+    _setCaptureRequest((req) => {
+        captured.push(req);
+        if (req.method === "GET" && req.path === "/api/system/pipelines/rule/functions") return EMPTY_LIVE_FUNCTIONS;
+        if (req.method === "POST" && req.path === "/api/system/pipelines/rule/parse") return {};
+        if (req.method === "GET" && req.path === "/api/system/pipelines/rule") return [];
+        if (req.method === "POST" && req.path === "/api/system/pipelines/rule") return { ...FULL_RULE_A, id: "r_new" };
+        throw new Error(`Unexpected ${req.method} ${req.path}`);
+    });
+    const res = await handleCreatePipelineRule({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                structured: VALID_STRUCTURED,
+                description: "Uppercases source field",
+                dryRun: false,
+            },
+        },
+    });
+    const posts = captured.filter((r) => r.method === "POST" && r.path === "/api/system/pipelines/rule");
+    assert.equal(posts.length, 1);
+    assert.equal(posts[0].body.source.includes("uppercase-source"), true);
+    assert.equal(posts[0].body.description, "Uppercases source field");
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.applied, true);
+    assert.equal(payload.result.id, "r_new");
+});
+
+// =====================================================================
+// Task 2 — update_pipeline_rule (PIPE-09) — STRICT_NO_ECHO partial-update +
+// conditional parse pre-flight + simulator_message clear-intent + D-15.
+// =====================================================================
+
+test("update_pipeline_rule description-only change: NO parse round-trip fires; no parseResult key in JSON", async () => {
+    const captured = [];
+    _setCaptureRequest((req) => {
+        captured.push(req);
+        if (req.method === "GET" && req.path === "/api/system/pipelines/rule/r1") {
+            return FULL_RULE_A;
+        }
+        throw new Error(`Unexpected ${req.method} ${req.path}`);
+    });
+    const res = await handleUpdatePipelineRule({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                ruleId: "r1",
+                changes: { description: "new desc" },
+            },
+        },
+    });
+    const parseCalls = captured.filter(
+        (r) => r.method === "POST" && r.path === "/api/system/pipelines/rule/parse",
+    );
+    assert.equal(parseCalls.length, 0, "parse pre-flight must NOT fire when source/structured is not touched");
+    const functionCalls = captured.filter(
+        (r) => r.method === "GET" && r.path === "/api/system/pipelines/rule/functions",
+    );
+    assert.equal(functionCalls.length, 0, "function-catalogue fetch must NOT fire when source/structured is not touched");
+    assert.doesNotMatch(res.content[0].text, /"parseResult"/);
+});
+
+test("update_pipeline_rule structured-source change: emit + parse + STRICT body", async () => {
+    const captured = [];
+    _setCaptureRequest((req) => {
+        captured.push(req);
+        if (req.method === "GET" && req.path === "/api/system/pipelines/rule/r1") {
+            return FULL_RULE_A;
+        }
+        if (req.method === "GET" && req.path === "/api/system/pipelines/rule/functions") {
+            return EMPTY_LIVE_FUNCTIONS;
+        }
+        if (req.method === "POST" && req.path === "/api/system/pipelines/rule/parse") {
+            return { source: "ok" };
+        }
+        throw new Error(`Unexpected ${req.method} ${req.path}`);
+    });
+    const res = await handleUpdatePipelineRule({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                ruleId: "r1",
+                changes: { structured: VALID_STRUCTURED },
+            },
+        },
+    });
+    const parseCalls = captured.filter(
+        (r) => r.method === "POST" && r.path === "/api/system/pipelines/rule/parse",
+    );
+    assert.equal(parseCalls.length, 1);
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.parseResult.ok, true);
+    // STRICT_NO_ECHO — wire body has ONLY `source` (the field touched).
+    assert.deepEqual(Object.keys(payload.preview.body), ["source"]);
+    assert.match(payload.preview.body.source, /rule "uppercase-source"/);
+});
+
+test("update_pipeline_rule raw ruleSource change: parse + STRICT body (no emit)", async () => {
+    const captured = [];
+    const newSource = 'rule "raw-update" when has_field("x") then end';
+    _setCaptureRequest((req) => {
+        captured.push(req);
+        if (req.method === "GET" && req.path === "/api/system/pipelines/rule/r1") return FULL_RULE_A;
+        if (req.method === "GET" && req.path === "/api/system/pipelines/rule/functions") return EMPTY_LIVE_FUNCTIONS;
+        if (req.method === "POST" && req.path === "/api/system/pipelines/rule/parse") return {};
+        throw new Error(`Unexpected ${req.method} ${req.path}`);
+    });
+    const res = await handleUpdatePipelineRule({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                ruleId: "r1",
+                changes: { ruleSource: newSource },
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.deepEqual(Object.keys(payload.preview.body), ["source"]);
+    assert.equal(payload.preview.body.source, newSource);
+    assert.equal(payload.parseResult.ok, true);
+});
+
+test("update_pipeline_rule C4 GATE: parse failure on update path → reason rule_parse_failed; PUT refused", async () => {
+    let putFired = false;
+    _setCaptureRequest((req) => {
+        if (req.method === "GET" && req.path === "/api/system/pipelines/rule/r1") return FULL_RULE_A;
+        if (req.method === "GET" && req.path === "/api/system/pipelines/rule/functions") return EMPTY_LIVE_FUNCTIONS;
+        if (req.method === "POST" && req.path === "/api/system/pipelines/rule/parse") {
+            throw new GraylogValidationError("parse failed", {
+                status: 400,
+                method: "POST",
+                path: "/api/system/pipelines/rule/parse",
+                body: [{ type: "SyntaxError", line: 1, positionInLine: 5, message: "broken" }],
+            });
+        }
+        if (req.method === "PUT") {
+            putFired = true;
+            return FULL_RULE_A;
+        }
+        return [];
+    });
+    const res = await handleUpdatePipelineRule({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                ruleId: "r1",
+                changes: { ruleSource: 'rule "broken"' },
+                dryRun: false,
+            },
+        },
+    });
+    assert.equal(res.isError, true);
+    assert.equal(res.reason, "rule_parse_failed");
+    assert.equal(putFired, false, "PUT must NOT fire when parse pre-flight 400s");
+});
+
+test("update_pipeline_rule simulator_message:null explicit clear → wire body emits simulator_message:null", async () => {
+    _setCaptureRequest(pipelinesMultiCapture([
+        {
+            method: "GET",
+            pathPattern: "/api/system/pipelines/rule/r1",
+            response: FULL_RULE_A,
+        },
+    ]));
+    const res = await handleUpdatePipelineRule({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                ruleId: "r1",
+                changes: { simulator_message: null },
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.deepEqual(Object.keys(payload.preview.body), ["simulator_message"]);
+    assert.equal(payload.preview.body.simulator_message, null);
+});
+
+test("update_pipeline_rule simulator_message omitted → wire body omits the key entirely", async () => {
+    _setCaptureRequest(pipelinesMultiCapture([
+        {
+            method: "GET",
+            pathPattern: "/api/system/pipelines/rule/r1",
+            response: FULL_RULE_A,
+        },
+    ]));
+    const res = await handleUpdatePipelineRule({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                ruleId: "r1",
+                changes: { description: "new desc" },
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal("simulator_message" in payload.preview.body, false);
+    assert.deepEqual(Object.keys(payload.preview.body), ["description"]);
+});
+
+test("update_pipeline_rule simulator_message: 'new value' → wire body emits the string", async () => {
+    _setCaptureRequest(pipelinesMultiCapture([
+        {
+            method: "GET",
+            pathPattern: "/api/system/pipelines/rule/r1",
+            response: FULL_RULE_A,
+        },
+    ]));
+    const res = await handleUpdatePipelineRule({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                ruleId: "r1",
+                changes: { simulator_message: "new sample" },
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.preview.body.simulator_message, "new sample");
+});
+
+test("update_pipeline_rule PUT URL is /api/system/pipelines/rule/{id} on apply (Pitfall 3 rule variant)", async () => {
+    const captured = [];
+    _setCaptureRequest((req) => {
+        captured.push(req);
+        if (req.method === "GET" && req.path === "/api/system/pipelines/rule/r1") return FULL_RULE_A;
+        if (req.method === "GET" && req.path === "/api/system/pipelines/rule/functions") return EMPTY_LIVE_FUNCTIONS;
+        if (req.method === "POST" && req.path === "/api/system/pipelines/rule/parse") return {};
+        if (req.method === "PUT") return { ...FULL_RULE_A, title: "renamed" };
+        throw new Error(`Unexpected ${req.method} ${req.path}`);
+    });
+    await handleUpdatePipelineRule({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                ruleId: "r1",
+                changes: { ruleSource: 'rule "X" when has_field("x") then end' },
+                dryRun: false,
+            },
+        },
+    });
+    const puts = captured.filter((r) => r.method === "PUT");
+    assert.equal(puts.length, 1);
+    assert.equal(puts[0].path, "/api/system/pipelines/rule/r1");
+});
+
+test("update_pipeline_rule 404 on pre-flight GET surfaces clean MCP error envelope", async () => {
+    _setCaptureRequest((req) => {
+        if (req.method === "GET") {
+            throw new GraylogNotFoundError("not found", {
+                status: 404,
+                method: "GET",
+                path: "/api/system/pipelines/rule/missing",
+                body: null,
+            });
+        }
+        throw new Error("Unexpected " + req.method);
+    });
+    const res = await handleUpdatePipelineRule({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                ruleId: "missing",
+                changes: { description: "x" },
+            },
+        },
+    });
+    assert.equal(res.isError, true);
+    assert.match(res.content[0].text, /404/);
+    assert.match(res.content[0].text, /update_pipeline_rule|missing/i);
+});
+
+test("update_pipeline_rule has NO is_editable / mutable check (D-15 generalisation — rules have no mutable flag)", async () => {
+    // Confirm that even a synthetic `is_editable: false` on the GET response
+    // does NOT short-circuit the PUT. Rules carry no is_editable in
+    // RuleSource.java; the wrapper must not invent one.
+    let putFired = false;
+    _setCaptureRequest((req) => {
+        if (req.method === "GET" && req.path === "/api/system/pipelines/rule/r1") {
+            return { ...FULL_RULE_A, is_editable: false };
+        }
+        if (req.method === "GET" && req.path === "/api/system/pipelines/rule/functions") {
+            return EMPTY_LIVE_FUNCTIONS;
+        }
+        if (req.method === "POST" && req.path === "/api/system/pipelines/rule/parse") return {};
+        if (req.method === "PUT") {
+            putFired = true;
+            return FULL_RULE_A;
+        }
+        throw new Error("Unexpected " + req.method);
+    });
+    const res = await handleUpdatePipelineRule({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                ruleId: "r1",
+                changes: { ruleSource: 'rule "x" when has_field("y") then end' },
+                dryRun: false,
+            },
+        },
+    });
+    assert.equal(res.isError, undefined);
+    assert.equal(putFired, true, "PUT must fire — rules have no mutable check");
+});
+
+test("update_pipeline_rule description:null clear-intent preserved (3-state semantics)", async () => {
+    _setCaptureRequest(pipelinesMultiCapture([
+        { method: "GET", pathPattern: "/api/system/pipelines/rule/r1", response: FULL_RULE_A },
+    ]));
+    const res = await handleUpdatePipelineRule({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                ruleId: "r1",
+                changes: { description: null },
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.deepEqual(Object.keys(payload.preview.body), ["description"]);
+    assert.equal(payload.preview.body.description, null);
 });
