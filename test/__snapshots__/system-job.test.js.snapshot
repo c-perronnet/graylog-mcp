@@ -1,0 +1,27 @@
+exports[`await_system_job dry-run returns polling plan WITHOUT issuing GETs 1`] = `
+{
+  "dryRun": true,
+  "tool": "await_system_job",
+  "connection": "fake",
+  "idempotencyKey": "20a157f10e21e34b45b0c15a2b3d13cd",
+  "summary": "Wait for system job job-1",
+  "preview": {
+    "method": "GET",
+    "path": "/api/system/jobs/job-1"
+  },
+  "postApplyEstimate": {
+    "jobId": "job-1",
+    "plan": [
+      500,
+      1000,
+      2000,
+      4000,
+      5000
+    ],
+    "timeoutMs": 60000,
+    "note": "Apply (dryRun:false) blocks until job completes, errors, is cancelled, or timeout fires."
+  },
+  "existingMatches": [],
+  "applyHint": "Re-call with dryRun: false to apply"
+}
+`;

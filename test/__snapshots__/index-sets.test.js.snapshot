@@ -1,0 +1,247 @@
+exports[`create_index_set time-based+delete dry-run emits the exact wire shape (D-08 + D-17) 1`] = `
+{
+  "dryRun": true,
+  "tool": "create_index_set",
+  "connection": "fake",
+  "idempotencyKey": "37b26d0e399cbcda90a346c4cf206943",
+  "summary": "Create index set \\"App errors\\" (time-based rotation, delete retention)",
+  "preview": {
+    "method": "POST",
+    "path": "/api/system/indices/index_sets",
+    "body": {
+      "title": "App errors",
+      "description": "",
+      "index_prefix": "app_errors",
+      "shards": 4,
+      "replicas": 0,
+      "rotation_strategy_class": "org.graylog2.indexer.rotation.strategies.TimeBasedRotationStrategy",
+      "rotation_strategy": {
+        "type": "org.graylog2.indexer.rotation.strategies.TimeBasedRotationStrategyConfig",
+        "rotation_period": "P1D"
+      },
+      "retention_strategy_class": "org.graylog2.indexer.retention.strategies.DeletionRetentionStrategy",
+      "retention_strategy": {
+        "type": "org.graylog2.indexer.retention.strategies.DeletionRetentionStrategyConfig",
+        "max_number_of_indices": 30
+      },
+      "index_analyzer": "standard",
+      "index_optimization_max_num_segments": 1,
+      "index_optimization_disabled": false,
+      "field_type_refresh_interval": 5000,
+      "writable": true,
+      "use_legacy_rotation": true,
+      "creation_date": "2026-05-15T12:00:00.000Z"
+    }
+  },
+  "postApplyEstimate": {
+    "id": "__SERVER_ASSIGNED__"
+  },
+  "existingMatches": [],
+  "applyHint": "Re-call with dryRun: false to apply"
+}
+`;
+
+exports[`cycle_deflector against a writable index set emits the POST dry-run preview with UPDATED D-14 sync semantics + side_effects.observable_at 1`] = `
+{
+  "dryRun": true,
+  "tool": "cycle_deflector",
+  "connection": "fake",
+  "idempotencyKey": "4f9d8685199bd662c8beda870cff9c73",
+  "summary": "Cycle deflector for index set iset-app",
+  "preview": {
+    "method": "POST",
+    "path": "/api/system/deflector/iset-app/cycle"
+  },
+  "postApplyEstimate": {
+    "id": "iset-app",
+    "async": false,
+    "rotated": true,
+    "message": "Cycled index set iset-app; closed previous active index",
+    "side_effects": {
+      "observable_at": "/system/jobs",
+      "describes": "closed-index range rebuild (IndexRangesUpdateJob fires asynchronously; the rotation itself is complete on response)"
+    }
+  },
+  "existingMatches": [],
+  "applyHint": "Re-call with dryRun: false to apply"
+}
+`;
+
+exports[`delete_index_set deleteIndices:false dry-run emits the metadata-only path with NO confirmation token (D-03) 1`] = `
+{
+  "dryRun": true,
+  "tool": "delete_index_set",
+  "connection": "fake",
+  "idempotencyKey": "e48a8e8e6279db2e9fd874a7d5534069",
+  "summary": "Delete index set iset-1 (deleteIndices: false)",
+  "preview": {
+    "method": "DELETE",
+    "path": "/api/system/indices/index_sets/iset-1?delete_indices=false"
+  },
+  "postApplyEstimate": {
+    "id": "iset-1",
+    "deletedIndices": false
+  },
+  "existingMatches": [],
+  "applyHint": "Re-call with dryRun: false to apply"
+}
+`;
+
+exports[`delete_index_set deleteIndices:true dry-run against a populated index set surfaces real cascades + a different hash 1`] = `
+{
+  "dryRun": true,
+  "tool": "delete_index_set",
+  "connection": "fake",
+  "idempotencyKey": "01e37cd7c4dad4b97575994881e3cc34",
+  "summary": "Delete index set iset-1 (deleteIndices: true)",
+  "preview": {
+    "method": "DELETE",
+    "path": "/api/system/indices/index_sets/iset-1?delete_indices=true"
+  },
+  "postApplyEstimate": {
+    "id": "iset-1",
+    "async": true,
+    "job_id_observable_at": "/system/jobs",
+    "message": "Submitted cleanup for index set iset-1; await via /system/jobs (call await_system_job with info_substring: \\"iset-1\\")"
+  },
+  "existingMatches": [],
+  "confirmationToken": "d5f10faaada8fc8f558b1a53cc8777a83fd73fa9172aa65fb36728ff246583c0",
+  "cascades": {
+    "indices": [
+      "graylog_0",
+      "graylog_1",
+      "graylog_2"
+    ],
+    "messageCount": 12345,
+    "indexCount": 3
+  },
+  "applyHint": "Re-call with dryRun: false to apply"
+}
+`;
+
+exports[`delete_index_set deleteIndices:true dry-run against an empty index set emits confirmation token + empty cascades + UPDATED D-15 no-job_id envelope 1`] = `
+{
+  "dryRun": true,
+  "tool": "delete_index_set",
+  "connection": "fake",
+  "idempotencyKey": "01e37cd7c4dad4b97575994881e3cc34",
+  "summary": "Delete index set iset-1 (deleteIndices: true)",
+  "preview": {
+    "method": "DELETE",
+    "path": "/api/system/indices/index_sets/iset-1?delete_indices=true"
+  },
+  "postApplyEstimate": {
+    "id": "iset-1",
+    "async": true,
+    "job_id_observable_at": "/system/jobs",
+    "message": "Submitted cleanup for index set iset-1; await via /system/jobs (call await_system_job with info_substring: \\"iset-1\\")"
+  },
+  "existingMatches": [],
+  "confirmationToken": "ed22c223ab80ce359fbb3d00b3ca46a76f99cbe07a658c1f3a3e644c5c337d1d",
+  "cascades": {
+    "indices": [],
+    "messageCount": 0,
+    "indexCount": 0
+  },
+  "applyHint": "Re-call with dryRun: false to apply"
+}
+`;
+
+exports[`set_default_index_set against an ineligible (can_be_default:false) index set is refused with reason default_eligibility_failed — PUT never fires (UPDATED D-13 + m2) 1`] = `
+{
+  "isError": true,
+  "reason": "default_eligibility_failed",
+  "content": [
+    {
+      "type": "text",
+      "text": "[set_default_index_set] 409 PUT /api/system/indices/index_sets/iset-events/default: Index set \\"Events Index\\" (iset-events) is not eligible as the default index set (can_be_default: false). The server's derived eligibility flag covers events-style and system index sets and any future eligibility rules Graylog adds. [reason: default_eligibility_failed]"
+    }
+  ]
+}
+`;
+
+exports[`update_index_set strategy-replace (D-11 atomic) emits new rotation FQCNs + config 1`] = `
+{
+  "dryRun": true,
+  "tool": "update_index_set",
+  "connection": "fake",
+  "idempotencyKey": "32be36a1240bc15d2b0cdca1ffe8b8da",
+  "summary": "Update index set iset-1 (2 change(s))",
+  "preview": {
+    "method": "PUT",
+    "path": "/api/system/indices/index_sets/iset-1",
+    "body": {
+      "title": "App errors",
+      "description": "Stream-routed errors",
+      "index_prefix": "app_errors",
+      "creation_date": "2026-01-01T00:00:00.000Z",
+      "shards": 4,
+      "replicas": 0,
+      "rotation_strategy_class": "org.graylog2.indexer.rotation.strategies.SizeBasedRotationStrategy",
+      "rotation_strategy": {
+        "type": "org.graylog2.indexer.rotation.strategies.SizeBasedRotationStrategyConfig",
+        "max_size": 1073741824
+      },
+      "retention_strategy_class": "org.graylog2.indexer.retention.strategies.DeletionRetentionStrategy",
+      "retention_strategy": {
+        "type": "org.graylog2.indexer.retention.strategies.DeletionRetentionStrategyConfig",
+        "max_number_of_indices": 30
+      },
+      "index_analyzer": "standard",
+      "index_optimization_max_num_segments": 1,
+      "index_optimization_disabled": false,
+      "field_type_refresh_interval": 5000,
+      "writable": true,
+      "use_legacy_rotation": true
+    }
+  },
+  "postApplyEstimate": {
+    "id": "iset-1"
+  },
+  "existingMatches": [],
+  "applyHint": "Re-call with dryRun: false to apply"
+}
+`;
+
+exports[`update_index_set title-only change emits the full merged DTO (U1 MERGE_FROM_CURRENT) 1`] = `
+{
+  "dryRun": true,
+  "tool": "update_index_set",
+  "connection": "fake",
+  "idempotencyKey": "4e729b07e6041065b609e68e77ac7614",
+  "summary": "Update index set iset-1 (1 change(s))",
+  "preview": {
+    "method": "PUT",
+    "path": "/api/system/indices/index_sets/iset-1",
+    "body": {
+      "title": "Renamed app errors",
+      "description": "Stream-routed errors",
+      "index_prefix": "app_errors",
+      "creation_date": "2026-01-01T00:00:00.000Z",
+      "shards": 4,
+      "replicas": 0,
+      "rotation_strategy_class": "org.graylog2.indexer.rotation.strategies.MessageCountRotationStrategy",
+      "rotation_strategy": {
+        "type": "org.graylog2.indexer.rotation.strategies.MessageCountRotationStrategyConfig",
+        "max_docs_per_index": 1000000
+      },
+      "retention_strategy_class": "org.graylog2.indexer.retention.strategies.DeletionRetentionStrategy",
+      "retention_strategy": {
+        "type": "org.graylog2.indexer.retention.strategies.DeletionRetentionStrategyConfig",
+        "max_number_of_indices": 30
+      },
+      "index_analyzer": "standard",
+      "index_optimization_max_num_segments": 1,
+      "index_optimization_disabled": false,
+      "field_type_refresh_interval": 5000,
+      "writable": true,
+      "use_legacy_rotation": true
+    }
+  },
+  "postApplyEstimate": {
+    "id": "iset-1"
+  },
+  "existingMatches": [],
+  "applyHint": "Re-call with dryRun: false to apply"
+}
+`;

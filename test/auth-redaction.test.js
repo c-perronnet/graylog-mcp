@@ -54,6 +54,13 @@ const DENY_PATTERNS = [
  *      delete_index_set with deleteIndices:true; it is not credential
  *      material and cannot grant any capability that a re-issued dry-run
  *      wouldn't issue again.
+ *   3. A 32+ char alphanumeric match is allowed iff it is the terminal
+ *      segment of a Java FQCN whose root is `org.graylog…` (e.g.
+ *      `org.graylog2.indexer.rotation.strategies.MessageCountRotationStrategyConfig`).
+ *      Graylog Java class names are public API surface — D-01 / D-08 require
+ *      them in the wire body so the server's deserializer can dispatch on
+ *      class. The structural marker is a dot immediately preceding the match
+ *      AND an `org.graylog` substring within the lookbehind window.
  *
  * The password-literal pattern is narrowed at the *regex* level (see
  * PASSWORD_LITERAL above) so placeholder syntax like `<redacted>` never
@@ -62,13 +69,18 @@ const DENY_PATTERNS = [
  */
 function isAllowedMatch(content, match, regex, matchIndex) {
     if (regex.source === /[A-Za-z0-9]{32,}/.source) {
-        const context = content.slice(Math.max(0, matchIndex - 40), matchIndex);
+        const context = content.slice(Math.max(0, matchIndex - 80), matchIndex);
         // Match the JSON-stringified shape: `"idempotencyKey": "<32 hex>"`
         // (with optional whitespace and the colon/equals separator).
-        if (/idempotencyKey['"]?\s*[:=]\s*['"]?$/.test(context)) return true;
+        if (/idempotencyKey['"]?\s*[:=]\s*['"]?$/.test(context.slice(-40))) return true;
         // Plan 02-05: 64-hex confirmationToken (D-01) is a sha-256 over public
         // state, not a secret. Mirrors the idempotencyKey context check above.
-        if (/confirmationToken['"]?\s*[:=]\s*['"]?$/.test(context)) return true;
+        if (/confirmationToken['"]?\s*[:=]\s*['"]?$/.test(context.slice(-40))) return true;
+        // Plan 02-05: terminal segment of a Graylog Java FQCN.
+        // Marker: the match is preceded by `.` AND somewhere in the 80-char
+        // lookbehind window an `org.graylog` substring is present (the FQCN
+        // root). Real secrets are not dotted FQCNs rooted in `org.graylog`.
+        if (context.endsWith(".") && /org\.graylog/.test(context)) return true;
     }
     return false;
 }
