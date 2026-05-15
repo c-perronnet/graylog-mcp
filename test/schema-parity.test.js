@@ -360,3 +360,21 @@ test("schema-parity: update_pipeline_rule", async () => {
     const { UpdatePipelineRuleSchema } = await import("../src/tools/pipelines/schemas.js");
     await assertSchemaParityForTool("update_pipeline_rule", UpdatePipelineRuleSchema);
 });
+
+// ---------------------------------------------------------------------------
+// Plan 04-05 enrichment — 2 new pipeline-stream connection tools (PIPE-13/14).
+//
+// Both schemas use plain mutatingBase.extend() with .min(1) constraints on
+// streamId + pipelineIds; no .refine() or .superRefine() wrapping. getShape()
+// reads .shape directly.
+// ---------------------------------------------------------------------------
+
+test("schema-parity: connect_pipelines_to_stream", async () => {
+    const { ConnectPipelinesToStreamSchema } = await import("../src/tools/pipelines/schemas.js");
+    await assertSchemaParityForTool("connect_pipelines_to_stream", ConnectPipelinesToStreamSchema);
+});
+
+test("schema-parity: disconnect_pipelines_from_stream", async () => {
+    const { DisconnectPipelinesFromStreamSchema } = await import("../src/tools/pipelines/schemas.js");
+    await assertSchemaParityForTool("disconnect_pipelines_from_stream", DisconnectPipelinesFromStreamSchema);
+});

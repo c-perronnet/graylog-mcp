@@ -923,8 +923,14 @@ import {
     RuleSpecSchema,
     ConditionSchema,
     ActionSchema,
+    // Plan 04-05 — PIPE-13 + PIPE-14 schemas (connect/disconnect pipelines to streams).
+    ConnectPipelinesToStreamSchema,
+    DisconnectPipelinesFromStreamSchema,
 } from "../src/tools/pipelines/schemas.js";
 import { _clearFunctionCatalogueForTests } from "../src/pipeline-dsl/function-catalogue.js";
+// Plan 04-05 — PIPE-13 + PIPE-14 handlers (connect/disconnect pipelines to streams).
+import { handleConnectPipelinesToStream } from "../src/tools/pipelines/connect-pipelines-to-stream.js";
+import { handleDisconnectPipelinesFromStream } from "../src/tools/pipelines/disconnect-pipelines-from-stream.js";
 
 // =====================================================================
 // Fixtures — RuleSource DTO and structured-intent helpers
@@ -1946,4 +1952,586 @@ test("update_pipeline_rule description:null clear-intent preserved (3-state sema
     const payload = JSON.parse(res.content[0].text);
     assert.deepEqual(Object.keys(payload.preview.body), ["description"]);
     assert.equal(payload.preview.body.description, null);
+});
+
+// =====================================================================
+// Plan 04-05 — Task 1 schema-layer tests for connect/disconnect.
+// =====================================================================
+
+test("ConnectPipelinesToStreamSchema requires streamId and non-empty pipelineIds", () => {
+    // Missing streamId
+    assert.throws(
+        () => ConnectPipelinesToStreamSchema.parse({ pipelineIds: ["p1"] }),
+        /streamId|required/i,
+    );
+    // Missing pipelineIds
+    assert.throws(
+        () => ConnectPipelinesToStreamSchema.parse({ streamId: "s1" }),
+        /pipelineIds|required/i,
+    );
+    // Empty pipelineIds array
+    assert.throws(
+        () => ConnectPipelinesToStreamSchema.parse({ streamId: "s1", pipelineIds: [] }),
+        /pipelineIds|min|at least/i,
+    );
+    // Empty string in array
+    assert.throws(
+        () => ConnectPipelinesToStreamSchema.parse({ streamId: "s1", pipelineIds: [""] }),
+        /pipelineIds/i,
+    );
+    // Empty streamId
+    assert.throws(
+        () => ConnectPipelinesToStreamSchema.parse({ streamId: "", pipelineIds: ["p1"] }),
+        /streamId/i,
+    );
+    // Valid input
+    const parsed = ConnectPipelinesToStreamSchema.parse({
+        streamId: "s1",
+        pipelineIds: ["p1", "p2"],
+    });
+    assert.equal(parsed.streamId, "s1");
+    assert.deepEqual(parsed.pipelineIds, ["p1", "p2"]);
+    assert.equal(parsed.dryRun, true);  // mutatingBase default
+});
+
+test("DisconnectPipelinesFromStreamSchema requires streamId and non-empty pipelineIds", () => {
+    assert.throws(
+        () => DisconnectPipelinesFromStreamSchema.parse({ pipelineIds: ["p1"] }),
+        /streamId|required/i,
+    );
+    assert.throws(
+        () => DisconnectPipelinesFromStreamSchema.parse({ streamId: "s1" }),
+        /pipelineIds|required/i,
+    );
+    assert.throws(
+        () => DisconnectPipelinesFromStreamSchema.parse({ streamId: "s1", pipelineIds: [] }),
+        /pipelineIds|min|at least/i,
+    );
+    const parsed = DisconnectPipelinesFromStreamSchema.parse({
+        streamId: "s1",
+        pipelineIds: ["p1"],
+    });
+    assert.equal(parsed.streamId, "s1");
+    assert.deepEqual(parsed.pipelineIds, ["p1"]);
+});
+
+// =====================================================================
+// Plan 04-05 — connect_pipelines_to_stream (PIPE-13) — GET-merge-PUT.
+//
+// CRITICAL: POST /api/system/pipelines/connections/to_stream has REPLACE
+// semantics — the wrapper does GET-merge-PUT client-side to preserve
+// previously-connected pipelines. Pitfall 2 acceptance gate proves this.
+// =====================================================================
+
+test("connect_pipelines_to_stream HAPPY (union): merged set = current ∪ args; sorted", async () => {
+    const captured = [];
+    _setCaptureRequest((req) => {
+        captured.push(req);
+        if (req.method === "GET" && req.path === "/api/system/pipelines/connections/s1") {
+            return { id: "conn1", stream_id: "s1", pipeline_ids: ["a", "b"] };
+        }
+        throw new Error(`Unexpected ${req.method} ${req.path}`);
+    });
+    const res = await handleConnectPipelinesToStream({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                streamId: "s1",
+                pipelineIds: ["c", "d"],
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.preview.method, "POST");
+    assert.equal(payload.preview.path, "/api/system/pipelines/connections/to_stream");
+    assert.equal(payload.preview.body.stream_id, "s1");
+    assert.deepEqual(payload.preview.body.pipeline_ids, ["a", "b", "c", "d"]);
+    assert.deepEqual(payload.existingMatches, []);
+    assert.deepEqual(payload.postApplyEstimate.pipeline_ids, ["a", "b", "c", "d"]);
+});
+
+test("connect_pipelines_to_stream PITFALL 2 ACCEPTANCE GATE: current=[a,b], args=[new] → body=[a,b,new] (NOT [new])", async () => {
+    // The load-bearing test of this plan. A naive REPLACE-semantics call would
+    // produce body.pipeline_ids === ["new"] (silently disconnecting a and b).
+    // GET-merge-PUT MUST produce ["a", "b", "new"] (sorted).
+    _setCaptureRequest((req) => {
+        if (req.method === "GET" && req.path === "/api/system/pipelines/connections/s1") {
+            return { id: "conn1", stream_id: "s1", pipeline_ids: ["a", "b"] };
+        }
+        throw new Error(`Unexpected ${req.method} ${req.path}`);
+    });
+    const res = await handleConnectPipelinesToStream({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                streamId: "s1",
+                pipelineIds: ["new"],
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    // Pitfall 2 GATE — body MUST contain a + b + new (sorted), not just [new]
+    assert.deepEqual(payload.preview.body.pipeline_ids, ["a", "b", "new"]);
+    assert.notDeepStrictEqual(payload.preview.body.pipeline_ids, ["new"]);
+});
+
+test("connect_pipelines_to_stream 404 on GET treated as empty set; current treated as empty", async () => {
+    _setCaptureRequest((req) => {
+        if (req.method === "GET" && req.path === "/api/system/pipelines/connections/s_new") {
+            throw new GraylogNotFoundError("no connection record yet", {
+                status: 404,
+                method: "GET",
+                path: "/api/system/pipelines/connections/s_new",
+                body: null,
+            });
+        }
+        throw new Error(`Unexpected ${req.method} ${req.path}`);
+    });
+    const res = await handleConnectPipelinesToStream({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                streamId: "s_new",
+                pipelineIds: ["x"],
+            },
+        },
+    });
+    assert.equal(res.isError, undefined);
+    const payload = JSON.parse(res.content[0].text);
+    assert.deepEqual(payload.preview.body.pipeline_ids, ["x"]);
+    assert.deepEqual(payload.postApplyEstimate.pipeline_ids, ["x"]);
+});
+
+test("connect_pipelines_to_stream idempotency (attach already-connected): existingMatches surfaces already_connected", async () => {
+    _setCaptureRequest((req) => {
+        if (req.method === "GET" && req.path === "/api/system/pipelines/connections/s1") {
+            return { id: "conn1", stream_id: "s1", pipeline_ids: ["a", "b"] };
+        }
+        throw new Error(`Unexpected ${req.method} ${req.path}`);
+    });
+    const res = await handleConnectPipelinesToStream({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                streamId: "s1",
+                pipelineIds: ["a"],
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    // Merged set is unchanged (a already in current set)
+    assert.deepEqual(payload.preview.body.pipeline_ids, ["a", "b"]);
+    assert.equal(payload.existingMatches.length, 1);
+    assert.equal(payload.existingMatches[0].id, "a");
+    assert.equal(payload.existingMatches[0].similarity_reason, "already_connected");
+});
+
+test("connect_pipelines_to_stream partial idempotency (attach mix of new+existing)", async () => {
+    _setCaptureRequest((req) => {
+        if (req.method === "GET" && req.path === "/api/system/pipelines/connections/s1") {
+            return { id: "conn1", stream_id: "s1", pipeline_ids: ["a", "b"] };
+        }
+        throw new Error(`Unexpected ${req.method} ${req.path}`);
+    });
+    const res = await handleConnectPipelinesToStream({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                streamId: "s1",
+                pipelineIds: ["a", "c"],
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.deepEqual(payload.preview.body.pipeline_ids, ["a", "b", "c"]);
+    assert.equal(payload.existingMatches.length, 1);
+    assert.equal(payload.existingMatches[0].id, "a");
+    assert.equal(payload.existingMatches[0].similarity_reason, "already_connected");
+});
+
+test("connect_pipelines_to_stream deterministic sort: unsorted inputs → alphabetically sorted body", async () => {
+    _setCaptureRequest((req) => {
+        if (req.method === "GET" && req.path === "/api/system/pipelines/connections/s1") {
+            return { id: "conn1", stream_id: "s1", pipeline_ids: ["z", "a"] };
+        }
+        throw new Error(`Unexpected ${req.method} ${req.path}`);
+    });
+    const res = await handleConnectPipelinesToStream({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                streamId: "s1",
+                pipelineIds: ["m", "b"],
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.deepEqual(payload.preview.body.pipeline_ids, ["a", "b", "m", "z"]);
+});
+
+test("connect_pipelines_to_stream 5xx on GET propagates as MCP error; POST NEVER fires", async () => {
+    const captured = [];
+    _setCaptureRequest((req) => {
+        captured.push(req);
+        if (req.method === "GET" && req.path === "/api/system/pipelines/connections/s1") {
+            throw new GraylogValidationError("internal error", {
+                status: 500,
+                method: "GET",
+                path: "/api/system/pipelines/connections/s1",
+                body: null,
+            });
+        }
+        throw new Error(`Unexpected ${req.method} ${req.path}`);
+    });
+    const res = await handleConnectPipelinesToStream({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                streamId: "s1",
+                pipelineIds: ["new"],
+                dryRun: false,
+            },
+        },
+    });
+    assert.equal(res.isError, true);
+    assert.match(res.content[0].text, /500/);
+    const posts = captured.filter((r) => r.method === "POST");
+    assert.equal(posts.length, 0, "POST must NEVER fire when GET pre-flight errors");
+});
+
+test("connect_pipelines_to_stream writable:false short-circuits BEFORE the GET fires (D-07)", async () => {
+    _setConnectionsForTests({
+        ro: { baseUrl: "http://r", apiToken: "t", writable: false },
+    });
+    const captured = [];
+    _setCaptureRequest((req) => {
+        captured.push(req);
+        return {};
+    });
+    const res = await handleConnectPipelinesToStream({
+        params: {
+            arguments: {
+                connectionName: "ro",
+                streamId: "s1",
+                pipelineIds: ["x"],
+            },
+        },
+    });
+    assert.equal(res.isError, true);
+    assert.equal(res.reason, "connection_read_only");
+    assert.equal(captured.length, 0, "GET pre-flight must NOT fire on read-only connections");
+});
+
+test("connect_pipelines_to_stream paths: GET URL has streamId; POST URL is /to_stream literal", async () => {
+    let getCaptured = null;
+    _setCaptureRequest((req) => {
+        if (req.method === "GET" && req.path === "/api/system/pipelines/connections/sX") {
+            getCaptured = req;
+            return { id: "c", stream_id: "sX", pipeline_ids: [] };
+        }
+        throw new Error(`Unexpected ${req.method} ${req.path}`);
+    });
+    const res = await handleConnectPipelinesToStream({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                streamId: "sX",
+                pipelineIds: ["one"],
+            },
+        },
+    });
+    assert.equal(getCaptured.path, "/api/system/pipelines/connections/sX");
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.preview.path, "/api/system/pipelines/connections/to_stream");
+});
+
+test("connect_pipelines_to_stream apply on dryRun:false POSTs merged set to /to_stream", async () => {
+    const captured = [];
+    _setCaptureRequest((req) => {
+        captured.push(req);
+        if (req.method === "GET" && req.path === "/api/system/pipelines/connections/s1") {
+            return { id: "conn1", stream_id: "s1", pipeline_ids: ["a", "b"] };
+        }
+        if (req.method === "POST" && req.path === "/api/system/pipelines/connections/to_stream") {
+            return { id: "conn1", stream_id: "s1", pipeline_ids: ["a", "b", "new"] };
+        }
+        throw new Error(`Unexpected ${req.method} ${req.path}`);
+    });
+    const res = await handleConnectPipelinesToStream({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                streamId: "s1",
+                pipelineIds: ["new"],
+                dryRun: false,
+            },
+        },
+    });
+    const posts = captured.filter((r) => r.method === "POST");
+    assert.equal(posts.length, 1);
+    assert.deepEqual(posts[0].body.pipeline_ids, ["a", "b", "new"]);
+    assert.equal(posts[0].body.stream_id, "s1");
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.applied, true);
+});
+
+// =====================================================================
+// Plan 04-05 — disconnect_pipelines_from_stream (PIPE-14) — GET-subtract-PUT.
+// Same wire endpoint as PIPE-13 (POST /to_stream — REPLACE semantics);
+// wrapper subtracts client-side.
+// =====================================================================
+
+test("disconnect_pipelines_from_stream HAPPY (subtract): reduced set = current \\ args", async () => {
+    _setCaptureRequest((req) => {
+        if (req.method === "GET" && req.path === "/api/system/pipelines/connections/s1") {
+            return { id: "conn1", stream_id: "s1", pipeline_ids: ["a", "b", "c"] };
+        }
+        throw new Error(`Unexpected ${req.method} ${req.path}`);
+    });
+    const res = await handleDisconnectPipelinesFromStream({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                streamId: "s1",
+                pipelineIds: ["b"],
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.preview.method, "POST");
+    assert.equal(payload.preview.path, "/api/system/pipelines/connections/to_stream");
+    assert.equal(payload.preview.body.stream_id, "s1");
+    assert.deepEqual(payload.preview.body.pipeline_ids, ["a", "c"]);
+    assert.deepEqual(payload.existingMatches, []);
+    assert.deepEqual(payload.postApplyEstimate.pipeline_ids, ["a", "c"]);
+});
+
+test("disconnect_pipelines_from_stream PITFALL 2 mirror: multi-detach preserves remaining; current=[a,b,c], args=[b,c] → body=[a]", async () => {
+    _setCaptureRequest((req) => {
+        if (req.method === "GET" && req.path === "/api/system/pipelines/connections/s1") {
+            return { id: "conn1", stream_id: "s1", pipeline_ids: ["a", "b", "c"] };
+        }
+        throw new Error(`Unexpected ${req.method} ${req.path}`);
+    });
+    const res = await handleDisconnectPipelinesFromStream({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                streamId: "s1",
+                pipelineIds: ["b", "c"],
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    // Pitfall 2 mirror — `a` is PRESERVED. A naive REPLACE with body.pipeline_ids=[]
+    // would silently disconnect `a` too.
+    assert.deepEqual(payload.preview.body.pipeline_ids, ["a"]);
+});
+
+test("disconnect_pipelines_from_stream detach-all: current=[a,b], args=[a,b] → body=[]", async () => {
+    _setCaptureRequest((req) => {
+        if (req.method === "GET" && req.path === "/api/system/pipelines/connections/s1") {
+            return { id: "conn1", stream_id: "s1", pipeline_ids: ["a", "b"] };
+        }
+        throw new Error(`Unexpected ${req.method} ${req.path}`);
+    });
+    const res = await handleDisconnectPipelinesFromStream({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                streamId: "s1",
+                pipelineIds: ["a", "b"],
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.deepEqual(payload.preview.body.pipeline_ids, []);
+});
+
+test("disconnect_pipelines_from_stream no-op detach (already-not-connected): existingMatches surfaces not_currently_connected", async () => {
+    _setCaptureRequest((req) => {
+        if (req.method === "GET" && req.path === "/api/system/pipelines/connections/s1") {
+            return { id: "conn1", stream_id: "s1", pipeline_ids: ["a", "b"] };
+        }
+        throw new Error(`Unexpected ${req.method} ${req.path}`);
+    });
+    const res = await handleDisconnectPipelinesFromStream({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                streamId: "s1",
+                pipelineIds: ["x"],
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    // Reduced set unchanged
+    assert.deepEqual(payload.preview.body.pipeline_ids, ["a", "b"]);
+    assert.equal(payload.existingMatches.length, 1);
+    assert.equal(payload.existingMatches[0].id, "x");
+    assert.equal(payload.existingMatches[0].similarity_reason, "not_currently_connected");
+});
+
+test("disconnect_pipelines_from_stream 404 on GET → currentSet empty; existingMatches lists all args as not_currently_connected; POST fires with empty set", async () => {
+    const captured = [];
+    _setCaptureRequest((req) => {
+        captured.push(req);
+        if (req.method === "GET" && req.path === "/api/system/pipelines/connections/s_new") {
+            throw new GraylogNotFoundError("no record yet", {
+                status: 404,
+                method: "GET",
+                path: "/api/system/pipelines/connections/s_new",
+                body: null,
+            });
+        }
+        if (req.method === "POST" && req.path === "/api/system/pipelines/connections/to_stream") {
+            return { id: "conn_new", stream_id: "s_new", pipeline_ids: [] };
+        }
+        throw new Error(`Unexpected ${req.method} ${req.path}`);
+    });
+    const res = await handleDisconnectPipelinesFromStream({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                streamId: "s_new",
+                pipelineIds: ["y", "z"],
+                dryRun: false,
+            },
+        },
+    });
+    assert.equal(res.isError, undefined);
+    const posts = captured.filter((r) => r.method === "POST");
+    assert.equal(posts.length, 1, "POST still fires on 404 path (consistency)");
+    assert.deepEqual(posts[0].body.pipeline_ids, []);
+});
+
+test("disconnect_pipelines_from_stream 404 case dry-run: existingMatches lists all args as not_currently_connected", async () => {
+    _setCaptureRequest((req) => {
+        if (req.method === "GET" && req.path === "/api/system/pipelines/connections/s_new") {
+            throw new GraylogNotFoundError("no record yet", {
+                status: 404,
+                method: "GET",
+                path: "/api/system/pipelines/connections/s_new",
+                body: null,
+            });
+        }
+        throw new Error(`Unexpected ${req.method} ${req.path}`);
+    });
+    const res = await handleDisconnectPipelinesFromStream({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                streamId: "s_new",
+                pipelineIds: ["y", "z"],
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.deepEqual(payload.preview.body.pipeline_ids, []);
+    assert.equal(payload.existingMatches.length, 2);
+    const reasons = payload.existingMatches.map((m) => m.similarity_reason);
+    assert.deepEqual(reasons, ["not_currently_connected", "not_currently_connected"]);
+});
+
+test("disconnect_pipelines_from_stream deterministic sort: removes one entry; result sorted", async () => {
+    _setCaptureRequest((req) => {
+        if (req.method === "GET" && req.path === "/api/system/pipelines/connections/s1") {
+            return { id: "conn1", stream_id: "s1", pipeline_ids: ["z", "a", "m"] };
+        }
+        throw new Error(`Unexpected ${req.method} ${req.path}`);
+    });
+    const res = await handleDisconnectPipelinesFromStream({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                streamId: "s1",
+                pipelineIds: ["m"],
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.deepEqual(payload.preview.body.pipeline_ids, ["a", "z"]);
+});
+
+test("disconnect_pipelines_from_stream 5xx on GET propagates; POST NEVER fires", async () => {
+    const captured = [];
+    _setCaptureRequest((req) => {
+        captured.push(req);
+        if (req.method === "GET" && req.path === "/api/system/pipelines/connections/s1") {
+            throw new GraylogValidationError("internal", {
+                status: 500,
+                method: "GET",
+                path: "/api/system/pipelines/connections/s1",
+                body: null,
+            });
+        }
+        throw new Error(`Unexpected ${req.method} ${req.path}`);
+    });
+    const res = await handleDisconnectPipelinesFromStream({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                streamId: "s1",
+                pipelineIds: ["a"],
+                dryRun: false,
+            },
+        },
+    });
+    assert.equal(res.isError, true);
+    assert.match(res.content[0].text, /500/);
+    const posts = captured.filter((r) => r.method === "POST");
+    assert.equal(posts.length, 0);
+});
+
+test("disconnect_pipelines_from_stream writable:false short-circuits BEFORE the GET fires", async () => {
+    _setConnectionsForTests({
+        ro: { baseUrl: "http://r", apiToken: "t", writable: false },
+    });
+    const captured = [];
+    _setCaptureRequest((req) => {
+        captured.push(req);
+        return {};
+    });
+    const res = await handleDisconnectPipelinesFromStream({
+        params: {
+            arguments: {
+                connectionName: "ro",
+                streamId: "s1",
+                pipelineIds: ["a"],
+            },
+        },
+    });
+    assert.equal(res.isError, true);
+    assert.equal(res.reason, "connection_read_only");
+    assert.equal(captured.length, 0);
+});
+
+test("disconnect_pipelines_from_stream apply on dryRun:false POSTs reduced set to /to_stream", async () => {
+    const captured = [];
+    _setCaptureRequest((req) => {
+        captured.push(req);
+        if (req.method === "GET" && req.path === "/api/system/pipelines/connections/s1") {
+            return { id: "conn1", stream_id: "s1", pipeline_ids: ["a", "b", "c"] };
+        }
+        if (req.method === "POST" && req.path === "/api/system/pipelines/connections/to_stream") {
+            return { id: "conn1", stream_id: "s1", pipeline_ids: ["a", "c"] };
+        }
+        throw new Error(`Unexpected ${req.method} ${req.path}`);
+    });
+    const res = await handleDisconnectPipelinesFromStream({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                streamId: "s1",
+                pipelineIds: ["b"],
+                dryRun: false,
+            },
+        },
+    });
+    const posts = captured.filter((r) => r.method === "POST");
+    assert.equal(posts.length, 1);
+    assert.deepEqual(posts[0].body.pipeline_ids, ["a", "c"]);
+    assert.equal(posts[0].body.stream_id, "s1");
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.applied, true);
 });
