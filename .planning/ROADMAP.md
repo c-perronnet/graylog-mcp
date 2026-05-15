@@ -113,11 +113,11 @@
   3. `create_event_notification` validates the discriminator string (`email-notification-v1`, `http-notification-v2`, etc.) against a zod discriminated union — invalid notification types fail validation before any HTTP call.
   4. `enable_event_definition` / `disable_event_definition` send an empty body to `PUT /events/definitions/{id}/schedule|unschedule` — handling the `@Consumes(WILDCARD)` quirk so the agent can't waste context constructing a fake body.
 **Plans**: 5 plans
-  - [x] 02-01-PLAN.md — Foundation amendments (handler.js _confirmationToken forward + requireConfirm gate; conflict.js index_sets envelope) + await_system_job (INDEX-08) + list_index_sets (INDEX-01) + get_index_set (INDEX-02) + U1 live-smoke decision artifact
-  - [x] 02-02-PLAN.md — create_index_set (INDEX-03) with D-10 + D-08 friendly aliases + D-09 6 strict configs + M5 idempotency; update_index_set (INDEX-04) with D-11 atomic strategy-replace + U1-resolved partial-update + ND2 pre-flight
-  - [x] 02-03-PLAN.md — delete_index_set (INDEX-05) C1 mitigation centerpiece — sha-256 confirmation hash, D-04 inverted default, D-05 stats hard-block, ND1 default refusal, D-15 async envelope
-  - [ ] 02-04-PLAN.md — set_default_index_set (INDEX-06) D-13 can_be_default invariant + cycle_deflector (INDEX-07) ND3 writable pre-flight + UPDATED D-14 sync semantics + side_effects.observable_at
-  - [ ] 02-05-PLAN.md — Snapshot fixtures (9 per RESEARCH §Snapshot Fixture Design) + schema-parity enrichment (8 tools) + auth-redaction confirmationToken allowlist + VALIDATION.md flip + human-verify checkpoint
+  - [ ] 05-01-PLAN.md — Foundation amendments (conflict.js `elements` envelope for /paginated + computeNotificationCascadeHash thin wrapper + 6-variant discriminator + v6→v7 migration + S5 displacement of v2.3 list_event_* + 05-U1-SMOKE.md decision artifact)
+  - [ ] 05-02-PLAN.md — Event-definition list/get/create/update (EVENT-01..04): M1 ACCEPTANCE GATE (?schedule=false structural) + C5 ACCEPTANCE GATE (visible v6→v7 migration) + CreateEntityRequest envelope + STRICT_NO_ECHO on update
+  - [ ] 05-03-PLAN.md — Enable/disable (EVENT-06) WILDCARD empty-body + delete_event_definition (EVENT-05) D-08 informational cascade (no token; mirrors Phase 1 delete_input)
+  - [ ] 05-04-PLAN.md — Notification list/create/update/delete (EVENT-07..09): D-05 6-variant discriminator + http-notification-v2 C3 STRICT_NO_ECHO encrypted fields + D-09 cascade-hash + apply-time drift refusal (mirrors Phase 3 delete_stream)
+  - [ ] 05-05-PLAN.md — 12-13 snapshot fixtures + 11 schema-parity assertions + auth-redaction inheritance + 05-VALIDATION.md flip + human-verify checkpoint
 **UI hint**: yes
 
 ### Phase 6: Dashboards, Widget Templates & Blueprints
