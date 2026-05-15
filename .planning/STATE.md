@@ -2,8 +2,8 @@
 gsd_state_version: 1.0
 milestone: v2.3
 milestone_name: milestone
-status: Ready to execute
-last_updated: "2026-05-15T10:14:55.455Z"
+status: Executing Phase 01
+last_updated: "2026-05-15T10:18:11.326Z"
 progress:
   total_phases: 8
   completed_phases: 1
@@ -27,8 +27,8 @@ progress:
 
 ## Current Position
 
-Phase: 1
-Plan: Not started
+Phase: 01 (inputs-extractors) — EXECUTING
+Plan: 1 of 5
 
 - **Phase**: 0 — Foundation
 - **Plan**: 6 of 6 — Plan 00-06 shipped (snapshot infrastructure proven + auth-redaction + schema-parity scaffold); Phase 0 closed with `wave_0_complete: true` + `nyquist_compliant: true` in VALIDATION.md
