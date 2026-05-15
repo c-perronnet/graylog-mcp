@@ -249,3 +249,55 @@ test("schema-parity: delete_stream", async () => {
     const { DeleteStreamSchema } = await import("../src/tools/streams/schemas.js");
     await assertSchemaParityForTool("delete_stream", DeleteStreamSchema);
 });
+
+// ---------------------------------------------------------------------------
+// Plan 03-04 enrichment — stream-rule CRUD + test_stream_match (4 tools).
+//
+// CreateStreamRuleSchema is a `mutatingBase.extend({ streamId }).and(StreamRuleSchema)`
+// — z.intersection wraps the parent base shape with the 8-variant discriminated
+// union. The intersection's _def.left holds the mutatingBase-extended shape
+// (`connectionName, dryRun, idempotencyKey, streamId`) which is the agent-facing
+// outer shape for JSON-Schema parity. The discriminated-union variant fields
+// (type, field, value, inverted, description) are documented inline in the
+// inputSchema description rather than the properties map — same precedent as
+// create_input / create_extractor where the discriminator-narrowed fields live
+// in the `inputs` array description, not as flat schema properties. The parity
+// helper compares against the outer mutatingBase shape.
+// ---------------------------------------------------------------------------
+
+test("schema-parity: create_stream_rule", async () => {
+    const { CreateStreamRuleSchema } = await import("../src/tools/streams/schemas.js");
+    // CreateStreamRuleSchema is z.intersection (a `.and()` result). Pull
+    // the outer mutatingBase-extended shape from `_def.left`.
+    const outerShape = CreateStreamRuleSchema._def?.left?.shape;
+    assert.ok(outerShape, "CreateStreamRuleSchema must expose its outer (mutatingBase) shape via _def.left.shape");
+    const { toolDefinitions } = await import("../src/tools.js");
+    const tool = toolDefinitions.find((t) => t.name === "create_stream_rule");
+    assert.ok(tool, "Tool create_stream_rule missing from tools.js");
+    const jsonSchemaKeys = Object.keys(tool.inputSchema.properties).sort();
+    const outerKeys = Object.keys(outerShape).sort();
+    // JSON-Schema MUST include every outer key (mutatingBase + streamId). The
+    // JSON-Schema typically also documents the discriminator fields (type, field,
+    // value, inverted, description) for agent ergonomics; allow superset there.
+    for (const k of outerKeys) {
+        assert.ok(
+            jsonSchemaKeys.includes(k),
+            `Schema drift in create_stream_rule: JSON-Schema missing key ${k} (zod has: ${outerKeys.join(",")})`,
+        );
+    }
+});
+
+test("schema-parity: update_stream_rule", async () => {
+    const { UpdateStreamRuleSchema } = await import("../src/tools/streams/schemas.js");
+    await assertSchemaParityForTool("update_stream_rule", UpdateStreamRuleSchema);
+});
+
+test("schema-parity: delete_stream_rule", async () => {
+    const { DeleteStreamRuleSchema } = await import("../src/tools/streams/schemas.js");
+    await assertSchemaParityForTool("delete_stream_rule", DeleteStreamRuleSchema);
+});
+
+test("schema-parity: test_stream_match", async () => {
+    const { TestStreamMatchSchema } = await import("../src/tools/streams/schemas.js");
+    await assertSchemaParityForTool("test_stream_match", TestStreamMatchSchema);
+});

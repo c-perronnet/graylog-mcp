@@ -24,6 +24,11 @@ import { handleUpdateStream } from "../src/tools/streams/update-stream.js";
 import { handleStartStream } from "../src/tools/streams/start-stream.js";
 import { handlePauseStream } from "../src/tools/streams/pause-stream.js";
 import { handleDeleteStream } from "../src/tools/streams/delete-stream.js";
+// Plan 03-04 — stream-rule CRUD + test_stream_match handlers.
+import { handleCreateStreamRule } from "../src/tools/streams/create-stream-rule.js";
+import { handleDeleteStreamRule } from "../src/tools/streams/delete-stream-rule.js";
+import { handleUpdateStreamRule } from "../src/tools/streams/update-stream-rule.js";
+import { handleTestStreamMatch } from "../src/tools/streams/test-stream-match.js";
 import { computeCascadeHash } from "../src/tools/_shared/cascade-hash.js";
 import {
     ListStreamsSchema,
@@ -39,6 +44,11 @@ import {
     PauseStreamSchema,
     // Plan 03-03 addition.
     DeleteStreamSchema,
+    // Plan 03-04 additions — stream-rule schemas + test_stream_match.
+    CreateStreamRuleSchema,
+    UpdateStreamRuleSchema,
+    DeleteStreamRuleSchema,
+    TestStreamMatchSchema,
 } from "../src/tools/streams/schemas.js";
 import {
     _setCaptureRequest,
@@ -1683,4 +1693,414 @@ test("delete_stream refuses on writable:false connection BEFORE any GET fires", 
     assert.equal(res.isError, true);
     assert.equal(res.reason, "connection_read_only");
     assert.equal(anyCall, false, "no GET should fire when writable gate refuses");
+});
+
+// =====================================================================
+// Plan 03-04 Task 1 — create_stream_rule + delete_stream_rule (+ schemas)
+// =====================================================================
+//
+// Coverage matrix (Tests 1-16 per 03-04-PLAN Task 1 <behavior>):
+//   Tests 1-5:   CreateStreamRuleSchema parse acceptance/rejection (8 variants).
+//   Test 6:      DeleteStreamRuleSchema parse acceptance/rejection.
+//   Test 7:      create_stream_rule D-09 parent-mutable refusal — 0 POSTs.
+//   Test 8:      create_stream_rule wire emission for `exact` (S9 numeric, S10 defaults).
+//   Test 9:      create_stream_rule wire emission for `always_match` (S10 empty-string).
+//   Test 10:     create_stream_rule wire emission for `match_input` (D-11 8th variant).
+//   Test 11:     create_stream_rule apply normalizes streamrule_id.
+//   Test 12:     delete_stream_rule D-09 parent-mutable refusal — 0 DELETEs.
+//   Test 13:     delete_stream_rule Discretion-04 — preview JSON omits `cascades`.
+//   Test 14:     delete_stream_rule no confirmation gate — no confirmationToken.
+//   Test 15:     delete_stream_rule apply path fires DELETE.
+//   Test 16:     schema-parity assertions land in test/schema-parity.test.js.
+
+// ---------- Test 1 — CreateStreamRuleSchema accepts `exact` ----------
+
+test("CreateStreamRuleSchema accepts exact variant with field+value+streamId", () => {
+    const parsed = CreateStreamRuleSchema.parse({
+        streamId: "s1",
+        type: "exact",
+        field: "source",
+        value: "host-1",
+    });
+    assert.equal(parsed.streamId, "s1");
+    assert.equal(parsed.type, "exact");
+    assert.equal(parsed.field, "source");
+    assert.equal(parsed.value, "host-1");
+});
+
+// ---------- Test 2 — CreateStreamRuleSchema accepts `always_match` (no field/value) ----------
+
+test("CreateStreamRuleSchema accepts always_match variant (no field, no value)", () => {
+    const parsed = CreateStreamRuleSchema.parse({
+        streamId: "s1",
+        type: "always_match",
+    });
+    assert.equal(parsed.streamId, "s1");
+    assert.equal(parsed.type, "always_match");
+    assert.equal(parsed.field, undefined);
+    assert.equal(parsed.value, undefined);
+});
+
+// ---------- Test 3 — CreateStreamRuleSchema accepts `match_input` (8th variant) ----------
+
+test("CreateStreamRuleSchema accepts match_input variant (no field; value is input id)", () => {
+    const parsed = CreateStreamRuleSchema.parse({
+        streamId: "s1",
+        type: "match_input",
+        value: "input-uuid",
+    });
+    assert.equal(parsed.type, "match_input");
+    assert.equal(parsed.value, "input-uuid");
+    assert.equal(parsed.field, undefined);
+});
+
+// ---------- Test 4 — CreateStreamRuleSchema rejects unknown discriminator (closed-set) ----------
+
+test("CreateStreamRuleSchema rejects unknown discriminator `regexp` (D-11 closed set)", () => {
+    assert.throws(
+        () =>
+            CreateStreamRuleSchema.parse({
+                streamId: "s1",
+                type: "regexp",  // misspelled — must be `regex`
+                field: "msg",
+                value: ".*",
+            }),
+        /regexp|type|invalid|discriminator|enum/i,
+    );
+});
+
+// ---------- Test 5 — CreateStreamRuleSchema requires streamId ----------
+
+test("CreateStreamRuleSchema rejects when streamId is missing", () => {
+    assert.throws(
+        () =>
+            CreateStreamRuleSchema.parse({
+                type: "exact",
+                field: "x",
+                value: "y",
+            }),
+        /streamId|required/i,
+    );
+});
+
+// ---------- Test 6 — DeleteStreamRuleSchema requires both streamId and ruleId ----------
+
+test("DeleteStreamRuleSchema requires both streamId and ruleId", () => {
+    const parsed = DeleteStreamRuleSchema.parse({ streamId: "s1", ruleId: "r1" });
+    assert.equal(parsed.streamId, "s1");
+    assert.equal(parsed.ruleId, "r1");
+    assert.throws(() => DeleteStreamRuleSchema.parse({ streamId: "s1" }), /ruleId|required/i);
+    assert.throws(() => DeleteStreamRuleSchema.parse({ ruleId: "r1" }), /streamId|required/i);
+});
+
+// ---------- Test 7 — create_stream_rule D-09 parent-mutable refusal ----------
+
+test("create_stream_rule D-09 parent-mutable pre-flight refuses with stream_immutable; NO POST fires", async () => {
+    const captured = [];
+    _setCaptureRequest(streamsMultiCapture([
+        {
+            method: "GET",
+            pathPattern: "/api/streams/s1",
+            response: (req) => {
+                captured.push(req);
+                return { id: "s1", title: "All messages", is_editable: false };
+            },
+        },
+        {
+            method: "POST",
+            pathPattern: "/api/streams/s1/rules",
+            response: () => {
+                throw new Error("POST /rules MUST NOT fire when D-09 refuses");
+            },
+        },
+    ]));
+    const res = await handleCreateStreamRule({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                streamId: "s1",
+                type: "exact",
+                field: "source",
+                value: "host-1",
+            },
+        },
+    });
+    assert.equal(res.isError, true);
+    assert.equal(res.reason, "stream_immutable");
+    assert.match(res.content[0].text, /stream_immutable|non-editable/i);
+    assert.equal(captured.length, 1, "exactly one GET (parent-mutable pre-flight) should fire");
+});
+
+// ---------- Test 8 — create_stream_rule wire emission for `exact` (S9 numeric + S10 defaults) ----------
+
+test("create_stream_rule dry-run emits exact variant wire body with numeric type=1 and S10 defaults", async () => {
+    _setCaptureRequest(streamsMultiCapture([
+        {
+            method: "GET",
+            pathPattern: "/api/streams/s1",
+            response: () => ({ id: "s1", title: "App", is_editable: true }),
+        },
+    ]));
+    const res = await handleCreateStreamRule({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                streamId: "s1",
+                type: "exact",
+                field: "source",
+                value: "host-1",
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.dryRun, true);
+    assert.equal(payload.tool, "create_stream_rule");
+    assert.equal(payload.preview.method, "POST");
+    assert.equal(payload.preview.path, "/api/streams/s1/rules");
+    // S9 numeric translation: exact -> 1
+    assert.equal(payload.preview.body.type, 1);
+    assert.equal(payload.preview.body.value, "host-1");
+    assert.equal(payload.preview.body.field, "source");
+    // S10 defaults: inverted -> false, description -> null
+    assert.equal(payload.preview.body.inverted, false);
+    assert.equal(payload.preview.body.description, null);
+    // D-13 __SERVER_ASSIGNED__ sentinel for the new rule id.
+    assert.equal(payload.postApplyEstimate.id, "__SERVER_ASSIGNED__");
+});
+
+// ---------- Test 9 — create_stream_rule wire emission for `always_match` (S10 empty defaults) ----------
+
+test("create_stream_rule dry-run emits always_match wire body with empty value+field (S10)", async () => {
+    _setCaptureRequest(streamsMultiCapture([
+        {
+            method: "GET",
+            pathPattern: "/api/streams/s1",
+            response: () => ({ id: "s1", title: "App", is_editable: true }),
+        },
+    ]));
+    const res = await handleCreateStreamRule({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                streamId: "s1",
+                type: "always_match",
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    // S9 numeric: always_match -> 7
+    assert.equal(payload.preview.body.type, 7);
+    // S10: irrelevant fields default to "" (non-nullable wire shape).
+    assert.equal(payload.preview.body.value, "");
+    assert.equal(payload.preview.body.field, "");
+    assert.equal(payload.preview.body.inverted, false);
+    assert.equal(payload.preview.body.description, null);
+});
+
+// ---------- Test 10 — create_stream_rule wire emission for `match_input` (8th variant) ----------
+
+test("create_stream_rule dry-run emits match_input wire body with empty field; value=input id (D-11)", async () => {
+    _setCaptureRequest(streamsMultiCapture([
+        {
+            method: "GET",
+            pathPattern: "/api/streams/s1",
+            response: () => ({ id: "s1", title: "App", is_editable: true }),
+        },
+    ]));
+    const res = await handleCreateStreamRule({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                streamId: "s1",
+                type: "match_input",
+                value: "input-uuid",
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    // S9 numeric: match_input -> 8
+    assert.equal(payload.preview.body.type, 8);
+    assert.equal(payload.preview.body.value, "input-uuid");
+    assert.equal(payload.preview.body.field, "");  // S10 empty default
+    assert.equal(payload.preview.body.inverted, false);
+    assert.equal(payload.preview.body.description, null);
+});
+
+// ---------- Test 11 — create_stream_rule apply normalizes streamrule_id ----------
+
+test("create_stream_rule apply path posts wire body and normalizes streamrule_id", async () => {
+    const captured = [];
+    _setCaptureRequest(streamsMultiCapture([
+        {
+            method: "GET",
+            pathPattern: "/api/streams/s1",
+            response: () => ({ id: "s1", title: "App", is_editable: true }),
+        },
+        {
+            method: "POST",
+            pathPattern: "/api/streams/s1/rules",
+            response: (req) => {
+                captured.push(req);
+                return { streamrule_id: "r-NEW" };
+            },
+        },
+    ]));
+    const res = await handleCreateStreamRule({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                streamId: "s1",
+                type: "exact",
+                field: "source",
+                value: "host-1",
+                dryRun: false,
+            },
+        },
+    });
+    assert.equal(captured.length, 1);
+    assert.equal(captured[0].method, "POST");
+    assert.equal(captured[0].path, "/api/streams/s1/rules");
+    assert.equal(captured[0].body.type, 1);
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.applied, true);
+    // Pitfall S7 / toIdBody idFields:["streamrule_id","id"]
+    assert.equal(payload.result.id, "r-NEW");
+});
+
+// ---------- Test 12 — delete_stream_rule D-09 parent-mutable refusal ----------
+
+test("delete_stream_rule D-09 parent-mutable pre-flight refuses; NO DELETE fires", async () => {
+    const captured = [];
+    _setCaptureRequest(streamsMultiCapture([
+        {
+            method: "GET",
+            pathPattern: "/api/streams/s1",
+            response: (req) => {
+                captured.push(req);
+                return { id: "s1", title: "All messages", is_editable: false };
+            },
+        },
+        {
+            method: "DELETE",
+            pathPattern: "/api/streams/s1/rules/r1",
+            response: () => {
+                throw new Error("DELETE MUST NOT fire when D-09 refuses");
+            },
+        },
+    ]));
+    const res = await handleDeleteStreamRule({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                streamId: "s1",
+                ruleId: "r1",
+            },
+        },
+    });
+    assert.equal(res.isError, true);
+    assert.equal(res.reason, "stream_immutable");
+    assert.match(res.content[0].text, /stream_immutable|non-editable/i);
+    assert.equal(captured.length, 1, "exactly one GET (parent-mutable pre-flight) should fire");
+});
+
+// ---------- Test 13 — delete_stream_rule Discretion-04 — NO cascades key ----------
+
+test("delete_stream_rule dry-run preview omits `cascades` (Discretion-04 leaf delete)", async () => {
+    _setCaptureRequest(streamsMultiCapture([
+        {
+            method: "GET",
+            pathPattern: "/api/streams/s1",
+            response: () => ({ id: "s1", title: "App", is_editable: true }),
+        },
+    ]));
+    const res = await handleDeleteStreamRule({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                streamId: "s1",
+                ruleId: "r1",
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.dryRun, true);
+    assert.equal(payload.preview.method, "DELETE");
+    assert.equal(payload.preview.path, "/api/streams/s1/rules/r1");
+    // Discretion-04 — leaf delete; no cascades enumeration.
+    // handler.js emits `cascades` only when build()'s descriptor sets it.
+    // Verify absence at the parsed-JSON level AND at the raw-text level (so
+    // a future regression that accidentally emits `cascades: undefined` still
+    // fails — JSON.stringify omits undefined values, so payload.cascades
+    // would still be undefined but the raw text would not contain the key).
+    assert.equal(
+        Object.prototype.hasOwnProperty.call(payload, "cascades"),
+        false,
+        "preview JSON must omit `cascades` for leaf-delete (Discretion-04)",
+    );
+    assert.doesNotMatch(res.content[0].text, /"cascades"/);
+});
+
+// ---------- Test 14 — delete_stream_rule no confirmation gate ----------
+
+test("delete_stream_rule dry-run preview omits confirmationToken (no requireConfirm gate)", async () => {
+    _setCaptureRequest(streamsMultiCapture([
+        {
+            method: "GET",
+            pathPattern: "/api/streams/s1",
+            response: () => ({ id: "s1", title: "App", is_editable: true }),
+        },
+    ]));
+    const res = await handleDeleteStreamRule({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                streamId: "s1",
+                ruleId: "r1",
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(
+        Object.prototype.hasOwnProperty.call(payload, "confirmationToken"),
+        false,
+        "leaf-delete must not emit confirmationToken (Discretion-04)",
+    );
+    assert.doesNotMatch(res.content[0].text, /confirmationToken/);
+});
+
+// ---------- Test 15 — delete_stream_rule apply happy path ----------
+
+test("delete_stream_rule apply path fires DELETE /api/streams/{id}/rules/{ruleId}", async () => {
+    const captured = [];
+    _setCaptureRequest(streamsMultiCapture([
+        {
+            method: "GET",
+            pathPattern: "/api/streams/s1",
+            response: () => ({ id: "s1", title: "App", is_editable: true }),
+        },
+        {
+            method: "DELETE",
+            pathPattern: "/api/streams/s1/rules/r1",
+            response: (req) => {
+                captured.push(req);
+                return null;  // 204 No Content
+            },
+        },
+    ]));
+    const res = await handleDeleteStreamRule({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                streamId: "s1",
+                ruleId: "r1",
+                dryRun: false,
+            },
+        },
+    });
+    assert.equal(captured.length, 1);
+    assert.equal(captured[0].method, "DELETE");
+    assert.equal(captured[0].path, "/api/streams/s1/rules/r1");
+    assert.equal(captured[0].body, undefined);
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.applied, true);
 });
