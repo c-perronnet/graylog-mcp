@@ -113,7 +113,7 @@
   3. `create_event_notification` validates the discriminator string (`email-notification-v1`, `http-notification-v2`, etc.) against a zod discriminated union — invalid notification types fail validation before any HTTP call.
   4. `enable_event_definition` / `disable_event_definition` send an empty body to `PUT /events/definitions/{id}/schedule|unschedule` — handling the `@Consumes(WILDCARD)` quirk so the agent can't waste context constructing a fake body.
 **Plans**: 5 plans
-  - [ ] 05-01-PLAN.md — Foundation amendments (conflict.js `elements` envelope for /paginated + computeNotificationCascadeHash thin wrapper + 6-variant discriminator + v6→v7 migration + S5 displacement of v2.3 list_event_* + 05-U1-SMOKE.md decision artifact)
+  - [x] 05-01-PLAN.md — Foundation amendments (conflict.js `elements` envelope for /paginated + computeNotificationCascadeHash thin wrapper + 6-variant discriminator + v6→v7 migration + S5 displacement of v2.3 list_event_* + 05-U1-SMOKE.md decision artifact)
   - [ ] 05-02-PLAN.md — Event-definition list/get/create/update (EVENT-01..04): M1 ACCEPTANCE GATE (?schedule=false structural) + C5 ACCEPTANCE GATE (visible v6→v7 migration) + CreateEntityRequest envelope + STRICT_NO_ECHO on update
   - [ ] 05-03-PLAN.md — Enable/disable (EVENT-06) WILDCARD empty-body + delete_event_definition (EVENT-05) D-08 informational cascade (no token; mirrors Phase 1 delete_input)
   - [ ] 05-04-PLAN.md — Notification list/create/update/delete (EVENT-07..09): D-05 6-variant discriminator + http-notification-v2 C3 STRICT_NO_ECHO encrypted fields + D-09 cascade-hash + apply-time drift refusal (mirrors Phase 3 delete_stream)
@@ -162,7 +162,7 @@
 | 2. Index Sets & Retention | 2/5 | In Progress | - |
 | 3. Streams & Stream Rules | 4/5 | In Progress | - |
 | 4. Pipelines, Pipeline Rules & Connections | 5/6 | In Progress | - |
-| 5. Events & Notifications | 0/? | Not started | - |
+| 5. Events & Notifications | 1/5 | In Progress | - |
 | 6. Dashboards, Widget Templates & Blueprints | 0/? | Not started | - |
 | 7. Final Hardening | 0/? | Not started | - |
 
