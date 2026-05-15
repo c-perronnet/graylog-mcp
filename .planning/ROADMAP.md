@@ -47,7 +47,7 @@
 **Plans**: 5 plans
   - [x] 01-01-PLAN.md — Foundation amendments (A4 async build, A2 conflict pre-check, D-06 type-catalogue cache) + INPUT-01/02/03 read tools
   - [x] 01-02-PLAN.md — Input CRUD: create_input (D-04 redaction), update_input (C3 mitigation centerpiece — INPUT-05), delete_input (D-05 cascade enumeration)
-  - [ ] 01-03-PLAN.md — Input lifecycle: start_input (PUT) + stop_input (DELETE) (INPUT-07)
+  - [x] 01-03-PLAN.md — Input lifecycle: start_input (PUT) + stop_input (DELETE) (INPUT-07)
   - [ ] 01-04-PLAN.md — Extractor CRUD: list_extractors + create_extractor (all 8 Graylog types per A1) + update_extractor + delete_extractor (INPUT-08..11)
   - [ ] 01-05-PLAN.md — Snapshot fixtures (incl. C3 acceptance gate) + schema-parity enrichment + 01-VALIDATION.md flip
 

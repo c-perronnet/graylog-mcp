@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v2.3
 milestone_name: milestone
 status: Ready to execute
-last_updated: "2026-05-15T10:43:14.593Z"
+last_updated: "2026-05-15T10:49:54.839Z"
 progress:
   total_phases: 8
   completed_phases: 1
   total_plans: 11
-  completed_plans: 8
-  percent: 73
+  completed_plans: 9
+  percent: 82
 ---
 
 # Project Memory: Graylog MCP — Full Admin Surface
@@ -28,12 +28,12 @@ progress:
 ## Current Position
 
 Phase: 01 (inputs-extractors) — EXECUTING
-Plan: 3 of 5
+Plan: 4 of 5
 
 - **Phase**: 1 — Inputs & Extractors
-- **Plan**: 2 of 5 complete (01-01 shipped: foundation amendments + read tools; 01-02 shipped: create_input + update_input C3 mitigation + delete_input cascade enumeration)
-- **Status**: 195 tests / 18 suites green (+18 net-new over Plan 01-01 baseline of 177); all Phase 0 + Plan 01-01 contracts preserved
-- **Progress bar**: `[███████░░░] 73%` (8 of 11 milestone plans complete: 6 Phase 0 + 2 Phase 1)
+- **Plan**: 3 of 5 complete (01-01 shipped: foundation amendments + read tools; 01-02 shipped: create_input + update_input C3 mitigation + delete_input cascade enumeration; 01-03 shipped: start_input + stop_input lifecycle tools)
+- **Status**: 203 tests / 18 suites green (+8 net-new over Plan 01-02 baseline of 195); all Phase 0 + Plan 01-01 + Plan 01-02 contracts preserved
+- **Progress bar**: `[████████░░] 82%` (9 of 11 milestone plans complete: 6 Phase 0 + 3 Phase 1)
 
 ## Performance Metrics
 
@@ -52,6 +52,7 @@ Plan: 3 of 5
 | Phase 00-foundation P06 | ~10 min | 3 tasks | 11 files |
 | Phase 01-inputs-extractors P01 | ~6min | 2 tasks | 16 files |
 | Phase 01 P02 | ~8min | 2 tasks | 8 files |
+| Phase 01 P03 | ~2 min | 1 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -140,6 +141,17 @@ Drawn from `PROJECT.md` Key Decisions table — restated here for quick referenc
   - **Test growth**: 177 → 195 (+18 net-new). Focused run = 24/24 pass; full `npm test` = 195/195 pass; zero regressions. Commits: `d1ba1f1` (Task 1 RED, ERR_MODULE_NOT_FOUND), `1e7520b` (Task 2 GREEN, all 18 pass + 177 baseline preserved).
   - **Plan 03-04-05 hand-off**: `_applyBody` sibling pattern + strict-no-echo wire-build available for `update_extractor` (D-09 reuses this contract). `findExistingMatches` per-input scoped is wired for `create_extractor` (Plan 04). The C3 + D-03 + D-04 + D-05 acceptance gates are pinned as ad-hoc tests now; Plan 05 lands them as byte-identical snapshot fixtures + `assertSchemaParityForTool(create_input/update_input/delete_input)` enrichment of `test/schema-parity.test.js`.
 
+- **Plan 01-03 (start_input + stop_input lifecycle — D-08)**:
+  - **Lifecycle-as-mutation contract end-to-end**: `start_input` and `stop_input` compose through `defineMutatingHandler` exactly like CRUD tools. dryRun: true defaults + writable-flag gate (wrapper + client defense-in-depth) + idempotency-key auto-derivation inherit from `mutatingBase`. No special-cased "runtime-only" path; D-08 in action.
+  - **Verb-mapping contract verified**: `start_input` → PUT /api/system/inputstates/{inputId}; `stop_input` → DELETE on the same path. Both verified by `_setCaptureRequest` seam tests (Tests 38 + 40). The counter-intuitive verb mapping is documented in tools.js descriptions ("Maps to PUT/DELETE …") so the agent never has to know the underlying REST quirk.
+  - **Eventually-consistent semantics surfaced in tool descriptions**: both descriptions warn "This sets the DESIRED state; actual state may briefly remain STARTING/STOPPING until Graylog's input registry converges. Poll get_input if you need to wait for RUNNING/STOPPED." The agent gets explicit permission slip to add a poll loop after start/stop calls (RESEARCH.md §Pitfall Start/Stop Are Eventually Consistent).
+  - **`postApplyEstimate.id = args.inputId` (NOT __SERVER_ASSIGNED__)**: lifecycle tools are not create-shaped; the ID already exists. Setting the estimate to the known ID lets a blueprint author chain start_input → get_input(inputId) without re-reading args.inputId.
+  - **Schemas `StartInputSchema` + `StopInputSchema`**: both = `mutatingBase.extend({ inputId })`. ONLY inputId required (no extraneous lifecycle state args). Discretion-04 (whether to add a `state` arg) resolved cleanly — D-08 says no.
+  - **Per-tool-per-file convention reinforced**: start-input.js + stop-input.js join create-input.js / update-input.js / delete-input.js as the established pattern. The two handlers differ only in the HTTP verb string and the summarize callback's verb word, but separating them mirrors the per-tool-per-file convention used by the CRUD tools. Future maintainers see a one-to-one mapping between tool name and file.
+  - **`body: undefined`**: build returns `body: undefined` for both lifecycle tools (empty-body verbs). `JSON.stringify({ body: undefined })` produces `"{}"` (key omitted), so the dry-run preview JSON omits the `preview.body` key — observed in tests via `payload.preview.body === undefined`. The apply callback passes `req.body` (undefined) to `client.request`; axios treats undefined as "no body". Per-tool-no-special-casing pattern established for empty-body verbs.
+  - **Test growth**: 195 → 203 (+8 net-new). Focused run = 32/32 pass; full `npm test` = 203/203 pass; zero regressions. Commits: `968cdc4` (Task 1 RED, ERR_MODULE_NOT_FOUND), `4e40a2e` (Task 1 GREEN, all 8 pass + 195 baseline preserved).
+  - **Plan 04 hand-off (extractors)**: per-tool-per-file convention proven across 5 inputs files (create / update / delete / start / stop); Plan 04 lands 4 more (list / create / update / delete extractor) under the same convention. Lifecycle-as-mutation pattern is reusable for any future runtime-flag tool (e.g. `enable_pipeline`, `pause_event_definition` in later phases) — defineMutatingHandler composition + `postApplyEstimate.id = args.<resourceId>` + `body: undefined` for empty-body verbs.
+
 ### Foundation Primitives To Be Built In Phase 0
 
 These are the cross-cutting concerns every later phase depends on. They live in `FOUND-01` through `FOUND-13`:
@@ -188,11 +200,11 @@ None.
 
 ## Session Continuity
 
-**Last action**: Completed `01-02-PLAN.md` — Phase 1's input-CRUD plan (the C3 mitigation centerpiece). Shipped `create_input` (INPUT-04: D-04 encrypted-field redaction, M5 existingMatches via real findExistingMatches), `update_input` (INPUT-05: C3 mitigation + D-03 STRICT NO-ECHO wire-build — configuration block built ONLY from args.changes.configuration, no copy-from-current loop, encrypted fields never echoed unless explicitly passed then wrapped as `{ set_value }`), `delete_input` (INPUT-06: D-05 cascade enumeration via best-effort pre-flight GET /api/system/inputs/{id}/extractors). handler.js cascades-forwarding amendment (BLOCKER #1 fix, declared in this plan's files_modified). `_connectionName` + `_conn` pass-through into `defineMutatingHandler.build()` (generalizes Plan 01-01's list-handler pass-through; eliminates duplicate resolveConnection boilerplate per handler). 8 strict input variants in `variantMap` (GELF UDP/TCP/HTTP + Beats2 + Syslog UDP/TCP + Raw UDP/TCP — WARNING #9 fix: GELF HTTP now strict). Generic fallback for other input types preserved. `redact.js` ships `REDACTION_PLACEHOLDER = "<redacted>"`, `redactForPreview`, `encodeEncryptedForWire` as pure reusable helpers. Test growth 177 → 195 (+18); focused run 24/24; full `npm test` 195/195 pass; zero regressions on Plan 01-01 baseline. Commits: `d1ba1f1` (Task 1 RED, ERR_MODULE_NOT_FOUND), `1e7520b` (Task 2 GREEN).
+**Last action**: Completed `01-03-PLAN.md` — Phase 1's input lifecycle plan. Shipped `start_input` (INPUT-07a: PUT /api/system/inputstates/{inputId}) and `stop_input` (INPUT-07b: DELETE /api/system/inputstates/{inputId}). Both compose through `defineMutatingHandler` so dryRun: true defaults + writable-flag gate (wrapper + client defense-in-depth) + idempotency-key auto-derivation inherit uniformly — D-08 lifecycle-as-mutation contract honored end-to-end. Tool descriptions explicitly document (a) the counter-intuitive verb mapping (start=PUT, stop=DELETE — RESEARCH.md §Pitfall Lifecycle Maps to DELETE Verb) and (b) the eventually-consistent semantics ("sets the DESIRED state; actual state may briefly remain STARTING/STOPPING — poll get_input if you need to wait for RUNNING/STOPPED"). Both handlers set `postApplyEstimate.id = args.inputId` (NOT __SERVER_ASSIGNED__ — the agent supplied the ID up front; not create-shaped). Schemas `StartInputSchema` + `StopInputSchema` = `mutatingBase.extend({ inputId })` — only inputId required (no extraneous lifecycle state args). Test growth 195 → 203 (+8 net-new); focused run 32/32 inputs; full `npm test` 203/203 pass; zero regressions on Plan 01-02 baseline. Commits: `968cdc4` (Task 1 RED, ERR_MODULE_NOT_FOUND), `4e40a2e` (Task 1 GREEN, all 8 tests pass + 195 baseline preserved).
 
-**Stopped at**: Completed 01-02-PLAN.md — C3 + D-03 + D-04 + D-05 acceptance gates all green; ready for Plan 03 (start_input + stop_input lifecycle).
+**Stopped at**: Completed 01-03-PLAN.md — input lifecycle landed; ready for Plan 04 (extractors CRUD: list_extractors + create_extractor + update_extractor + delete_extractor).
 
-**Next action**: Execute `01-03-PLAN.md` (start_input PUT + stop_input DELETE — INPUT-07). Plan 03 inherits: (1) `_connectionName` + `_conn` pass-through in `defineMutatingHandler.build()` so lifecycle build callbacks reach the resolved connection without re-resolving; (2) cascades-forwarding amendment in handler.js (irrelevant for start/stop but available); (3) `_applyBody` sibling pattern (irrelevant for start/stop — they have no body; the pattern is for future tools with preview/apply asymmetry). The C3 + D-03 + D-04 + D-05 acceptance gates are currently pinned by Test 27/28/29/20/31/34 (ad-hoc assertions); Plan 05 lands them as byte-identical snapshot fixtures + `assertSchemaParityForTool(create_input/update_input/delete_input)` enrichment of `test/schema-parity.test.js`. Plan 04 (extractors CRUD) reuses the `_applyBody` pattern + strict-no-echo wire-build for `update_extractor` per D-09.
+**Next action**: Execute `01-04-PLAN.md` (extractors CRUD — INPUT-08/09/10/11). Plan 04 inherits from Plans 01-02 + 01-03: (1) `_applyBody` sibling pattern + strict-no-echo wire-build available for `update_extractor` (D-09: reuses the `update_input` contract); (2) per-input-scoped `findExistingMatches({ listPath: '/api/system/inputs/{inputId}/extractors', matchFn: ... })` for `create_extractor` idempotency; (3) variant-map dispatch via superRefine (Plan 02 pattern) keyed on `extractor_type` — D-07 says all 8 Graylog 7.0.6 extractor types get strict schemas (grok, regex, regex_replace, json, split_and_index, substring, copy_input, lookup_table); (4) per-tool-per-file convention reinforced by Plans 01-02 + 01-03 — Plan 04 lands list-extractors.js / create-extractor.js / update-extractor.js / delete-extractor.js as separate files. The C3 + D-03 + D-04 + D-05 acceptance gates + lifecycle verb-mapping contract are currently pinned by Tests 20/27/28/29/31/34/37-44 (ad-hoc assertions); Plan 05 lands them as byte-identical snapshot fixtures + `assertSchemaParityForTool(...)` enrichment of `test/schema-parity.test.js` for create_input / update_input / delete_input / start_input / stop_input / *_extractor.
 
 ---
 *State initialized: 2026-05-13*
