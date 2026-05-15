@@ -106,3 +106,48 @@ test("findExistingMatches similarityReason can be a function evaluated per-item"
     });
     assert.equal(matches[0].similarity_reason, "title=foo");
 });
+
+// =====================================================================
+// Plan 02-01 Test 7 — index_sets envelope normalization
+// =====================================================================
+//
+// /api/system/indices/index_sets returns { total, index_sets: [...], stats: {} }.
+// create_index_set (Plan 02-02) consumes findExistingMatches to surface
+// duplicate-title pre-checks; without the envelope unwrap, every match returns []
+// regardless of source data. One additive line in conflict.js's envelope chain.
+
+test("findExistingMatches normalizes index_sets envelope (Plan 02-01)", async () => {
+    _setCaptureRequest(() => ({
+        total: 2,
+        index_sets: [
+            { id: "a", title: "X" },
+            { id: "b", title: "Y" },
+        ],
+    }));
+    const client = makeClient(FAKE_CONN);
+    const matches = await findExistingMatches(client, {
+        listPath: "/api/system/indices/index_sets",
+        matchFn: (it) => it.title === "X",
+    });
+    assert.equal(matches.length, 1);
+    assert.equal(matches[0].id, "a");
+    assert.equal(matches[0].title, "X");
+    assert.equal(matches[0].similarity_reason, "exact");
+});
+
+// =====================================================================
+// Plan 02-01 Test 8 — back-compat with inputs envelope (regression guard)
+// =====================================================================
+
+test("findExistingMatches back-compat: inputs envelope still works (regression guard)", async () => {
+    _setCaptureRequest(() => ({
+        inputs: [{ id: "in1", title: "matchme" }, { id: "in2", title: "skip" }],
+    }));
+    const client = makeClient(FAKE_CONN);
+    const matches = await findExistingMatches(client, {
+        listPath: "/api/system/inputs",
+        matchFn: (it) => it.title === "matchme",
+    });
+    assert.equal(matches.length, 1);
+    assert.equal(matches[0].id, "in1");
+});

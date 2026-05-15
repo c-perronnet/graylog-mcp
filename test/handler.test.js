@@ -387,3 +387,181 @@ test("build() that returns a rejected promise → wrapper surfaces error (no unh
     assert.equal(res.isError, true);
     assert.match(res.content[0].text, /preflight failed/);
 });
+
+// =====================================================================
+// Plan 02-01: _confirmationToken forwarding + requireConfirm apply-time gate
+// =====================================================================
+//
+// Two additive hooks on defineMutatingHandler:
+// 1. build() may return `_confirmationToken: "<hex>"` → dry-run preview JSON
+//    emits `confirmationToken: "<hex>"` (key ABSENT when not set; back-compat).
+// 2. spec may declare `requireConfirm({ args, req }) → token|null` → apply-time
+//    gate: if expected token is non-null and args.confirm !== token → isError
+//    with reason 'confirmation_mismatch'; apply() NOT called.
+//
+// Plan 03 consumes both hooks for delete_index_set's C1 confirmation gate.
+
+test("Test 1 — back-compat: no requireConfirm + no _confirmationToken → no confirmationToken key in preview", async () => {
+    const handler = fixtureHandler(); // baseline build returns no _confirmationToken, no requireConfirm spec
+    const res = await handler({
+        params: { arguments: { title: "T", _testConnection: "fake" } },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.dryRun, true);
+    assert.equal(
+        payload.confirmationToken,
+        undefined,
+        "confirmationToken key must be ABSENT when build() did not set _confirmationToken — back-compat for every Phase 0/1 tool",
+    );
+});
+
+test("Test 2 — build() returning _confirmationToken → dry-run preview surfaces confirmationToken: <hex>", async () => {
+    const handler = defineMutatingHandler({
+        name: "delete_index_set",
+        schema: TestSchema,
+        build: (args) => ({
+            method: "DELETE",
+            path: "/api/system/indices/index_sets/x?delete_indices=true",
+            body: undefined,
+            _confirmationToken: "abc123",
+        }),
+        apply: async () => ({}),
+    });
+    const res = await handler({
+        params: { arguments: { title: "T", _testConnection: "fake" } },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.confirmationToken, "abc123");
+});
+
+test("Test 3 — requireConfirm callback: matching confirm allows apply() to run", async () => {
+    let applyCalled = false;
+    const handler = defineMutatingHandler({
+        name: "delete_index_set",
+        schema: TestSchema.extend({ confirm: z.string().optional() }),
+        build: () => ({
+            method: "DELETE",
+            path: "/api/system/indices/index_sets/x?delete_indices=true",
+            body: undefined,
+            _confirmationToken: "abc123",
+        }),
+        apply: async () => {
+            applyCalled = true;
+            return { deleted: true };
+        },
+        requireConfirm: ({ args, req }) => req._confirmationToken ?? null,
+    });
+    const res = await handler({
+        params: {
+            arguments: {
+                title: "T",
+                _testConnection: "fake",
+                dryRun: false,
+                confirm: "abc123",
+            },
+        },
+    });
+    assert.equal(applyCalled, true, "apply() must run when args.confirm matches the expected token");
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.applied, true);
+});
+
+test("Test 4 — requireConfirm callback: missing confirm rejects with confirmation_mismatch; apply() NOT called", async () => {
+    let applyCalled = false;
+    const handler = defineMutatingHandler({
+        name: "delete_index_set",
+        schema: TestSchema.extend({ confirm: z.string().optional() }),
+        build: () => ({
+            method: "DELETE",
+            path: "/api/system/indices/index_sets/x",
+            body: undefined,
+            _confirmationToken: "abc123",
+        }),
+        apply: async () => {
+            applyCalled = true;
+            return {};
+        },
+        requireConfirm: ({ args, req }) => req._confirmationToken ?? null,
+    });
+    const res = await handler({
+        params: {
+            arguments: {
+                title: "T",
+                _testConnection: "fake",
+                dryRun: false,
+                // confirm: <missing>
+            },
+        },
+    });
+    assert.equal(res.isError, true);
+    assert.equal(res.reason, "confirmation_mismatch");
+    assert.match(res.content[0].text, /confirmation_mismatch/);
+    assert.equal(applyCalled, false, "apply() must NOT run when args.confirm is missing");
+});
+
+test("Test 5 — requireConfirm callback: wrong confirm rejects with confirmation_mismatch; apply() NOT called", async () => {
+    let applyCalled = false;
+    const handler = defineMutatingHandler({
+        name: "delete_index_set",
+        schema: TestSchema.extend({ confirm: z.string().optional() }),
+        build: () => ({
+            method: "DELETE",
+            path: "/api/system/indices/index_sets/x",
+            body: undefined,
+            _confirmationToken: "abc123",
+        }),
+        apply: async () => {
+            applyCalled = true;
+            return {};
+        },
+        requireConfirm: ({ args, req }) => req._confirmationToken ?? null,
+    });
+    const res = await handler({
+        params: {
+            arguments: {
+                title: "T",
+                _testConnection: "fake",
+                dryRun: false,
+                confirm: "WRONG-TOKEN",
+            },
+        },
+    });
+    assert.equal(res.isError, true);
+    assert.equal(res.reason, "confirmation_mismatch");
+    assert.equal(applyCalled, false, "apply() must NOT run on wrong confirm");
+});
+
+test("Test 6 — requireConfirm returning null is a no-op: apply() runs regardless of args.confirm", async () => {
+    // delete_index_set with deleteIndices:false does NOT issue a token (D-03). The
+    // requireConfirm callback returns null, signalling "no token expected for this call".
+    let applyCalled = false;
+    const handler = defineMutatingHandler({
+        name: "delete_index_set",
+        schema: TestSchema.extend({ confirm: z.string().optional() }),
+        build: () => ({
+            method: "DELETE",
+            path: "/api/system/indices/index_sets/x",
+            body: undefined,
+            // NO _confirmationToken
+        }),
+        apply: async () => {
+            applyCalled = true;
+            return { deleted: true };
+        },
+        requireConfirm: ({ args, req }) => req._confirmationToken ?? null, // returns null
+    });
+    const res = await handler({
+        params: {
+            arguments: {
+                title: "T",
+                _testConnection: "fake",
+                dryRun: false,
+                confirm: "irrelevant",
+            },
+        },
+    });
+    assert.equal(applyCalled, true, "apply() must run when requireConfirm returns null");
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.applied, true);
+});
+
