@@ -10,7 +10,7 @@ function resolveConnection(args) {
     const conn = getActiveConnectionConfig();
     if (!conn) {
         const available = Object.keys(getConnections()).join(", ");
-        return { error: errorResponse(`No active connection. Use 'use_connection' first. Available: ${available || "none"}`) };
+        return { error: errorResponse(`No active connection. Use 'set_active_connection' first. Available: ${available || "none"}`) };
     }
     return { name: getActiveConnection() };
 }

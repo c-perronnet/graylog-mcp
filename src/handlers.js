@@ -26,7 +26,7 @@ function requireActiveConnection() {
                 isError: true,
                 content: [{
                     type: "text",
-                    text: `No active connection. Use 'use_connection' first. Available: ${available || "none"}`,
+                    text: `No active connection. Use 'set_active_connection' first. Available: ${available || "none"}`,
                 }],
             },
         };

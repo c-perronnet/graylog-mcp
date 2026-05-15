@@ -8,7 +8,7 @@ export const toolDefinitions = [
         },
     },
     {
-        name: "use_connection",
+        name: "set_active_connection",
         description: "Connect to a specific Graylog instance by name. Must be called before fetching messages.",
         inputSchema: {
             type: "object",
@@ -22,8 +22,8 @@ export const toolDefinitions = [
         },
     },
     {
-        name: "fetch_graylog_messages",
-        description: "Fetch messages from the active Graylog connection. Use 'use_connection' first to select a connection.",
+        name: "search_messages_graylog",
+        description: "Fetch messages from the active Graylog connection. Use 'set_active_connection' first to select a connection.",
         inputSchema: {
             type: "object",
             properties: {
@@ -76,7 +76,7 @@ export const toolDefinitions = [
         },
     },
     {
-        name: "get_surrounding_messages",
+        name: "get_context_messages",
         description: "Get messages surrounding a specific message. Provide messageId (preferred) or messageTimestamp to identify the target message.",
         inputSchema: {
             type: "object",
@@ -181,7 +181,7 @@ export const toolDefinitions = [
         },
     },
     {
-        name: "get_log_histogram",
+        name: "get_histogram_messages",
         description: "Get a time-based histogram of log messages. Shows message counts over time intervals.",
         inputSchema: {
             type: "object",
@@ -232,7 +232,7 @@ export const toolDefinitions = [
         },
     },
     {
-        name: "get_field_aggregation",
+        name: "get_aggregation_field",
         description: "Aggregate log messages by field values with statistics. Get counts, sums, averages, etc. for field values.",
         inputSchema: {
             type: "object",
@@ -288,7 +288,7 @@ export const toolDefinitions = [
         },
     },
     {
-        name: "get_field_time_aggregation",
+        name: "get_aggregation_field_over_time",
         description: "Two-dimensional aggregation: field values over time. Shows how field values change over time intervals.",
         inputSchema: {
             type: "object",
@@ -339,7 +339,7 @@ export const toolDefinitions = [
         },
     },
     {
-        name: "debug_histogram_query",
+        name: "debug_query_histogram",
         description: "Debug helper to test if the histogram query finds any messages at all. Use this if histogram returns empty buckets.",
         inputSchema: {
             type: "object",
@@ -377,7 +377,7 @@ export const toolDefinitions = [
         },
     },
     {
-        name: "save_search",
+        name: "create_saved_search",
         description: "Save a named search query for later reuse. Saves query parameters so you don't have to re-type complex searches.",
         inputSchema: {
             type: "object",
@@ -484,8 +484,8 @@ export const toolDefinitions = [
         },
     },
     {
-        name: "search_events",
-        description: "Search Graylog events and alerts. Use 'use_connection' first to select a connection.",
+        name: "search_events_graylog",
+        description: "Search Graylog events and alerts. Use 'set_active_connection' first to select a connection.",
         inputSchema: {
             type: "object",
             properties: {
@@ -536,8 +536,8 @@ export const toolDefinitions = [
         },
     },
     {
-        name: "get_event_definitions",
-        description: "Get Graylog event definitions. Use 'use_connection' first to select a connection.",
+        name: "list_event_definitions",
+        description: "Get Graylog event definitions. Use 'set_active_connection' first to select a connection.",
         inputSchema: {
             type: "object",
             properties: {
@@ -557,8 +557,8 @@ export const toolDefinitions = [
         },
     },
     {
-        name: "get_event_notifications",
-        description: "Get Graylog event notifications. Use 'use_connection' first to select a connection.",
+        name: "list_event_notifications",
+        description: "Get Graylog event notifications. Use 'set_active_connection' first to select a connection.",
         inputSchema: {
             type: "object",
             properties: {
@@ -575,11 +575,11 @@ export const toolDefinitions = [
     },
     {
         name: "cluster_log_messages",
-        description: "Cluster similar log messages into Drain3-style templates. Fetches messages with the same args as fetch_graylog_messages, then groups them by structural similarity. Templates are persisted per connection and reused across calls.",
+        description: "Cluster similar log messages into Drain3-style templates. Fetches messages with the same args as search_messages_graylog, then groups them by structural similarity. Templates are persisted per connection and reused across calls.",
         inputSchema: {
             type: "object",
             properties: {
-                query: { type: "string", description: "Query string (same as fetch_graylog_messages)" },
+                query: { type: "string", description: "Query string (same as search_messages_graylog)" },
                 filters: { type: "object", description: "Field filters" },
                 timeRange: { type: "string", description: "Time range (e.g. '1h', '30m')" },
                 from: { type: "string", description: "Absolute start time (ISO)" },
@@ -621,7 +621,7 @@ export const toolDefinitions = [
         },
     },
     {
-        name: "rename_log_template",
+        name: "update_log_template",
         description: "Set or update a human-readable label for a template.",
         inputSchema: {
             type: "object",

@@ -25,7 +25,7 @@ export async function handleClusterLogMessages(request) {
         conn = getActiveConnectionConfig();
         if (!conn) {
             const available = Object.keys(getConnections()).join(", ");
-            return errorResponse(`No active connection. Use 'use_connection' first. Available: ${available || "none"}`);
+            return errorResponse(`No active connection. Use 'set_active_connection' first. Available: ${available || "none"}`);
         }
     }
 

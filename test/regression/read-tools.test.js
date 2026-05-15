@@ -39,7 +39,7 @@ test("regression: list_connections returns deterministic listing", async (t) => 
 });
 
 test("regression: use_connection switches active connection", async (t) => {
-    const res = await dispatch({ params: { name: "use_connection", arguments: { name: "test_a" } } });
+    const res = await dispatch({ params: { name: "set_active_connection", arguments: { name: "test_a" } } });
     t.assert.snapshot({
         isError: res.isError ?? false,
         contentType: res.content[0].type,
@@ -48,7 +48,7 @@ test("regression: use_connection switches active connection", async (t) => {
 });
 
 test("regression: use_connection rejects missing name", async (t) => {
-    const res = await dispatch({ params: { name: "use_connection", arguments: {} } });
+    const res = await dispatch({ params: { name: "set_active_connection", arguments: {} } });
     t.assert.snapshot({
         isError: res.isError ?? false,
         contentType: res.content[0].type,
@@ -57,7 +57,7 @@ test("regression: use_connection rejects missing name", async (t) => {
 });
 
 test("regression: use_connection unknown name → not-found error response", async (t) => {
-    const res = await dispatch({ params: { name: "use_connection", arguments: { name: "no_such_connection_xyz" } } });
+    const res = await dispatch({ params: { name: "set_active_connection", arguments: { name: "no_such_connection_xyz" } } });
     t.assert.snapshot({
         isError: res.isError ?? false,
         contentType: res.content[0].type,
@@ -106,7 +106,7 @@ test("regression: fetch_graylog_messages without active connection → error env
     _setConnectionsForTests({});
     setActiveConnection(null);
     const res = await dispatch({
-        params: { name: "fetch_graylog_messages", arguments: { query: "*" } },
+        params: { name: "search_messages_graylog", arguments: { query: "*" } },
     });
     t.assert.snapshot({
         isError: res.isError ?? false,

@@ -2,7 +2,7 @@ exports[`regression: fetch_graylog_messages without active connection → error 
 {
   "isError": true,
   "contentType": "text",
-  "text": "No active connection. Use 'use_connection' first. Available: none"
+  "text": "No active connection. Use 'set_active_connection' first. Available: none"
 }
 `;
 

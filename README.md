@@ -153,14 +153,14 @@ Default is 15 minutes if unspecified.
 | Tool | Description |
 |---|---|
 | `list_connections` | List configured Graylog connections |
-| `use_connection` | Switch to a named connection |
+| `set_active_connection` | Switch to a named connection |
 
 ### Log Search
 
 | Tool | Description |
 |---|---|
-| `fetch_graylog_messages` | Search logs with query, filters, time range, pagination |
-| `get_surrounding_messages` | Get messages around a specific log entry by ID or timestamp |
+| `search_messages_graylog` | Search logs with query, filters, time range, pagination |
+| `get_context_messages` | Get messages around a specific log entry by ID or timestamp |
 | `list_streams` | List available Graylog streams |
 | `list_field_values` | Discover distinct values for a field (top N by count) |
 
@@ -168,10 +168,10 @@ Default is 15 minutes if unspecified.
 
 | Tool | Description |
 |---|---|
-| `get_log_histogram` | Time-bucketed message counts |
-| `get_field_aggregation` | Group by field with metrics (count, sum, avg, min, max) |
-| `get_field_time_aggregation` | Two-dimensional: field values over time intervals |
-| `debug_histogram_query` | Debug helper for empty histogram results |
+| `get_histogram_messages` | Time-bucketed message counts |
+| `get_aggregation_field` | Group by field with metrics (count, sum, avg, min, max) |
+| `get_aggregation_field_over_time` | Two-dimensional: field values over time intervals |
+| `debug_query_histogram` | Debug helper for empty histogram results |
 
 ### Log Clustering
 
@@ -180,7 +180,7 @@ Default is 15 minutes if unspecified.
 | `cluster_log_messages` | Group similar messages into structural templates (Drain3) |
 | `list_log_templates` | List learned templates for the active connection |
 | `delete_log_template` | Remove a template |
-| `rename_log_template` | Give a template a human-readable label |
+| `update_log_template` | Give a template a human-readable label |
 | `export_log_templates` | Export template library as JSON |
 | `import_log_templates` | Bulk import templates (merge or replace) |
 
@@ -190,15 +190,15 @@ Templates are persisted at `~/.graylog-mcp/templates/<connection>.json` and impr
 
 | Tool | Description |
 |---|---|
-| `search_events` | Search Graylog events with filters |
-| `get_event_definitions` | List event definitions |
-| `get_event_notifications` | List event notifications |
+| `search_events_graylog` | Search Graylog events with filters |
+| `list_event_definitions` | List event definitions |
+| `list_event_notifications` | List event notifications |
 
 ### Saved Searches
 
 | Tool | Description |
 |---|---|
-| `save_search` | Save a query configuration for reuse |
+| `create_saved_search` | Save a query configuration for reuse |
 | `list_saved_searches` | List all saved searches |
 | `get_saved_search` | Retrieve a saved search by name |
 | `delete_saved_search` | Delete a saved search |

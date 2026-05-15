@@ -3,9 +3,11 @@
 // imports this file once at module-init, then calls assertAllToolsRegistered
 // to fail-fast if any tool in src/tools.js lacks a registered handler.
 //
-// Plan 00-05 Task 2: initial registration uses OLD v2.3 tool names. Task 3
-// applies the D-03 rename map (12 tools renamed); both this file and
-// src/tools.js shift to the new names atomically in that task.
+// Plan 00-05 Task 3 applied the D-03 rename map: 12 of the 23 v2.3 tools
+// were renamed to fit the `<verb>_<domain>_<noun>` convention. The internal
+// handler function names retain the OLD camelCase (per RESEARCH.md Q9
+// closing rationale — internal-name rename is out of scope for Phase 0).
+// Old→new pairs are documented in CHANGELOG.md.
 
 import { register } from "../dispatch.js";
 
@@ -38,26 +40,29 @@ import {
     handleImportTemplates,
 } from "./template-mgmt.js";
 
+// Names that already fit `<verb>_<domain>_<noun>` (11 of 23)
 register("list_connections", listConnectionsHandler);
-register("use_connection", useConnectionHandler);
-register("fetch_graylog_messages", fetchGraylogMessagesHandler);
-register("get_surrounding_messages", getSurroundingMessagesHandler);
 register("list_streams", listStreamsHandler);
 register("list_field_values", listFieldValuesHandler);
-register("get_log_histogram", getLogHistogramHandler);
-register("get_field_aggregation", getFieldAggregationHandler);
-register("get_field_time_aggregation", getFieldTimeAggregationHandler);
-register("debug_histogram_query", debugHistogramQueryHandler);
-register("save_search", saveSearchHandler);
 register("list_saved_searches", listSavedSearchesHandler);
 register("get_saved_search", getSavedSearchHandler);
 register("delete_saved_search", deleteSavedSearchHandler);
-register("search_events", searchEventsHandler);
-register("get_event_definitions", getEventDefinitionsHandler);
-register("get_event_notifications", getEventNotificationsHandler);
 register("cluster_log_messages", handleClusterLogMessages);
 register("list_log_templates", handleListTemplates);
 register("delete_log_template", handleDeleteTemplate);
-register("rename_log_template", handleRenameTemplate);
 register("export_log_templates", handleExportTemplates);
 register("import_log_templates", handleImportTemplates);
+
+// Renamed under D-03 (12 of 23) — see CHANGELOG.md for old→new pairs
+register("set_active_connection", useConnectionHandler);
+register("search_messages_graylog", fetchGraylogMessagesHandler);
+register("get_context_messages", getSurroundingMessagesHandler);
+register("get_histogram_messages", getLogHistogramHandler);
+register("get_aggregation_field", getFieldAggregationHandler);
+register("get_aggregation_field_over_time", getFieldTimeAggregationHandler);
+register("debug_query_histogram", debugHistogramQueryHandler);
+register("create_saved_search", saveSearchHandler);
+register("search_events_graylog", searchEventsHandler);
+register("list_event_definitions", getEventDefinitionsHandler);
+register("list_event_notifications", getEventNotificationsHandler);
+register("update_log_template", handleRenameTemplate);
