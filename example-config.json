@@ -1,14 +1,15 @@
 {
-    "mcpServers": {
-        "simple-graylog-mcp": {
-            "command": "node",
-            "args": [
-              "/path/to/graylog-mcp/src/index.js"
-            ],
-            "env": {
-              "BASE_URL": "http://graylog1.internal.net.br:9000",
-              "API_TOKEN": "YOUR_GRAYLOG_API_TOKEN_HERE"
-            }
-          }
-    }
+    "connections": {
+        "prod": {
+            "baseUrl": "https://graylog.example.com",
+            "apiToken": "REPLACE_WITH_YOUR_API_TOKEN",
+            "writable": false
+        },
+        "staging": {
+            "baseUrl": "https://staging.graylog.example.com",
+            "apiToken": "REPLACE_WITH_YOUR_API_TOKEN"
+        }
+    },
+    "_doc_writable": "Optional per-connection 'writable' flag. Defaults to true when absent (all existing configs continue to work). Set to false to refuse all mutating tools on a connection — see CONTEXT.md D-07.",
+    "_doc_legacy_mcpServers": "Earlier versions of this example file documented an 'mcpServers' wrapper for the Claude Desktop launcher config. That format belongs in the MCP client's config (e.g. ~/.config/Claude/claude_desktop_config.json), not in graylog-mcp's own ~/.graylog-mcp/config.json which only holds the 'connections' registry."
 }
