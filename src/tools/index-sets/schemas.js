@@ -245,3 +245,25 @@ export const UpdateIndexSetSchema = mutatingBase.extend({
     indexSetId: z.string().min(1, "indexSetId is required"),
     changes: UpdateChangesShape,
 });
+
+// =====================================================================
+// Plan 02-03 — DeleteIndexSetSchema (INDEX-05; C1 mitigation centerpiece)
+// =====================================================================
+//
+// D-04 inverted default: deleteIndices defaults to false in the MCP wrapper,
+// inverting Graylog's server-side @DefaultValue(true). To actually destroy
+// the Elasticsearch indices, the agent must EXPLICITLY pass
+// `deleteIndices: true` AND echo the dry-run confirmationToken back as
+// `confirm` (D-01 — apply-time gate enforced by handler.js's requireConfirm
+// hook).
+//
+// confirm is optional at the schema layer — the requireConfirm gate fires at
+// apply time when build() set _confirmationToken (the deleteIndices:true
+// branch). The metadata-only path (deleteIndices:false) issues no token and
+// the gate is a no-op.
+
+export const DeleteIndexSetSchema = mutatingBase.extend({
+    indexSetId: z.string().min(1, "indexSetId is required"),
+    deleteIndices: z.boolean().optional().default(false), // D-04 INVERTED DEFAULT
+    confirm: z.string().optional(),                       // D-01 echo-the-token
+});

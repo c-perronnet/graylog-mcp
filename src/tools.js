@@ -953,4 +953,29 @@ export const toolDefinitions = [
             required: ["indexSetId", "changes"],
         },
     },
+    // ====================================================================
+    // Phase 2 — delete_index_set (Plan 02-03; INDEX-05 — C1 mitigation centerpiece)
+    // ====================================================================
+    {
+        name: "delete_index_set",
+        description: "Delete a Graylog index set. Graylog's server defaults `delete_indices` to TRUE — this wrapper INVERTS it to FALSE (D-04 safety inversion). With `deleteIndices: false` (the default) only the index-set metadata is removed; the Elasticsearch indices and their messages stay. To actually destroy the indices, pass `deleteIndices: true` AND echo back the `confirmationToken` from the dry-run output as `confirm` — the wrapper computes a deterministic sha-256 hash over {indexSetId, deleteIndices:true, sorted indexNames, messageCount} and refuses apply unless the agent echoes it. If anything changed server-side between dry-run and apply (new index opened, messages ingested), the hash mismatches and apply refuses with reason 'confirmation_mismatch'. PRE-FLIGHT REFUSALS: (a) The default index set CANNOT be deleted (Graylog refuses with BadRequestException) — surfaced with reason 'default_index_set_undeletable' BEFORE the DELETE fires, regardless of `deleteIndices` value. (b) When `deleteIndices: true`, stats-endpoint failure HARD-BLOCKS the dry-run with reason 'stats_unreachable' — the wrapper refuses to issue a confirmation token without knowing the destruction blast radius. AFTER APPLY with `deleteIndices: true`, the response is { async: true, job_id_observable_at: '/system/jobs', message: '...<indexSetId>...' } WITH NO job_id field — Graylog DELETE returns 204 with no body, so there is no server-supplied id to forward. To wait for the cleanup job to finish, call `await_system_job` with `info_substring: '<indexSetId>'` — the wrapper will GET /system/jobs, locate the IndexSetCleanupJob whose info field contains the indexSetId, then poll its id to completion.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                connectionName: { type: "string", description: "Optional per-call connection override" },
+                dryRun: { type: "boolean", description: "Default true. Set to false to apply." },
+                idempotencyKey: { type: "string", description: "Optional agent-supplied idempotency key" },
+                indexSetId: { type: "string", description: "The Graylog index-set ID to delete" },
+                deleteIndices: {
+                    type: "boolean",
+                    description: "Default FALSE (D-04 inverted from Graylog's server default of true). When false, only the index-set metadata is removed; the Elasticsearch indices stay. When true, the wrapper computes a confirmation token and refuses apply unless the agent echoes it back via `confirm`.",
+                },
+                confirm: {
+                    type: "string",
+                    description: "Required when applying with deleteIndices: true — must equal the 64-hex `confirmationToken` from a prior dry-run preview. Mismatch returns isError reason 'confirmation_mismatch' and the DELETE never fires.",
+                },
+            },
+            required: ["indexSetId"],
+        },
+    },
 ];

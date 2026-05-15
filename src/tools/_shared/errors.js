@@ -57,8 +57,20 @@ export function wrapGraylogError(err, toolName) {
             err.path ? err.path : "",
         ].filter(Boolean);
         let text = `${parts.join(" ")}: ${err.message}`;
+        // Surface a structured `reason` tag when the thrower attached one
+        // (e.g. update_index_set's `default_index_set_must_be_writable`,
+        // delete_index_set's `default_index_set_undeletable` /
+        // `stats_unreachable`). Programmatic identification surface for the
+        // agent — additive; no existing thrower depends on its absence.
+        if (typeof err.reason === "string" && err.reason.length > 0) {
+            text += ` [reason: ${err.reason}]`;
+        }
         if (bodySnippet) text += ` — ${bodySnippet}`;
-        return errorResponse(text);
+        const out = errorResponse(text);
+        if (typeof err.reason === "string" && err.reason.length > 0) {
+            out.reason = err.reason;
+        }
+        return out;
     }
     // Plain Error fallback (network failure, programmer error, etc.)
     const msg = err?.message ?? String(err);

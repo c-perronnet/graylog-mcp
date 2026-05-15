@@ -13,10 +13,12 @@ import { handleListIndexSets } from "./list-index-sets.js";
 import { handleGetIndexSet } from "./get-index-set.js";
 import { handleCreateIndexSet } from "./create-index-set.js";
 import { handleUpdateIndexSet } from "./update-index-set.js";
+import { handleDeleteIndexSet } from "./delete-index-set.js";
 import { handleAwaitSystemJob } from "../_shared/system-job.js";
 
 register("list_index_sets", handleListIndexSets);
 register("get_index_set", handleGetIndexSet);
 register("create_index_set", handleCreateIndexSet);
 register("update_index_set", handleUpdateIndexSet);
+register("delete_index_set", handleDeleteIndexSet);
 register("await_system_job", handleAwaitSystemJob);
