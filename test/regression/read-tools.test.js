@@ -1,21 +1,20 @@
 // Plan 00-05 Pitfall-1 regression net.
 //
-// Captures byte-precise snapshots of read-tool responses BEFORE the dispatch
-// Map refactor (Task 1 baseline). Task 2 flips src/index.js to use the new
-// Map dispatch and re-runs these snapshots — diff MUST be empty. Task 3
-// renames the tools and updates ONLY the embedded tool-name strings in the
-// snapshot.
+// Captures byte-precise snapshots of read-tool responses through the Map
+// dispatch (FOUND-01). Task 1 generated the baseline by calling handlers
+// directly; Task 2 routes the same fixtures through src/dispatch.js's
+// dispatch() to prove the Map produces byte-identical responses. Any
+// non-empty snapshot diff between Task 1 and Task 2 is a hard failure
+// (Pitfall 1: do NOT regenerate the snapshot).
 
 import { test, beforeEach, afterEach } from "node:test";
 import "../snapshot-config.js";
-import {
-    listConnectionsHandler,
-    useConnectionHandler,
-    listSavedSearchesHandler,
-    getSavedSearchHandler,
-    fetchGraylogMessagesHandler,
-} from "../../src/handlers.js";
-import { handleListTemplates } from "../../src/tools/template-mgmt.js";
+import { dispatch } from "../../src/dispatch.js";
+// Side-effect import: populates the dispatch registry. Tests below cannot
+// call _clearForTests() at top-level — that would unregister the production
+// handlers. dispatch.test.js uses _clearForTests() in its own beforeEach but
+// in a separate process under `node --test`, so isolation is automatic.
+import "../../src/tools/_register.js";
 import { _setConnectionsForTests, _clearConnectionsForTests, setActiveConnection } from "../../src/config.js";
 
 beforeEach(() => {
@@ -30,8 +29,8 @@ afterEach(() => {
     setActiveConnection(null);
 });
 
-test("regression: list_connections returns deterministic listing", (t) => {
-    const res = listConnectionsHandler({ params: { name: "list_connections", arguments: {} } });
+test("regression: list_connections returns deterministic listing", async (t) => {
+    const res = await dispatch({ params: { name: "list_connections", arguments: {} } });
     t.assert.snapshot({
         isError: res.isError ?? false,
         contentType: res.content[0].type,
@@ -39,8 +38,8 @@ test("regression: list_connections returns deterministic listing", (t) => {
     });
 });
 
-test("regression: use_connection switches active connection", (t) => {
-    const res = useConnectionHandler({ params: { name: "use_connection", arguments: { name: "test_a" } } });
+test("regression: use_connection switches active connection", async (t) => {
+    const res = await dispatch({ params: { name: "use_connection", arguments: { name: "test_a" } } });
     t.assert.snapshot({
         isError: res.isError ?? false,
         contentType: res.content[0].type,
@@ -48,8 +47,8 @@ test("regression: use_connection switches active connection", (t) => {
     });
 });
 
-test("regression: use_connection rejects missing name", (t) => {
-    const res = useConnectionHandler({ params: { name: "use_connection", arguments: {} } });
+test("regression: use_connection rejects missing name", async (t) => {
+    const res = await dispatch({ params: { name: "use_connection", arguments: {} } });
     t.assert.snapshot({
         isError: res.isError ?? false,
         contentType: res.content[0].type,
@@ -57,8 +56,8 @@ test("regression: use_connection rejects missing name", (t) => {
     });
 });
 
-test("regression: use_connection unknown name → not-found error response", (t) => {
-    const res = useConnectionHandler({ params: { name: "use_connection", arguments: { name: "no_such_connection_xyz" } } });
+test("regression: use_connection unknown name → not-found error response", async (t) => {
+    const res = await dispatch({ params: { name: "use_connection", arguments: { name: "no_such_connection_xyz" } } });
     t.assert.snapshot({
         isError: res.isError ?? false,
         contentType: res.content[0].type,
@@ -66,8 +65,8 @@ test("regression: use_connection unknown name → not-found error response", (t)
     });
 });
 
-test("regression: list_saved_searches returns deterministic shape", (t) => {
-    const res = listSavedSearchesHandler({ params: { name: "list_saved_searches", arguments: {} } });
+test("regression: list_saved_searches returns deterministic shape", async (t) => {
+    const res = await dispatch({ params: { name: "list_saved_searches", arguments: {} } });
     // Snapshot shape only — items depend on ~/.graylog-mcp/saved-searches.json
     t.assert.snapshot({
         isError: res.isError ?? false,
@@ -77,7 +76,7 @@ test("regression: list_saved_searches returns deterministic shape", (t) => {
 });
 
 test("regression: get_saved_search without name → error", async (t) => {
-    const res = await getSavedSearchHandler({ params: { name: "get_saved_search", arguments: {} } });
+    const res = await dispatch({ params: { name: "get_saved_search", arguments: {} } });
     t.assert.snapshot({
         isError: res.isError ?? false,
         contentType: res.content[0].type,
@@ -86,7 +85,7 @@ test("regression: get_saved_search without name → error", async (t) => {
 });
 
 test("regression: list_log_templates via _testConnection seam", async (t) => {
-    const res = await handleListTemplates({
+    const res = await dispatch({
         params: { name: "list_log_templates", arguments: { _testConnection: "_regression_fixture", limit: 50 } },
     });
     // Snapshot the response envelope shape — template-store contents on disk
@@ -106,7 +105,7 @@ test("regression: fetch_graylog_messages without active connection → error env
     // is in ~/.graylog-mcp/config.json).
     _setConnectionsForTests({});
     setActiveConnection(null);
-    const res = await fetchGraylogMessagesHandler({
+    const res = await dispatch({
         params: { name: "fetch_graylog_messages", arguments: { query: "*" } },
     });
     t.assert.snapshot({
