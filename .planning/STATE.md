@@ -2,8 +2,8 @@
 gsd_state_version: 1.0
 milestone: v2.3
 milestone_name: milestone
-status: Ready to execute
-last_updated: "2026-05-15T20:47:56.765Z"
+status: Executing Phase 04
+last_updated: "2026-05-15T20:48:10.879Z"
 progress:
   total_phases: 8
   completed_phases: 4
@@ -27,8 +27,8 @@ progress:
 
 ## Current Position
 
-Phase: 4
-Plan: Not started
+Phase: 04 (pipelines-pipeline-rules-connections) — EXECUTING
+Plan: 1 of 6
 
 - **Phase**: 3 — Streams & stream rules
 - **Plan**: 4 of 5 complete (03-04 shipped: STREAM-08/09/10/11 stream-rule CRUD + test_stream_match — all 4 remaining Phase 3 net-new tools landed, COMPLETING the Phase 3 12-tool surface. `create_stream_rule` (z.intersection of mutatingBase + StreamRuleSchema 8-variant union; D-09 parent-mutable pre-flight; Pitfall S9 numeric translation via STREAM_RULE_TYPE_TO_NUMERIC; Pitfall S10 empty-string defaults for variant-irrelevant fields; D-13 __SERVER_ASSIGNED__ sentinel; toIdBody idFields:[streamrule_id,id] per Pitfall S7) + `update_stream_rule` (STRICT_NO_ECHO partial-update per 03-U1-SMOKE.md UNREACHABLE_STRICT_NO_ECHO with the Pitfall S8 type-echo-from-current exception — CreateStreamRuleRequest.type is non-nullable Java int, ALWAYS on wire echoed from rule pre-flight GET unconditionally; D-09 parent-mutable pre-flight) + `delete_stream_rule` (LEAF DELETE per Discretion-04 — NO cascades, NO _confirmationToken, NO requireConfirm gate; D-09 parent-mutable pre-flight is the only safety gate per Pitfall S12; structural assertion at descriptor + preview-JSON layers via Tests 13+14) + `test_stream_match` (D-07 server-side wrapper; D-08 streamId required at schema layer; literal-outer-key `{ message: <field-map> }` wire body per StreamResource.java:561-564; response forwarded verbatim under result.body). All 4 ROADMAP SCs for Phase 3 now provably met: SC1 (Plan 03 delete_stream cascade preview + drift refusal), SC2 (Plan 01 list_streams mutable projection), SC3 (Plan 04 test_stream_match server-side per-rule outcomes), SC4 (Plan 02 create_stream 3-bucket existingMatches).)
