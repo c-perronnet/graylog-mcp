@@ -41,7 +41,7 @@ Out of scope: streams, pipelines, index sets, dashboards, event definitions/noti
 
 ### Extractor schemas (INPUT-09)
 
-- **D-07:** Hand-write strict zod schemas for **all 6 named extractor types** — grok, regex, JSON, key-value, split-and-index, lookup-table. The requirement enumerates a closed, stable set, so full typing is achievable with no generic escape hatch (unlike inputs).
+- **D-07:** Hand-write strict zod schemas for **all 8 actual Graylog 7.0.6 extractor types** — grok, regex, regex_replace, json, split_and_index, substring, copy_input, lookup_table. (Originally drafted as "6 types" naming `grok / regex / JSON / key-value / split-and-index / lookup-table`; reconfirmed during plan-phase 1 after RESEARCH.md surfaced A1: Graylog's actual primitive set is 8, and "key-value" is not a real Graylog type — agents wanting key-value flattening use the `json` extractor's existing config. Graylog's extractor enum IS the closed set, so full strict typing covers it without a generic escape hatch.)
 
 ### Input lifecycle (INPUT-07)
 
