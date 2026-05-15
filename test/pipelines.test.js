@@ -874,3 +874,372 @@ test("update_pipeline has NO is_editable / mutable check (D-15 — pipelines hav
     assert.equal(res.isError, undefined);
     assert.equal(putFired, true, "PUT must fire — pipelines have no mutable check (D-15)");
 });
+
+// =====================================================================
+// Plan 04-03 — pipeline-rule CRUD (PIPE-06..PIPE-09).
+//
+// Critical structural invariants under test (mirrors Plan 04-02 contract,
+// adapted for the rule surface):
+//   - Pitfall 3 (rule variant): every rule URL uses the literal
+//     `/api/system/pipelines/rule/{id}` segment.
+//   - D-05 server-authoritative rule-parse pre-flight: POST
+//     /api/system/pipelines/rule/parse fires BEFORE create/update. On
+//     400 + Set<ParseError>, wrapper throws GraylogValidationError with
+//     reason:"rule_parse_failed"; apply NEVER fires (C4 acceptance gate).
+//   - D-10 mutual exclusion: CreatePipelineRuleSchema.refine refuses
+//     when BOTH structured AND ruleSource are set, OR when neither is.
+//   - D-04 client-side lint via validateRuleSource(source, mergedCatalogue):
+//     catches obvious typos (toUpperCase) BEFORE network round-trip.
+//   - Pitfall 5: validate consumes the MERGED catalogue so live-only
+//     function names are accepted.
+//   - Pitfall 6: ParseError.positionInLine (camelCase) on wire →
+//     position_in_line (snake_case) in emitted envelope.
+//   - D-11 full DSL coverage via recursive ConditionSchema / ActionSchema
+//     (z.lazy for recursion).
+//   - D-16 STRICT_NO_ECHO partial-update for update_pipeline_rule (per
+//     04-U1-SMOKE.md UNREACHABLE_STRICT_NO_ECHO). Parse pre-flight fires
+//     ONLY when changes.structured OR changes.ruleSource is touched.
+//   - simulator_message Nullable String: agent can pass null to clear;
+//     undefined → omit; string → set. STRICT_NO_ECHO preserves.
+//   - D-17 __SERVER_ASSIGNED__ sentinel on create.
+//   - D-15 no mutable check (rules have no is_editable).
+// =====================================================================
+
+import { handleListPipelineRules } from "../src/tools/pipelines/list-pipeline-rules.js";
+import { handleGetPipelineRule } from "../src/tools/pipelines/get-pipeline-rule.js";
+import { handleCreatePipelineRule } from "../src/tools/pipelines/create-pipeline-rule.js";
+import { handleUpdatePipelineRule } from "../src/tools/pipelines/update-pipeline-rule.js";
+import {
+    ListPipelineRulesSchema,
+    GetPipelineRuleSchema,
+    CreatePipelineRuleSchema,
+    UpdatePipelineRuleSchema,
+    RuleSpecSchema,
+    ConditionSchema,
+    ActionSchema,
+} from "../src/tools/pipelines/schemas.js";
+import { _clearFunctionCatalogueForTests } from "../src/pipeline-dsl/function-catalogue.js";
+
+// =====================================================================
+// Fixtures — RuleSource DTO and structured-intent helpers
+// =====================================================================
+
+const FULL_RULE_A = {
+    id: "r1",
+    title: "uppercase-source",
+    description: "Uppercases the source field",
+    source: 'rule "uppercase-source"\nwhen has_field("source")\nthen\n    set_field("source", uppercase(to_string($message.source)));\nend',
+    created_at: "2026-01-01T00:00:00.000Z",
+    modified_at: "2026-01-15T00:00:00.000Z",
+    rule_builder: null,
+    simulator_message: null,
+};
+
+const FULL_RULE_B = {
+    id: "r2",
+    title: "tag-error",
+    description: "",
+    source: 'rule "tag-error"\nwhen has_field("level")\nthen\n    set_field("severity", "error");\nend',
+    created_at: "2026-01-01T00:00:00.000Z",
+    modified_at: "2026-01-01T00:00:00.000Z",
+    rule_builder: null,
+    simulator_message: "level=ERROR",
+};
+
+// Minimal valid structured intent — has_field check + uppercase action.
+// All function names (has_field, uppercase, to_string) are static-baseline
+// entries verified to be in builtins.js.
+const VALID_STRUCTURED = {
+    name: "uppercase-source",
+    when: { type: "has_field", field: "source" },
+    then: [
+        {
+            type: "function_call_statement",
+            name: "uppercase",
+            args: {
+                positional: [
+                    { type: "field_ref", field: "source", source: "message" },
+                ],
+            },
+        },
+    ],
+};
+
+// Same shape but uses a camelCase function name (toUpperCase) that should
+// fail the client-side lint BEFORE the server parse pre-flight ever fires
+// (C4 acceptance gate — client lint path).
+const INVALID_STRUCTURED_TOUPPERCASE = {
+    name: "broken-rule",
+    when: { type: "has_field", field: "source" },
+    then: [
+        {
+            type: "function_call_statement",
+            name: "toUpperCase",   // CamelCase typo — not in catalogue
+            args: {
+                positional: [
+                    { type: "field_ref", field: "source", source: "message" },
+                ],
+            },
+        },
+    ],
+};
+
+// Minimal LIVE function-catalogue response. The static baseline contains
+// has_field, uppercase, to_string, etc. — this live payload is empty so
+// the merged map equals staticBuiltins. Used as the default route for
+// GET /api/system/pipelines/rule/functions.
+const EMPTY_LIVE_FUNCTIONS = [];
+
+// =====================================================================
+// Schema-layer tests — D-10 mutual exclusion + D-11 recursion
+// =====================================================================
+
+test("ListPipelineRulesSchema extends listBase: accepts connectionName/fields/limit", () => {
+    const parsed = ListPipelineRulesSchema.parse({
+        connectionName: "fake",
+        fields: ["id", "title"],
+        limit: 10,
+    });
+    assert.equal(parsed.connectionName, "fake");
+    assert.deepEqual(parsed.fields, ["id", "title"]);
+    assert.equal(parsed.limit, 10);
+});
+
+test("GetPipelineRuleSchema requires ruleId; empty string rejected", () => {
+    assert.throws(() => GetPipelineRuleSchema.parse({ ruleId: "" }), /ruleId/);
+    assert.throws(() => GetPipelineRuleSchema.parse({}), /ruleId|required/i);
+    const parsed = GetPipelineRuleSchema.parse({ ruleId: "r1" });
+    assert.equal(parsed.ruleId, "r1");
+});
+
+test("RuleSpecSchema requires name + when + then[]; rejects empty `then` array", () => {
+    assert.throws(
+        () => RuleSpecSchema.parse({ name: "x", when: { type: "has_field", field: "f" }, then: [] }),
+        /then/,
+    );
+    assert.throws(
+        () => RuleSpecSchema.parse({ when: { type: "has_field", field: "f" }, then: [{ type: "function_call_statement", name: "uppercase", args: {} }] }),
+        /name|required/i,
+    );
+    const parsed = RuleSpecSchema.parse(VALID_STRUCTURED);
+    assert.equal(parsed.name, "uppercase-source");
+});
+
+test("ConditionSchema accepts deeply nested AND/OR/NOT tree (D-11 recursion via z.lazy, 4 levels)", () => {
+    // Build a 4-level deep tree:
+    //   AND(OR(NOT(comparison), has_field), AND(field_ref, function_call))
+    const fourLevels = {
+        type: "and",
+        left: {
+            type: "or",
+            left: {
+                type: "not",
+                expr: {
+                    type: "comparison",
+                    op: "==",
+                    left: { type: "field_ref", field: "level", source: "message" },
+                    right: { type: "literal", value: 6 },
+                },
+            },
+            right: { type: "has_field", field: "source" },
+        },
+        right: {
+            type: "and",
+            left: { type: "field_ref", field: "x" },
+            right: {
+                type: "function_call",
+                name: "has_field",
+                args: { positional: [{ type: "literal", value: "x" }] },
+            },
+        },
+    };
+    const parsed = ConditionSchema.parse(fourLevels);
+    assert.equal(parsed.type, "and");
+    assert.equal(parsed.left.left.type, "not");
+    assert.equal(parsed.left.left.expr.type, "comparison");
+});
+
+test("ActionSchema accepts ALL 6 action variant types (D-11 coverage)", () => {
+    const examples = [
+        { type: "set_field", field: "x", value: { type: "literal", value: 1 } },
+        { type: "remove_field", field: "x" },
+        { type: "rename_field", old_field: "old", new_field: "new" },
+        { type: "lookup_value", target_field: "out", lookup_table: "tab", key: { type: "literal", value: "k" } },
+        { type: "function_call_statement", name: "uppercase", args: { positional: [{ type: "field_ref", field: "x" }] } },
+        { type: "let_assignment", var_name: "tmp", value: { type: "literal", value: 1 } },
+    ];
+    for (const ex of examples) {
+        const parsed = ActionSchema.parse(ex);
+        assert.equal(parsed.type, ex.type);
+    }
+});
+
+test("CreatePipelineRuleSchema D-10 mutual exclusion: REJECTS when BOTH structured AND ruleSource set", () => {
+    assert.throws(
+        () => CreatePipelineRuleSchema.parse({
+            structured: VALID_STRUCTURED,
+            ruleSource: 'rule "x" when has_field("y") then end',
+        }),
+        /EXACTLY ONE|mutual|structured|ruleSource/i,
+    );
+});
+
+test("CreatePipelineRuleSchema D-10 mutual exclusion: REJECTS when NEITHER structured NOR ruleSource set", () => {
+    assert.throws(
+        () => CreatePipelineRuleSchema.parse({
+            description: "no source given",
+        }),
+        /EXACTLY ONE|mutual|structured|ruleSource/i,
+    );
+});
+
+test("CreatePipelineRuleSchema accepts structured-only", () => {
+    const parsed = CreatePipelineRuleSchema.parse({ structured: VALID_STRUCTURED });
+    assert.equal(parsed.structured.name, "uppercase-source");
+    assert.equal(parsed.ruleSource, undefined);
+});
+
+test("CreatePipelineRuleSchema accepts ruleSource-only", () => {
+    const parsed = CreatePipelineRuleSchema.parse({
+        ruleSource: 'rule "raw" when has_field("x") then end',
+    });
+    assert.equal(parsed.ruleSource.startsWith("rule"), true);
+    assert.equal(parsed.structured, undefined);
+});
+
+test("UpdatePipelineRuleSchema changes envelope: REJECTS when both changes.structured AND changes.ruleSource set", () => {
+    assert.throws(
+        () => UpdatePipelineRuleSchema.parse({
+            ruleId: "r1",
+            changes: {
+                structured: VALID_STRUCTURED,
+                ruleSource: 'rule "x" when has_field("y") then end',
+            },
+        }),
+        /ruleSource|structured|both/i,
+    );
+});
+
+test("UpdatePipelineRuleSchema changes envelope: accepts empty changes (STRICT_NO_ECHO minimal body)", () => {
+    const parsed = UpdatePipelineRuleSchema.parse({ ruleId: "r1", changes: {} });
+    assert.deepEqual(parsed.changes, {});
+});
+
+test("UpdatePipelineRuleSchema preserves simulator_message:null for explicit clear-intent", () => {
+    const parsed = UpdatePipelineRuleSchema.parse({
+        ruleId: "r1",
+        changes: { simulator_message: null },
+    });
+    assert.equal(parsed.changes.simulator_message, null);
+    assert.equal("simulator_message" in parsed.changes, true);
+});
+
+// =====================================================================
+// list_pipeline_rules (PIPE-06) tests
+// =====================================================================
+
+test("list_pipeline_rules GET URL is exactly /api/system/pipelines/rule (Pitfall 3 rule variant)", async () => {
+    let captured = null;
+    _setCaptureRequest((req) => {
+        captured = req;
+        return [FULL_RULE_A, FULL_RULE_B];
+    });
+    await handleListPipelineRules({
+        params: { arguments: { _testConnection: "fake" } },
+    });
+    assert.equal(captured.method, "GET");
+    assert.equal(captured.path, "/api/system/pipelines/rule");
+});
+
+test("list_pipeline_rules narrow projection: [id, title, description, created_at, modified_at]", async () => {
+    _setCaptureRequest(() => [FULL_RULE_A, FULL_RULE_B]);
+    const res = await handleListPipelineRules({
+        params: { arguments: { _testConnection: "fake" } },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.tool, "list_pipeline_rules");
+    assert.equal(payload.count, 2);
+    assert.deepEqual(payload.fields, ["id", "title", "description", "created_at", "modified_at"]);
+    // Source text should NOT appear in the narrow projection.
+    assert.equal(payload.items[0].source, undefined);
+});
+
+test("list_pipeline_rules fields:'all' returns full DTO including source text", async () => {
+    _setCaptureRequest(() => [FULL_RULE_A]);
+    const res = await handleListPipelineRules({
+        params: { arguments: { _testConnection: "fake", fields: "all" } },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.count, 1);
+    assert.equal(payload.items[0].source.length > 0, true);
+    assert.equal(payload.items[0].id, "r1");
+});
+
+// =====================================================================
+// get_pipeline_rule (PIPE-07) tests
+// =====================================================================
+
+test("get_pipeline_rule GET URL is /api/system/pipelines/rule/{ruleId} (Pitfall 3 rule variant)", async () => {
+    let captured = null;
+    _setCaptureRequest((req) => {
+        captured = req;
+        return FULL_RULE_A;
+    });
+    await handleGetPipelineRule({
+        params: { arguments: { _testConnection: "fake", ruleId: "r1" } },
+    });
+    assert.equal(captured.method, "GET");
+    assert.equal(captured.path, "/api/system/pipelines/rule/r1");
+});
+
+test("get_pipeline_rule returns the full RuleSource DTO (no projection)", async () => {
+    _setCaptureRequest(() => FULL_RULE_A);
+    const res = await handleGetPipelineRule({
+        params: { arguments: { _testConnection: "fake", ruleId: "r1" } },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.tool, "get_pipeline_rule");
+    assert.equal(payload.rule.id, "r1");
+    assert.equal(payload.rule.title, "uppercase-source");
+    assert.equal(payload.rule.source.length > 0, true);
+    assert.equal(payload.rule.created_at, "2026-01-01T00:00:00.000Z");
+    assert.equal("rule_builder" in payload.rule, true);
+    assert.equal("simulator_message" in payload.rule, true);
+});
+
+test("get_pipeline_rule propagates 404 via wrapGraylogError", async () => {
+    _setCaptureRequest(() => {
+        throw new GraylogNotFoundError("not found", {
+            status: 404,
+            method: "GET",
+            path: "/api/system/pipelines/rule/missing",
+            body: null,
+        });
+    });
+    const res = await handleGetPipelineRule({
+        params: { arguments: { _testConnection: "fake", ruleId: "missing" } },
+    });
+    assert.equal(res.isError, true);
+    assert.match(res.content[0].text, /404/);
+    assert.match(res.content[0].text, /get_pipeline_rule/);
+});
+
+// =====================================================================
+// Task 1 — Barrel + tool registration after PIPE-06..PIPE-07 land
+// =====================================================================
+
+test("dispatch resolves list_pipeline_rules/get_pipeline_rule via the pipelines barrel", async () => {
+    const { dispatch } = await import("../src/dispatch.js");
+    await import("../src/tools/_register.js");
+
+    _setConnectionsForTests({
+        fake: { baseUrl: "http://fake.example", apiToken: "tok" },
+    });
+    setActiveConnection("fake");
+    _setCaptureRequest(() => []);
+
+    const res = await dispatch({ params: { name: "list_pipeline_rules", arguments: {} } });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.tool, "list_pipeline_rules");
+    assert.ok(Array.isArray(payload.items));
+});

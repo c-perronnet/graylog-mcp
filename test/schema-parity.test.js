@@ -332,3 +332,31 @@ test("schema-parity: delete_pipeline", async () => {
     const { DeletePipelineSchema } = await import("../src/tools/pipelines/schemas.js");
     await assertSchemaParityForTool("delete_pipeline", DeletePipelineSchema);
 });
+
+// ---------------------------------------------------------------------------
+// Plan 04-03 enrichment — 4 new pipeline-rule CRUD tools (PIPE-06..PIPE-09).
+//
+// CreatePipelineRuleSchema + UpdatePipelineRuleSchema use .refine() (D-10
+// mutual exclusion); zod wraps them in ZodEffects. getShape() handles that
+// via the `_def?.schema?.shape` branch.
+// ---------------------------------------------------------------------------
+
+test("schema-parity: list_pipeline_rules", async () => {
+    const { ListPipelineRulesSchema } = await import("../src/tools/pipelines/schemas.js");
+    await assertSchemaParityForTool("list_pipeline_rules", ListPipelineRulesSchema);
+});
+
+test("schema-parity: get_pipeline_rule", async () => {
+    const { GetPipelineRuleSchema } = await import("../src/tools/pipelines/schemas.js");
+    await assertSchemaParityForTool("get_pipeline_rule", GetPipelineRuleSchema);
+});
+
+test("schema-parity: create_pipeline_rule", async () => {
+    const { CreatePipelineRuleSchema } = await import("../src/tools/pipelines/schemas.js");
+    await assertSchemaParityForTool("create_pipeline_rule", CreatePipelineRuleSchema);
+});
+
+test("schema-parity: update_pipeline_rule", async () => {
+    const { UpdatePipelineRuleSchema } = await import("../src/tools/pipelines/schemas.js");
+    await assertSchemaParityForTool("update_pipeline_rule", UpdatePipelineRuleSchema);
+});
