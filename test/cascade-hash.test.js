@@ -106,8 +106,7 @@ test("computeCascadeHash returns the pinned hash for the populated frozen fixtur
     });
     assert.equal(
         hash,
-        "be72c1c8efb02ad5f10c2f3b25a48b1751dc3aa3a36b6c3a39fafde47b9f8d7a8".slice(0, 0) ||
-            hash, // placeholder — actual literal pinned in GREEN phase below
+        "888cfe478f5ef2d421d1cd4e9a00b7e439e07d5d0b03094891542bea8cbaf991",
     );
     // Regex sanity: 64-hex.
     assert.match(hash, /^[0-9a-f]{64}$/);
@@ -119,14 +118,20 @@ test("computeCascadeHash returns the pinned hash for the populated frozen fixtur
 
 test("computeCascadeHash returns the pinned hash for the empty cascade frozen fixture", () => {
     // Empty-cascade case is distinct from the populated case (Test 3) because
-    // the canonical JSON includes empty arrays (NOT omitted keys). Pin the
-    // literal after implementation.
+    // the canonical JSON includes empty arrays (NOT omitted keys). The pinned
+    // literal is the sha-256 of the canonical JSON with all three buckets as
+    // [] — drift here = drift in canonical-form generation for the "no
+    // dependents" path (the most common shape on a fresh stream).
     const hash = computeCascadeHash({
         streamId: "5f9d3b1c7e8a4d2b1c3e5f9d",
         ruleIds: [],
         pipelineConnIds: [],
         eventDefIds: [],
     });
+    assert.equal(
+        hash,
+        "541be7deb65006714cbde5270556b20d80e32e64197c4f5bd9493139f2cacbf6",
+    );
     assert.match(hash, /^[0-9a-f]{64}$/);
 
     // Empty vs populated must differ.
