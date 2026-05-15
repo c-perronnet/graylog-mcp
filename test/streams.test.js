@@ -23,6 +23,8 @@ import { handleCreateStream } from "../src/tools/streams/create-stream.js";
 import { handleUpdateStream } from "../src/tools/streams/update-stream.js";
 import { handleStartStream } from "../src/tools/streams/start-stream.js";
 import { handlePauseStream } from "../src/tools/streams/pause-stream.js";
+import { handleDeleteStream } from "../src/tools/streams/delete-stream.js";
+import { computeCascadeHash } from "../src/tools/_shared/cascade-hash.js";
 import {
     ListStreamsSchema,
     GetStreamSchema,
@@ -35,6 +37,8 @@ import {
     UpdateStreamSchema,
     StartStreamSchema,
     PauseStreamSchema,
+    // Plan 03-03 addition.
+    DeleteStreamSchema,
 } from "../src/tools/streams/schemas.js";
 import {
     _setCaptureRequest,
@@ -1032,4 +1036,651 @@ test("pause_stream apply path POSTs /api/streams/{id}/pause with empty body", as
     assert.equal(captured[0].body, undefined);
     const payload = JSON.parse(res.content[0].text);
     assert.equal(payload.applied, true);
+});
+
+// =====================================================================
+// Plan 03-03 — delete_stream tests (Tests 1-15) — THE C2 mitigation centerpiece
+// =====================================================================
+//
+// Coverage matrix:
+//   Tests 1-2:  DeleteStreamSchema parse acceptance/rejection.
+//   Test 3:     D-09 stream_immutable refusal BEFORE any cascade GET fires.
+//   Test 4:     D-01 happy path — 3-endpoint cascade pre-flight + keyed-buckets hash.
+//   Test 5:     D-01 empty cascade — confirmationToken is still emitted.
+//   Tests 6-8:  D-04 cascade_preflight_failed (one per endpoint).
+//   Test 9:     S6 paginated multi-page event-def fetch + per-page client-side filter.
+//   Test 10:    confirmation_mismatch on apply (wrong args.confirm).
+//   Test 11:    D-03 cascade_changed_since_preview drift refusal on apply.
+//   Test 12:    D-03 happy apply — DELETE fires; sync envelope.
+//   Test 13:    S11 sync envelope shape — no async:true / job_id keys.
+//   Test 14:    writable:false short-circuits BEFORE any GET fires.
+//   Test 15:    schema-parity (in test/schema-parity.test.js — counted here).
+
+// ---------- Test 1 — DeleteStreamSchema accepts streamId; rejects empty/missing ----------
+
+test("DeleteStreamSchema accepts streamId; rejects empty/missing streamId", () => {
+    const parsed = DeleteStreamSchema.parse({ streamId: "s1" });
+    assert.equal(parsed.streamId, "s1");
+    assert.throws(() => DeleteStreamSchema.parse({ streamId: "" }), /streamId/);
+    assert.throws(() => DeleteStreamSchema.parse({}), /streamId|required/i);
+});
+
+// ---------- Test 2 — DeleteStreamSchema accepts optional confirm ----------
+
+test("DeleteStreamSchema accepts optional confirm (zod string)", () => {
+    const parsed = DeleteStreamSchema.parse({ streamId: "s1", confirm: "abc123" });
+    assert.equal(parsed.streamId, "s1");
+    assert.equal(parsed.confirm, "abc123");
+    // confirm is optional — omitting it parses fine.
+    const parsedNoConfirm = DeleteStreamSchema.parse({ streamId: "s1" });
+    assert.equal(parsedNoConfirm.confirm, undefined);
+});
+
+// ---------- Test 3 — D-09 stream_immutable refusal; 0 cascade GETs fire ----------
+
+test("delete_stream D-09 mutable pre-flight refuses with stream_immutable; NO cascade GETs fire", async () => {
+    const captured = [];
+    _setCaptureRequest(streamsMultiCapture([
+        {
+            method: "GET",
+            pathPattern: "/api/streams/s1",
+            response: (req) => {
+                captured.push(req);
+                return { id: "s1", title: "All messages", is_editable: false };
+            },
+        },
+        {
+            method: "GET",
+            pathPattern: "/api/streams/s1/rules",
+            response: () => {
+                throw new Error("cascade GET /rules MUST NOT fire when D-09 refuses");
+            },
+        },
+        {
+            method: "GET",
+            pathPattern: "/api/streams/s1/pipelines",
+            response: () => {
+                throw new Error("cascade GET /pipelines MUST NOT fire when D-09 refuses");
+            },
+        },
+        {
+            method: "GET",
+            pathPattern: /\/api\/events\/definitions\/paginated/,
+            response: () => {
+                throw new Error("cascade GET /events/definitions MUST NOT fire when D-09 refuses");
+            },
+        },
+    ]));
+    const res = await handleDeleteStream({
+        params: { arguments: { _testConnection: "fake", streamId: "s1" } },
+    });
+    assert.equal(res.isError, true);
+    assert.match(res.content[0].text, /stream_immutable|non-editable/i);
+    // Exactly ONE GET fired — the D-09 pre-flight. Cascade GETs are skipped.
+    assert.equal(captured.length, 1, "exactly one GET (mutable pre-flight) should fire");
+    assert.equal(captured[0].method, "GET");
+    assert.equal(captured[0].path, "/api/streams/s1");
+});
+
+// ---------- Test 4 — D-01 happy path: 3-endpoint cascade + keyed-buckets hash ----------
+
+test("delete_stream dry-run happy path: cascades populated + confirmationToken via keyed-buckets hash", async () => {
+    _setCaptureRequest(streamsMultiCapture([
+        {
+            method: "GET",
+            pathPattern: "/api/streams/s1",
+            response: () => ({ id: "s1", title: "App", is_editable: true }),
+        },
+        {
+            method: "GET",
+            pathPattern: "/api/streams/s1/rules",
+            response: () => ({
+                total: 2,
+                stream_rules: [
+                    { id: "r1", type: 1, field: "msg", value: "hi" },
+                    { id: "r2", type: 6, field: "src", value: "foo" },
+                ],
+            }),
+        },
+        {
+            method: "GET",
+            pathPattern: "/api/streams/s1/pipelines",
+            // Pitfall A3 — BARE ARRAY, no envelope.
+            response: () => [{ id: "p1", title: "pipeline-1" }],
+        },
+        {
+            method: "GET",
+            pathPattern: /\/api\/events\/definitions\/paginated/,
+            response: () => ({
+                elements: [
+                    { id: "e1", title: "alert-1", config: { streams: ["s1"] } },
+                    // e2 should be FILTERED OUT client-side (S6) — doesn't reference s1.
+                    { id: "e2", title: "alert-2", config: { streams: ["s99"] } },
+                ],
+                pagination: { page: 1, per_page: 50, count: 2 },
+                total: 2,
+            }),
+        },
+    ]));
+    const res = await handleDeleteStream({
+        params: { arguments: { _testConnection: "fake", streamId: "s1" } },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.dryRun, true);
+    assert.equal(payload.tool, "delete_stream");
+    assert.equal(payload.preview.method, "DELETE");
+    assert.equal(payload.preview.path, "/api/streams/s1");
+    // cascades — the three buckets, with the e2 entry filtered out per S6.
+    assert.equal(payload.cascades.stream_rules.length, 2);
+    assert.deepEqual(payload.cascades.stream_rules.map((r) => r.id).sort(), ["r1", "r2"]);
+    assert.equal(payload.cascades.pipeline_connections.length, 1);
+    assert.equal(payload.cascades.pipeline_connections[0].id, "p1");
+    assert.equal(payload.cascades.pipeline_connections[0].title, "pipeline-1");
+    assert.equal(payload.cascades.event_definitions.length, 1);
+    assert.equal(payload.cascades.event_definitions[0].id, "e1");
+    // confirmationToken must equal computeCascadeHash for the exact bucket set.
+    const expectedToken = computeCascadeHash({
+        streamId: "s1",
+        ruleIds: ["r1", "r2"],
+        pipelineConnIds: ["p1"],
+        eventDefIds: ["e1"],
+    });
+    assert.equal(payload.confirmationToken, expectedToken);
+    // 64-hex sanity check.
+    assert.match(payload.confirmationToken, /^[0-9a-f]{64}$/);
+});
+
+// ---------- Test 5 — D-01 empty cascades still emits a token ----------
+
+test("delete_stream dry-run with empty cascades emits confirmationToken (empty-buckets hash)", async () => {
+    _setCaptureRequest(streamsMultiCapture([
+        {
+            method: "GET",
+            pathPattern: "/api/streams/s1",
+            response: () => ({ id: "s1", title: "Empty", is_editable: true }),
+        },
+        {
+            method: "GET",
+            pathPattern: "/api/streams/s1/rules",
+            response: () => ({ total: 0, stream_rules: [] }),
+        },
+        {
+            method: "GET",
+            pathPattern: "/api/streams/s1/pipelines",
+            response: () => [],
+        },
+        {
+            method: "GET",
+            pathPattern: /\/api\/events\/definitions\/paginated/,
+            response: () => ({ elements: [], pagination: { page: 1, per_page: 50, count: 0 }, total: 0 }),
+        },
+    ]));
+    const res = await handleDeleteStream({
+        params: { arguments: { _testConnection: "fake", streamId: "s1" } },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.deepEqual(payload.cascades.stream_rules, []);
+    assert.deepEqual(payload.cascades.pipeline_connections, []);
+    assert.deepEqual(payload.cascades.event_definitions, []);
+    const expectedToken = computeCascadeHash({
+        streamId: "s1",
+        ruleIds: [],
+        pipelineConnIds: [],
+        eventDefIds: [],
+    });
+    assert.equal(payload.confirmationToken, expectedToken);
+    // The empty-cascade hash is structurally different from the populated case.
+    const populatedToken = computeCascadeHash({
+        streamId: "s1",
+        ruleIds: ["r1"],
+        pipelineConnIds: [],
+        eventDefIds: [],
+    });
+    assert.notEqual(payload.confirmationToken, populatedToken);
+});
+
+// ---------- Test 6 — D-04 cascade_preflight_failed (rules endpoint) ----------
+
+test("delete_stream cascade_preflight_failed when /rules throws; no token issued", async () => {
+    const captured = [];
+    _setCaptureRequest(streamsMultiCapture([
+        {
+            method: "GET",
+            pathPattern: "/api/streams/s1",
+            response: () => ({ id: "s1", title: "App", is_editable: true }),
+        },
+        {
+            method: "GET",
+            pathPattern: "/api/streams/s1/rules",
+            response: (req) => {
+                captured.push(req);
+                throw new Error("upstream 503");
+            },
+        },
+        {
+            method: "GET",
+            pathPattern: "/api/streams/s1/pipelines",
+            response: () => {
+                throw new Error("pipelines MUST NOT be consulted after rules fail");
+            },
+        },
+        {
+            method: "GET",
+            pathPattern: /\/api\/events\/definitions\/paginated/,
+            response: () => {
+                throw new Error("event-defs MUST NOT be consulted after rules fail");
+            },
+        },
+    ]));
+    const res = await handleDeleteStream({
+        params: { arguments: { _testConnection: "fake", streamId: "s1" } },
+    });
+    assert.equal(res.isError, true);
+    assert.equal(res.reason, "cascade_preflight_failed");
+    assert.match(res.content[0].text, /\/api\/streams\/s1\/rules/);
+    // No confirmationToken should be in the response text.
+    assert.doesNotMatch(res.content[0].text, /confirmationToken/);
+    assert.equal(captured.length, 1, "rules endpoint consulted exactly once");
+});
+
+// ---------- Test 7 — D-04 cascade_preflight_failed (pipelines endpoint) ----------
+
+test("delete_stream cascade_preflight_failed when /pipelines throws", async () => {
+    _setCaptureRequest(streamsMultiCapture([
+        {
+            method: "GET",
+            pathPattern: "/api/streams/s1",
+            response: () => ({ id: "s1", title: "App", is_editable: true }),
+        },
+        {
+            method: "GET",
+            pathPattern: "/api/streams/s1/rules",
+            response: () => ({ total: 0, stream_rules: [] }),
+        },
+        {
+            method: "GET",
+            pathPattern: "/api/streams/s1/pipelines",
+            response: () => {
+                throw new Error("upstream 503");
+            },
+        },
+        {
+            method: "GET",
+            pathPattern: /\/api\/events\/definitions\/paginated/,
+            response: () => {
+                throw new Error("event-defs MUST NOT be consulted after pipelines fail");
+            },
+        },
+    ]));
+    const res = await handleDeleteStream({
+        params: { arguments: { _testConnection: "fake", streamId: "s1" } },
+    });
+    assert.equal(res.isError, true);
+    assert.equal(res.reason, "cascade_preflight_failed");
+    assert.match(res.content[0].text, /\/api\/streams\/s1\/pipelines/);
+});
+
+// ---------- Test 8 — D-04 cascade_preflight_failed (event-defs endpoint) ----------
+
+test("delete_stream cascade_preflight_failed when /events/definitions/paginated throws", async () => {
+    _setCaptureRequest(streamsMultiCapture([
+        {
+            method: "GET",
+            pathPattern: "/api/streams/s1",
+            response: () => ({ id: "s1", title: "App", is_editable: true }),
+        },
+        {
+            method: "GET",
+            pathPattern: "/api/streams/s1/rules",
+            response: () => ({ total: 0, stream_rules: [] }),
+        },
+        {
+            method: "GET",
+            pathPattern: "/api/streams/s1/pipelines",
+            response: () => [],
+        },
+        {
+            method: "GET",
+            pathPattern: /\/api\/events\/definitions\/paginated/,
+            response: () => {
+                throw new Error("upstream 503");
+            },
+        },
+    ]));
+    const res = await handleDeleteStream({
+        params: { arguments: { _testConnection: "fake", streamId: "s1" } },
+    });
+    assert.equal(res.isError, true);
+    assert.equal(res.reason, "cascade_preflight_failed");
+    assert.match(res.content[0].text, /\/api\/events\/definitions\/paginated/);
+});
+
+// ---------- Test 9 — S6 paginated multi-page event-def fetch ----------
+
+test("delete_stream event-def pagination: full page → next page; partial page → stop", async () => {
+    const pageCalls = [];
+    // Build 50 entries for page 1 (full page, all filtered out) + 5 entries for
+    // page 2 (partial page, one matches s1).
+    const page1Entries = Array.from({ length: 50 }, (_, i) => ({
+        id: `e_p1_${i}`, title: `def-p1-${i}`, config: { streams: ["s99"] },
+    }));
+    const page2Entries = [
+        { id: "e_p2_0", title: "def-p2-0", config: { streams: ["s1"] } },
+        { id: "e_p2_1", title: "def-p2-1", config: { streams: ["s99"] } },
+        { id: "e_p2_2", title: "def-p2-2", config: { streams: ["s1", "s99"] } },
+        { id: "e_p2_3", title: "def-p2-3", config: { streams: [] } },
+        { id: "e_p2_4", title: "def-p2-4", config: { streams: ["s99"] } },
+    ];
+    _setCaptureRequest(streamsMultiCapture([
+        {
+            method: "GET",
+            pathPattern: "/api/streams/s1",
+            response: () => ({ id: "s1", title: "App", is_editable: true }),
+        },
+        {
+            method: "GET",
+            pathPattern: "/api/streams/s1/rules",
+            response: () => ({ total: 0, stream_rules: [] }),
+        },
+        {
+            method: "GET",
+            pathPattern: "/api/streams/s1/pipelines",
+            response: () => [],
+        },
+        {
+            method: "GET",
+            pathPattern: /\/api\/events\/definitions\/paginated/,
+            response: (req) => {
+                pageCalls.push(req.path);
+                if (req.path.includes("page=1")) {
+                    return { elements: page1Entries, pagination: {}, total: 55 };
+                }
+                if (req.path.includes("page=2")) {
+                    return { elements: page2Entries, pagination: {}, total: 55 };
+                }
+                throw new Error(`No more pages should be requested; got ${req.path}`);
+            },
+        },
+    ]));
+    const res = await handleDeleteStream({
+        params: { arguments: { _testConnection: "fake", streamId: "s1" } },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    // Page 1 (full, 50 entries) + page 2 (partial, 5 entries — early exit). NO page 3.
+    assert.equal(pageCalls.length, 2);
+    assert.match(pageCalls[0], /page=1/);
+    assert.match(pageCalls[1], /page=2/);
+    // Filtered match: only page-2 entries 0 and 2 list s1 in config.streams.
+    const filteredIds = payload.cascades.event_definitions.map((d) => d.id).sort();
+    assert.deepEqual(filteredIds, ["e_p2_0", "e_p2_2"]);
+});
+
+// ---------- Test 10 — confirmation_mismatch on apply with wrong confirm ----------
+
+test("delete_stream apply with WRONG confirm hits confirmation_mismatch; DELETE never sent", async () => {
+    _setCaptureRequest(streamsMultiCapture([
+        {
+            method: "GET",
+            pathPattern: "/api/streams/s1",
+            response: () => ({ id: "s1", title: "App", is_editable: true }),
+        },
+        {
+            method: "GET",
+            pathPattern: "/api/streams/s1/rules",
+            response: () => ({ total: 1, stream_rules: [{ id: "r1", type: 1, field: "m", value: "v" }] }),
+        },
+        {
+            method: "GET",
+            pathPattern: "/api/streams/s1/pipelines",
+            response: () => [],
+        },
+        {
+            method: "GET",
+            pathPattern: /\/api\/events\/definitions\/paginated/,
+            response: () => ({ elements: [], pagination: {}, total: 0 }),
+        },
+        {
+            method: "DELETE",
+            pathPattern: "/api/streams/s1",
+            response: () => {
+                throw new Error("DELETE MUST NOT fire on confirmation_mismatch");
+            },
+        },
+    ]));
+    const res = await handleDeleteStream({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                streamId: "s1",
+                dryRun: false,
+                confirm: "WRONG_TOKEN_HEX",
+            },
+        },
+    });
+    assert.equal(res.isError, true);
+    assert.equal(res.reason, "confirmation_mismatch");
+});
+
+// ---------- Test 11 — D-03 cascade_changed_since_preview on drift ----------
+
+test("delete_stream apply refuses with cascade_changed_since_preview when cascade drifted", async () => {
+    // Dry-run sees [r1, r2]; apply-time re-fetch sees [r1, r2, r3] (one rule added).
+    // The recomputed hash differs from the dry-run token, so apply MUST refuse.
+    const dryRunToken = computeCascadeHash({
+        streamId: "s1",
+        ruleIds: ["r1", "r2"],
+        pipelineConnIds: [],
+        eventDefIds: [],
+    });
+
+    // Track call counts so we can return DIFFERENT rule lists on the dry-run
+    // (call #1) vs the apply-time re-fetch (call #2). The apply path's
+    // re-fetch must see the drifted state.
+    let rulesCalls = 0;
+    _setCaptureRequest(streamsMultiCapture([
+        {
+            method: "GET",
+            pathPattern: "/api/streams/s1",
+            response: () => ({ id: "s1", title: "App", is_editable: true }),
+        },
+        {
+            method: "GET",
+            pathPattern: "/api/streams/s1/rules",
+            response: () => {
+                rulesCalls += 1;
+                if (rulesCalls === 1) {
+                    return {
+                        total: 2,
+                        stream_rules: [
+                            { id: "r1", type: 1, field: "m", value: "v" },
+                            { id: "r2", type: 1, field: "m", value: "w" },
+                        ],
+                    };
+                }
+                // Apply-time re-fetch sees a drifted cascade.
+                return {
+                    total: 3,
+                    stream_rules: [
+                        { id: "r1", type: 1, field: "m", value: "v" },
+                        { id: "r2", type: 1, field: "m", value: "w" },
+                        { id: "r3", type: 1, field: "m", value: "x" },
+                    ],
+                };
+            },
+        },
+        {
+            method: "GET",
+            pathPattern: "/api/streams/s1/pipelines",
+            response: () => [],
+        },
+        {
+            method: "GET",
+            pathPattern: /\/api\/events\/definitions\/paginated/,
+            response: () => ({ elements: [], pagination: {}, total: 0 }),
+        },
+        {
+            method: "DELETE",
+            pathPattern: "/api/streams/s1",
+            response: () => {
+                throw new Error("DELETE MUST NOT fire on cascade_changed_since_preview");
+            },
+        },
+    ]));
+    const res = await handleDeleteStream({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                streamId: "s1",
+                dryRun: false,
+                confirm: dryRunToken,
+            },
+        },
+    });
+    assert.equal(res.isError, true);
+    assert.equal(res.reason, "cascade_changed_since_preview");
+    assert.match(res.content[0].text, /cascade_changed_since_preview/);
+    // Both rules calls fired: one in build() at apply, one structurally — actually
+    // ONE call in apply's buildCascade re-fetch (build() also runs once at apply
+    // time to compute the original-shape req, so total is 2: build's GET + apply's
+    // re-fetch GET).
+    assert.equal(rulesCalls, 2, "rules endpoint hit twice: once for build, once for apply re-fetch");
+});
+
+// ---------- Test 12 — D-03 happy apply path: DELETE fires when hash matches ----------
+
+test("delete_stream apply with matching confirm fires DELETE and returns sync envelope", async () => {
+    const captured = [];
+    // Stable cascade across both calls → hash matches.
+    const ruleList = { total: 1, stream_rules: [{ id: "r1", type: 1, field: "m", value: "v" }] };
+    const expectedToken = computeCascadeHash({
+        streamId: "s1",
+        ruleIds: ["r1"],
+        pipelineConnIds: [],
+        eventDefIds: [],
+    });
+    _setCaptureRequest(streamsMultiCapture([
+        {
+            method: "GET",
+            pathPattern: "/api/streams/s1",
+            response: () => ({ id: "s1", title: "App", is_editable: true }),
+        },
+        {
+            method: "GET",
+            pathPattern: "/api/streams/s1/rules",
+            response: () => ruleList,
+        },
+        {
+            method: "GET",
+            pathPattern: "/api/streams/s1/pipelines",
+            response: () => [],
+        },
+        {
+            method: "GET",
+            pathPattern: /\/api\/events\/definitions\/paginated/,
+            response: () => ({ elements: [], pagination: {}, total: 0 }),
+        },
+        {
+            method: "DELETE",
+            pathPattern: "/api/streams/s1",
+            response: (req) => {
+                captured.push(req);
+                return null;  // Graylog 204
+            },
+        },
+    ]));
+    const res = await handleDeleteStream({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                streamId: "s1",
+                dryRun: false,
+                confirm: expectedToken,
+            },
+        },
+    });
+    assert.equal(captured.length, 1);
+    assert.equal(captured[0].method, "DELETE");
+    assert.equal(captured[0].path, "/api/streams/s1");
+    assert.equal(captured[0].body, undefined);
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.applied, true);
+});
+
+// ---------- Test 13 — Pitfall S11 sync envelope shape ----------
+
+test("delete_stream apply envelope is SYNC {deleted:true, streamId} — no async/job keys", async () => {
+    const expectedToken = computeCascadeHash({
+        streamId: "s1",
+        ruleIds: [],
+        pipelineConnIds: [],
+        eventDefIds: [],
+    });
+    _setCaptureRequest(streamsMultiCapture([
+        {
+            method: "GET",
+            pathPattern: "/api/streams/s1",
+            response: () => ({ id: "s1", title: "App", is_editable: true }),
+        },
+        {
+            method: "GET",
+            pathPattern: "/api/streams/s1/rules",
+            response: () => ({ total: 0, stream_rules: [] }),
+        },
+        {
+            method: "GET",
+            pathPattern: "/api/streams/s1/pipelines",
+            response: () => [],
+        },
+        {
+            method: "GET",
+            pathPattern: /\/api\/events\/definitions\/paginated/,
+            response: () => ({ elements: [], pagination: {}, total: 0 }),
+        },
+        {
+            method: "DELETE",
+            pathPattern: "/api/streams/s1",
+            response: () => null,
+        },
+    ]));
+    const res = await handleDeleteStream({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                streamId: "s1",
+                dryRun: false,
+                confirm: expectedToken,
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.applied, true);
+    // result.body is the apply()'s sync envelope.
+    assert.equal(payload.result.body.deleted, true);
+    assert.equal(payload.result.body.streamId, "s1");
+    // NO async / job_id keys anywhere in the payload (Pitfall S11).
+    const flat = JSON.stringify(payload);
+    assert.doesNotMatch(flat, /"async":\s*true/);
+    assert.doesNotMatch(flat, /job_id_observable_at/);
+    assert.doesNotMatch(flat, /await_system_job/);
+});
+
+// ---------- Test 14 — writable:false short-circuits BEFORE any GET ----------
+
+test("delete_stream refuses on writable:false connection BEFORE any GET fires", async () => {
+    _setConnectionsForTests({
+        readonly: { baseUrl: "x", apiToken: "x", writable: false },
+    });
+    let anyCall = false;
+    _setCaptureRequest(() => {
+        anyCall = true;
+        return {};
+    });
+    const res = await handleDeleteStream({
+        params: {
+            arguments: { connectionName: "readonly", streamId: "s1" },
+        },
+    });
+    assert.equal(res.isError, true);
+    assert.equal(res.reason, "connection_read_only");
+    assert.equal(anyCall, false, "no GET should fire when writable gate refuses");
 });

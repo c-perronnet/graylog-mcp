@@ -236,3 +236,16 @@ test("schema-parity: pause_stream", async () => {
     const { PauseStreamSchema } = await import("../src/tools/streams/schemas.js");
     await assertSchemaParityForTool("pause_stream", PauseStreamSchema);
 });
+
+// ---------------------------------------------------------------------------
+// Plan 03-03 enrichment — delete_stream (STREAM-05; C2 mitigation centerpiece)
+//
+// DeleteStreamSchema = mutatingBase.extend({ streamId, confirm? }). No
+// superRefine wrap so .shape is direct; getShape handles it without extra
+// plumbing.
+// ---------------------------------------------------------------------------
+
+test("schema-parity: delete_stream", async () => {
+    const { DeleteStreamSchema } = await import("../src/tools/streams/schemas.js");
+    await assertSchemaParityForTool("delete_stream", DeleteStreamSchema);
+});
