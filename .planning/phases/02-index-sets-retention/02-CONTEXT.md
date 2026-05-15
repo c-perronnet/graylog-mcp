@@ -24,7 +24,7 @@ Out of scope: streams (Phase 3), pipelines, dashboards, event definitions, bluep
   - `indexSetId` — target id
   - `deleteIndices: true` — locked literal so a hash issued for `deleteIndices: false` can never be replayed as `true`
   - `indexNames` — sorted list of all Elasticsearch indices that would be cleaned, sourced from `GET /system/indexer/indices/{indexSetId}/list`
-  - `messageCount` — total message count across those indices, sourced from `GET /system/indices/index_sets/{indexSetId}?stats=true`
+  - `messageCount` — total message count across those indices, sourced from `GET /system/indices/index_sets/{indexSetId}/stats` (per-ID sub-resource on 7.0.6; `?stats=true` exists only on the LIST endpoint — corrected 2026-05-15 after research)
 - **D-03:** Calling `delete_index_set` with `deleteIndices: false` (the default — see D-04) does NOT require a confirmation token. The index-set metadata is removed; Elasticsearch indices stay. Confirmation gate fires only when destruction is requested.
 
 ### delete_index_set defaults (C1 inversion)
@@ -33,7 +33,7 @@ Out of scope: streams (Phase 3), pipelines, dashboards, event definitions, bluep
 
 ### Stats endpoint failure handling
 
-- **D-05:** If `GET /system/indices/index_sets/{id}?stats=true` fails during dry-run (Elasticsearch unreachable, 5xx, timeout), the dry-run returns `isError: true` with `reason: "stats_unreachable"` and a hint to check Elasticsearch health. No confirmation token is issued. Rationale: the agent cannot proceed to apply without knowing the destruction blast radius. A partial-cluster failure SHOULD block destructive tooling — operational robustness must not override safety here.
+- **D-05:** If `GET /system/indices/index_sets/{id}/stats` fails during dry-run (Elasticsearch unreachable, 5xx, timeout), the dry-run returns `isError: true` with `reason: "stats_unreachable"` and a hint to check Elasticsearch health. No confirmation token is issued. Rationale: the agent cannot proceed to apply without knowing the destruction blast radius. A partial-cluster failure SHOULD block destructive tooling — operational robustness must not override safety here.
 
 ### await_system_job polling primitive (INDEX-08)
 
@@ -63,11 +63,11 @@ Out of scope: streams (Phase 3), pipelines, dashboards, event definitions, bluep
 
 ### cycle_deflector behavior (INDEX-07)
 
-- **D-14:** `cycle_deflector` applies the rotation immediately (subject to `dryRun`) by hitting `POST /system/deflector/cycle`. Returns `{ async: true, job_id, job_id_observable_at: "/system/jobs", note: "Call await_system_job to wait for completion." }`. Does NOT auto-block. The agent calls `await_system_job` explicitly if it wants to wait. Same pattern as delete_index_set with `deleteIndices: true`.
+- **D-14:** `cycle_deflector` applies the rotation immediately by hitting `POST /system/deflector/cycle` (subject to `dryRun`). The cycle itself is **synchronous in Graylog 7.0.6** (source-verified: `DeflectorResource.java` calls `indexSet.cycle()` directly and returns `void` — no `systemJobManager.submit`). The wrapper returns `{ rotated: true, message: "Cycled index set <id>; closed previous active index", side_effects: { observable_at: "/system/jobs", describes: "Graylog spawns an IndexRangesUpdateJob to rebuild the closed index's ranges; the rotation itself is complete on response." } }`. The agent can optionally call `await_system_job` on the range-rebuild side effect if it cares about the secondary work completing. (Updated 2026-05-15 after research surfaced the sync semantics — original draft assumed async like delete_index_set+deleteIndices=true. Range rebuild stays observable; the primary action does not.)
 
 ### Async response shape (m5 mitigation, cross-cutting)
 
-- **D-15:** Every Phase 2 mutating tool that triggers a Graylog system job (today: `delete_index_set` with `deleteIndices: true`, `cycle_deflector`) returns a uniform async envelope: `{ async: true, job_id: "<id>", job_id_observable_at: "/system/jobs", message: "<one-line summary>" }`. The HTTP 204 from Graylog does NOT mean the work is done. Tool descriptions warn the agent and point at `await_system_job`.
+- **D-15:** Every Phase 2 mutating tool that triggers a Graylog system job (today: `delete_index_set` with `deleteIndices: true`) returns a uniform async envelope: `{ async: true, job_id: "<id>", job_id_observable_at: "/system/jobs", message: "<one-line summary>" }`. The HTTP 204 from Graylog does NOT mean the work is done. Tool descriptions warn the agent and point at `await_system_job`. `cycle_deflector` does NOT use this envelope — see D-14 (it's synchronous; the range-rebuild side effect is documented under `side_effects.observable_at`).
 
 ### Defense-in-depth carried forward
 
