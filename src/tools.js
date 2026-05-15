@@ -239,6 +239,45 @@ export const toolDefinitions = [
             required: ["streamId"],
         },
     },
+    // ----- Phase 3 Plan 04 stream-rule CRUD (STREAM-08, STREAM-10) -----
+    {
+        name: "create_stream_rule",
+        description: "Create one rule on a Graylog stream. 8 variants: exact, regex, greater, less, present, contains, always_match, match_input — the wrapper translates each to Graylog's numeric wire format (1..8) via STREAM_RULE_TYPE_TO_NUMERIC. Variant rules: `present` requires `field` only; `always_match` takes no field/value; `match_input` takes a `value` (input id) and no `field`; the other 5 variants require both `field` and `value`. Pre-flights GET /api/streams/{streamId}; refuses with reason `stream_immutable` if the parent stream's current.is_editable === false BEFORE the POST fires. postApplyEstimate.id is __SERVER_ASSIGNED__ — DO NOT reuse it; the real rule id ships in the apply response.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                connectionName: { type: "string", description: "Optional per-call connection override" },
+                dryRun: { type: "boolean", description: "Default true. Set to false to apply." },
+                idempotencyKey: { type: "string", description: "Optional agent-supplied idempotency key" },
+                streamId: { type: "string", description: "Parent stream ID (from list_streams)" },
+                type: {
+                    type: "string",
+                    enum: ["exact", "regex", "greater", "less", "present", "contains", "always_match", "match_input"],
+                    description: "Rule discriminator. Translates to numeric wire type (1=exact .. 8=match_input).",
+                },
+                field: { type: "string", description: "Message field to match. Required for exact|regex|greater|less|present|contains. Omitted for always_match|match_input." },
+                value: { type: ["string", "number"], description: "Match value. Required for exact|regex|greater|less|contains|match_input. Omitted for present|always_match. For greater|less, numeric." },
+                inverted: { type: "boolean", description: "Negate the match. Default false." },
+                description: { type: ["string", "null"], description: "Optional human-readable rule description." },
+            },
+            required: ["streamId", "type"],
+        },
+    },
+    {
+        name: "delete_stream_rule",
+        description: "Delete one rule from a Graylog stream. LEAF DELETE (Discretion-04) — stream rules have no further dependents, so there is NO cascade enumeration, NO confirmation hash, and NO requireConfirm gate. Pre-flights GET /api/streams/{streamId}; refuses with reason `stream_immutable` if the parent stream's current.is_editable === false BEFORE the DELETE fires. Apply envelope is sync (no system-job).",
+        inputSchema: {
+            type: "object",
+            properties: {
+                connectionName: { type: "string", description: "Optional per-call connection override" },
+                dryRun: { type: "boolean", description: "Default true. Set to false to apply." },
+                idempotencyKey: { type: "string", description: "Optional agent-supplied idempotency key" },
+                streamId: { type: "string", description: "Parent stream ID (from list_streams)" },
+                ruleId: { type: "string", description: "Rule ID to delete (from list_stream_rules)" },
+            },
+            required: ["streamId", "ruleId"],
+        },
+    },
     {
         name: "list_field_values",
         description: "List distinct values of a field with message counts. Useful for discovering available sources, environments, logger names, etc. Results are sorted by count descending.",

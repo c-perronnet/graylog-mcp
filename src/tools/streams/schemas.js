@@ -184,3 +184,60 @@ export const DeleteStreamSchema = mutatingBase.extend({
     streamId: z.string().min(1),
     confirm: z.string().optional(),
 });
+
+// =====================================================================
+// Plan 03-04 — stream-rule CRUD + test_stream_match schemas.
+// =====================================================================
+
+// STREAM-08 — create_stream_rule. Composes the 8-variant StreamRuleSchema
+// discriminated union with the parent streamId + mutatingBase via
+// z.intersection (`.and()`). z.intersection preserves the discriminated
+// union behavior whereas `.merge()` would flatten it. The wire-body
+// translation (string discriminator → numeric int via
+// STREAM_RULE_TYPE_TO_NUMERIC; S10 empty-string defaults for variant-
+// irrelevant fields) lives in create-stream-rule.js.
+const CreateStreamRuleBase = mutatingBase.extend({
+    streamId: z.string().min(1, "streamId is required"),
+});
+export const CreateStreamRuleSchema = CreateStreamRuleBase.and(StreamRuleSchema);
+
+// STREAM-09 — update_stream_rule. Partial-update via `changes` envelope
+// per D-14 + 03-U1-SMOKE.md (UNREACHABLE_STRICT_NO_ECHO → STRICT_NO_ECHO
+// chosen). `type` is NOT allowed in changes — immutability per
+// Pitfall S8 + CreateStreamRuleRequest.type's non-nullable Java int.
+// The wire body in update-stream-rule.js's build() echoes type from the
+// pre-flight GET's current.type unconditionally; the schema enforces
+// "no agent-driven type change" at parse time.
+const UpdateStreamRuleChangesShape = z.object({
+    field: z.string().optional(),
+    value: z.union([z.string(), z.number()]).optional(),
+    inverted: z.boolean().optional(),
+    description: z.string().nullish(),
+});
+export const UpdateStreamRuleSchema = mutatingBase.extend({
+    streamId: z.string().min(1, "streamId is required"),
+    ruleId: z.string().min(1, "ruleId is required"),
+    changes: UpdateStreamRuleChangesShape,
+});
+
+// STREAM-10 — delete_stream_rule. Leaf delete per Discretion-04 (no
+// cascade hash). Only the parent-stream mutable check fires (D-09);
+// no _confirmationToken; no requireConfirm gate.
+export const DeleteStreamRuleSchema = mutatingBase.extend({
+    streamId: z.string().min(1, "streamId is required"),
+    ruleId: z.string().min(1, "ruleId is required"),
+});
+
+// STREAM-11 — test_stream_match. D-07 server-side wrapper. D-08
+// streamId REQUIRED (pre-create config testing is out of scope —
+// agent's flow is: create_stream(dryRun:true) → create for real →
+// test_stream_match against the real id).
+//
+// The `message` field is a field-map (z.record of unknowns —
+// Graylog accepts any JSON-serializable values). The wire body in
+// test-stream-match.js's build() wraps it in the literal outer key
+// `{ "message": <field-map> }` per StreamResource.java:561-564.
+export const TestStreamMatchSchema = mutatingBase.extend({
+    streamId: z.string().min(1, "streamId is required"),
+    message: z.record(z.unknown()),
+});

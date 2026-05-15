@@ -24,11 +24,10 @@ import { handleUpdateStream } from "../src/tools/streams/update-stream.js";
 import { handleStartStream } from "../src/tools/streams/start-stream.js";
 import { handlePauseStream } from "../src/tools/streams/pause-stream.js";
 import { handleDeleteStream } from "../src/tools/streams/delete-stream.js";
-// Plan 03-04 — stream-rule CRUD + test_stream_match handlers.
+// Plan 03-04 Task 1 — create_stream_rule + delete_stream_rule.
+// Task 2 will append imports for handleUpdateStreamRule + handleTestStreamMatch.
 import { handleCreateStreamRule } from "../src/tools/streams/create-stream-rule.js";
 import { handleDeleteStreamRule } from "../src/tools/streams/delete-stream-rule.js";
-import { handleUpdateStreamRule } from "../src/tools/streams/update-stream-rule.js";
-import { handleTestStreamMatch } from "../src/tools/streams/test-stream-match.js";
 import { computeCascadeHash } from "../src/tools/_shared/cascade-hash.js";
 import {
     ListStreamsSchema,
