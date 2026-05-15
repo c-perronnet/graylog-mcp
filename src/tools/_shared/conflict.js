@@ -23,14 +23,17 @@ export async function findExistingMatches(client, opts = {}) {
     if (!opts.listPath || typeof opts.matchFn !== "function") return [];
     const response = await client.request("GET", opts.listPath, null);
     // Graylog list endpoints sometimes wrap the array in a domain-specific
-    // envelope (`inputs`, `streams`, `extractors`, `items`). Normalize both
-    // shapes here so callers can supply the simplest possible matchFn.
+    // envelope. Phase 5 adds `elements` for the /paginated PageListResponse
+    // shape (events/definitions/paginated + events/notifications/paginated).
+    // Position: `elements` BEFORE `items` so the modern PageListResponse wins
+    // over the rare endpoint that uses a generic `items` wrapper.
     const items = Array.isArray(response)
         ? response
         : (response?.inputs
             ?? response?.streams
             ?? response?.extractors
             ?? response?.index_sets
+            ?? response?.elements
             ?? response?.items
             ?? []);
     return items.filter(opts.matchFn).map((item) => ({

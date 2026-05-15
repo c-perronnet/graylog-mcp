@@ -182,3 +182,46 @@ export function computeRuleCascadeHash({ ruleId, pipelineIds }) {
         eventDefIds: [],
     });
 }
+
+// =====================================================================
+// Phase 5 D-09 — computeNotificationCascadeHash (thin semantic wrapper)
+// =====================================================================
+
+/**
+ * Compute the deterministic confirmation hash for delete_event_notification.
+ *
+ * Thin semantic wrapper around computeCascadeHash so call-sites read
+ * naturally — computeNotificationCascadeHash({ notificationId, eventDefIds })
+ * instead of the misleading-named computeCascadeHash({ streamId: notificationId,
+ * eventDefIds: [...] }) parameter renaming.
+ *
+ * Canonical JSON output is BYTE-IDENTICAL to the underlying call
+ * (forwards streamId=notificationId, eventDefIds=eventDefIds,
+ * ruleIds=[], pipelineConnIds=[]). Phase 3 / Phase 4 hashes are not
+ * shared with Phase 5 so the key-name reuse has no replay-attack
+ * surface — the streamId slot here carries a notification id, never
+ * a stream id or rule id.
+ *
+ * Threat-model T-05-01-07: byte-identity is pinned by
+ * test/cascade-hash.test.js so a future regression in
+ * computeCascadeHash breaks Phase 5 hashes too.
+ *
+ * @param {object} inputs
+ * @param {string}   inputs.notificationId  target notification id (non-empty)
+ * @param {string[]} inputs.eventDefIds     event-definition ids that reference the notification
+ * @returns {string} 64-hex sha-256
+ */
+export function computeNotificationCascadeHash({ notificationId, eventDefIds }) {
+    if (typeof notificationId !== "string" || notificationId.length === 0) {
+        throw new Error("computeNotificationCascadeHash: notificationId is required");
+    }
+    if (!Array.isArray(eventDefIds)) {
+        throw new Error("computeNotificationCascadeHash: eventDefIds must be string[]");
+    }
+    return computeCascadeHash({
+        streamId: notificationId,
+        ruleIds: [],
+        pipelineConnIds: [],
+        eventDefIds,
+    });
+}

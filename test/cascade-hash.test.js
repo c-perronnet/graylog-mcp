@@ -362,7 +362,7 @@ test("computeNotificationCascadeHash returns the pinned hash for the empty-casca
     });
     assert.equal(
         hash,
-        "__PINNED_EMPTY_NOTIFICATION_CASCADE_HASH__",
+        "e2ba7147288dc6e9dbc0086881b87975c60b3925d8835bba2ffaf5db439f269c",
     );
     assert.match(hash, /^[0-9a-f]{64}$/);
 });
@@ -374,7 +374,7 @@ test("computeNotificationCascadeHash returns the pinned hash for the 2-cascade f
     });
     assert.equal(
         hash,
-        "__PINNED_TWO_CASCADE_NOTIFICATION_HASH__",
+        "d986f30b3afe6d6ab54b8fdb667716837dbfcac395720390639d7198287b02dd",
     );
     assert.match(hash, /^[0-9a-f]{64}$/);
     // Empty vs populated must differ.
