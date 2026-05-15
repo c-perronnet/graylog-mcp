@@ -63,7 +63,7 @@
 **Plans**: 5 plans
   - [x] 02-01-PLAN.md — Foundation amendments (handler.js _confirmationToken forward + requireConfirm gate; conflict.js index_sets envelope) + await_system_job (INDEX-08) + list_index_sets (INDEX-01) + get_index_set (INDEX-02) + U1 live-smoke decision artifact
   - [x] 02-02-PLAN.md — create_index_set (INDEX-03) with D-10 + D-08 friendly aliases + D-09 6 strict configs + M5 idempotency; update_index_set (INDEX-04) with D-11 atomic strategy-replace + U1 MERGE_FROM_CURRENT partial-update + ND2 pre-flight
-  - [ ] 02-03-PLAN.md — delete_index_set (INDEX-05) C1 mitigation centerpiece — sha-256 confirmation hash, D-04 inverted default, D-05 stats hard-block, ND1 default refusal, D-15 async envelope
+  - [x] 02-03-PLAN.md — delete_index_set (INDEX-05) C1 mitigation centerpiece — sha-256 confirmation hash, D-04 inverted default, D-05 stats hard-block, ND1 default refusal, D-15 async envelope
   - [ ] 02-04-PLAN.md — set_default_index_set (INDEX-06) D-13 can_be_default invariant + cycle_deflector (INDEX-07) ND3 writable pre-flight + UPDATED D-14 sync semantics + side_effects.observable_at
   - [ ] 02-05-PLAN.md — Snapshot fixtures (9 per RESEARCH §Snapshot Fixture Design) + schema-parity enrichment (8 tools) + auth-redaction confirmationToken allowlist + VALIDATION.md flip + human-verify checkpoint
 
@@ -96,8 +96,8 @@
 **Research notes**: This phase has a **mandatory pre-phase research pass** flagged by `research/SUMMARY.md` — the ~100 Java built-in function classes under `source-code/graylog2-server/.../plugin/pipelineprocessor/functions/` must be enumerated into `src/pipeline-dsl/builtins.js` (name, signature, one-line description) before implementation of PIPE-08 begins. Hand-curated; auto-regeneration is future work.
 
 **Plans**: 5 plans
-  - [ ] 02-01-PLAN.md — Foundation amendments (handler.js _confirmationToken forward + requireConfirm gate; conflict.js index_sets envelope) + await_system_job (INDEX-08) + list_index_sets (INDEX-01) + get_index_set (INDEX-02) + U1 live-smoke decision artifact
-  - [ ] 02-02-PLAN.md — create_index_set (INDEX-03) with D-10 + D-08 friendly aliases + D-09 6 strict configs + M5 idempotency; update_index_set (INDEX-04) with D-11 atomic strategy-replace + U1-resolved partial-update + ND2 pre-flight
+  - [x] 02-01-PLAN.md — Foundation amendments (handler.js _confirmationToken forward + requireConfirm gate; conflict.js index_sets envelope) + await_system_job (INDEX-08) + list_index_sets (INDEX-01) + get_index_set (INDEX-02) + U1 live-smoke decision artifact
+  - [x] 02-02-PLAN.md — create_index_set (INDEX-03) with D-10 + D-08 friendly aliases + D-09 6 strict configs + M5 idempotency; update_index_set (INDEX-04) with D-11 atomic strategy-replace + U1-resolved partial-update + ND2 pre-flight
   - [ ] 02-03-PLAN.md — delete_index_set (INDEX-05) C1 mitigation centerpiece — sha-256 confirmation hash, D-04 inverted default, D-05 stats hard-block, ND1 default refusal, D-15 async envelope
   - [ ] 02-04-PLAN.md — set_default_index_set (INDEX-06) D-13 can_be_default invariant + cycle_deflector (INDEX-07) ND3 writable pre-flight + UPDATED D-14 sync semantics + side_effects.observable_at
   - [ ] 02-05-PLAN.md — Snapshot fixtures (9 per RESEARCH §Snapshot Fixture Design) + schema-parity enrichment (8 tools) + auth-redaction confirmationToken allowlist + VALIDATION.md flip + human-verify checkpoint
