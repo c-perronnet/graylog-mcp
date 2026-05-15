@@ -49,7 +49,7 @@
   - [x] 01-02-PLAN.md — Input CRUD: create_input (D-04 redaction), update_input (C3 mitigation centerpiece — INPUT-05), delete_input (D-05 cascade enumeration)
   - [x] 01-03-PLAN.md — Input lifecycle: start_input (PUT) + stop_input (DELETE) (INPUT-07)
   - [x] 01-04-PLAN.md — Extractor CRUD: list_extractors + create_extractor (all 8 Graylog types per A1) + update_extractor + delete_extractor (INPUT-08..11)
-  - [ ] 01-05-PLAN.md — Snapshot fixtures (incl. C3 acceptance gate) + schema-parity enrichment + 01-VALIDATION.md flip
+  - [x] 01-05-PLAN.md — Snapshot fixtures (incl. C3 acceptance gate) + schema-parity enrichment + 01-VALIDATION.md flip
 
 ### Phase 2: Index Sets & Retention
 **Goal**: An agent can configure where Graylog stores messages — including rotation/retention strategies — without ever silently destroying Elasticsearch data through a defaulted query parameter.
