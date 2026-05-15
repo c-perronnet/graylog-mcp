@@ -920,3 +920,180 @@ test_p2("dispatch resolves create_event_definition after Plan 05-02 Task 2 regis
     assert.equal(payload.tool, "create_event_definition");
     assert.equal(payload.dryRun, true);
 });
+
+// =====================================================================
+// Plan 05-02 Task 3 — update_event_definition (D-02 + STRICT_NO_ECHO + C5)
+// =====================================================================
+//
+// STRICT_NO_ECHO partial-update contract:
+//   - wire body emits ONLY fields the agent touched (omit-vs-explicit-null
+//     preserved per Phase 1/3/4 precedent).
+//   - body.id is always set to args.definitionId (Pitfall 8 — URL/body agreement).
+//   - scheduler READ_ONLY contamination is structurally impossible (the
+//     wrapper never round-trips a GET response).
+// D-02 wire path: /api/events/definitions/{id}?schedule=false UNCONDITIONALLY.
+
+test_p2("update_event_definition D-02 wire-path proof: /api/events/definitions/{id}?schedule=false", async () => {
+    const { handleUpdateEventDefinition } = await import("../src/tools/events/update-event-definition.js");
+    const res = await handleUpdateEventDefinition({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                definitionId: "abc",
+                changes: { title: "New" },
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.preview.path, "/api/events/definitions/abc?schedule=false");
+    assert.equal(payload.preview.method, "PUT");
+});
+
+test_p2("update_event_definition STRICT_NO_ECHO: title-only → body keys are EXACTLY [id, title]", async () => {
+    const { handleUpdateEventDefinition } = await import("../src/tools/events/update-event-definition.js");
+    const res = await handleUpdateEventDefinition({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                definitionId: "abc",
+                changes: { title: "New" },
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.deepEqual(Object.keys(payload.preview.body).sort(), ["id", "title"]);
+    assert.equal(payload.preview.body.id, "abc");
+    assert.equal(payload.preview.body.title, "New");
+});
+
+test_p2("update_event_definition STRICT_NO_ECHO: multi-field changes emit exactly the touched fields + id", async () => {
+    const { handleUpdateEventDefinition } = await import("../src/tools/events/update-event-definition.js");
+    const res = await handleUpdateEventDefinition({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                definitionId: "abc",
+                changes: { title: "New", priority: 3 },
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.deepEqual(Object.keys(payload.preview.body).sort(), ["id", "priority", "title"]);
+    assert.equal(payload.preview.body.priority, 3);
+});
+
+test_p2("update_event_definition C5 migration fires when changes.config has a v6 expression", async () => {
+    const { handleUpdateEventDefinition } = await import("../src/tools/events/update-event-definition.js");
+    const res = await handleUpdateEventDefinition({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                definitionId: "abc",
+                changes: {
+                    config: {
+                        type: "aggregation-v1",
+                        conditions: {
+                            expression: { type: "function", function: "count", parameter: "source" },
+                        },
+                    },
+                },
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.migration.migrated, true);
+    assert.equal(payload.migration.warnings[0].emitted, "count_source");
+    // Wire body's config carries the migrated expression.
+    assert.deepEqual(
+        payload.preview.body.config.conditions.expression,
+        { type: "number-ref", ref: "count_source" },
+    );
+});
+
+test_p2("update_event_definition C5 migration omitted when changes.config absent", async () => {
+    const { handleUpdateEventDefinition } = await import("../src/tools/events/update-event-definition.js");
+    const res = await handleUpdateEventDefinition({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                definitionId: "abc",
+                changes: { title: "New" },
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(Object.prototype.hasOwnProperty.call(payload, "migration"), false);
+});
+
+test_p2("update_event_definition Pitfall 5: scheduler NEVER on the wire (STRICT_NO_ECHO prevents structurally)", async () => {
+    const { handleUpdateEventDefinition } = await import("../src/tools/events/update-event-definition.js");
+    const res = await handleUpdateEventDefinition({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                definitionId: "abc",
+                changes: { title: "New" },
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    // The wire body should not contain a `scheduler` key — STRICT_NO_ECHO
+    // means the wrapper never round-trips a GET, so the READ_ONLY field
+    // physically cannot reach the wire (Pitfall 5 mitigation).
+    assert.equal(Object.prototype.hasOwnProperty.call(payload.preview.body, "scheduler"), false);
+    // Defense-in-depth: also check the JSON string for the literal "scheduler"
+    // — that would catch any accidental nested echoing too.
+    assert.doesNotMatch(res.content[0].text, /"scheduler"/);
+});
+
+test_p2("update_event_definition D-02 STRUCTURAL: agent CANNOT inject schedule:true (zod strip drops it)", async () => {
+    const { handleUpdateEventDefinition } = await import("../src/tools/events/update-event-definition.js");
+    const res = await handleUpdateEventDefinition({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                definitionId: "abc",
+                changes: { title: "x" },
+                schedule: true,
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.preview.path, "/api/events/definitions/abc?schedule=false");
+});
+
+test_p2("update_event_definition Pitfall 8: body.id matches URL segment", async () => {
+    const { handleUpdateEventDefinition } = await import("../src/tools/events/update-event-definition.js");
+    const res = await handleUpdateEventDefinition({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                definitionId: "abc",
+                changes: { title: "New" },
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.preview.body.id, "abc");
+    assert.match(payload.preview.path, /\/abc\?schedule=false$/);
+});
+
+// ---------- dispatch + tool count ----------
+
+test_p2("dispatch resolves update_event_definition after Plan 05-02 Task 3 registration", async () => {
+    const { dispatch } = await import("../src/dispatch.js");
+    await import("../src/tools/_register.js");
+    const res = await dispatch({
+        params: {
+            name: "update_event_definition",
+            arguments: {
+                _testConnection: "fake",
+                definitionId: "abc",
+                changes: { title: "DispTest" },
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.tool, "update_event_definition");
+    assert.equal(payload.dryRun, true);
+});
