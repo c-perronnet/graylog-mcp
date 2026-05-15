@@ -59,10 +59,10 @@ Cross-cutting infrastructure that every domain phase depends on. Cannot be folde
 - [x] **STREAM-05**: `delete_stream` — pre-delete cascade preview showing rules, pipeline connections, and event definitions that reference this stream (C2)
 - [x] **STREAM-06**: `start_stream` / `pause_stream`
 - [x] **STREAM-07**: `list_stream_rules`
-- [ ] **STREAM-08**: `create_stream_rule` — covers all rule types (exact, regex, greater, less, present, contains, always-match)
-- [ ] **STREAM-09**: `update_stream_rule`
-- [ ] **STREAM-10**: `delete_stream_rule`
-- [ ] **STREAM-11**: `test_stream_match` — the agent's rule-validation anchor; given a stream config and a sample message, returns which rules matched
+- [x] **STREAM-08**: `create_stream_rule` — covers all rule types (exact, regex, greater, less, present, contains, always-match)
+- [x] **STREAM-09**: `update_stream_rule`
+- [x] **STREAM-10**: `delete_stream_rule`
+- [x] **STREAM-11**: `test_stream_match` — the agent's rule-validation anchor; given a stream config and a sample message, returns which rules matched
 
 ### Pipelines & Pipeline Rules (PIPE)
 
@@ -242,10 +242,10 @@ Populated by the roadmapper on 2026-05-13. Every v1 requirement maps to exactly 
 | STREAM-05 | Phase 3 | Complete |
 | STREAM-06 | Phase 3 | Complete |
 | STREAM-07 | Phase 3 | Complete |
-| STREAM-08 | Phase 3 | Pending |
-| STREAM-09 | Phase 3 | Pending |
-| STREAM-10 | Phase 3 | Pending |
-| STREAM-11 | Phase 3 | Pending |
+| STREAM-08 | Phase 3 | Complete |
+| STREAM-09 | Phase 3 | Complete |
+| STREAM-10 | Phase 3 | Complete |
+| STREAM-11 | Phase 3 | Complete |
 | PIPE-01 | Phase 4 | Pending |
 | PIPE-02 | Phase 4 | Pending |
 | PIPE-03 | Phase 4 | Pending |

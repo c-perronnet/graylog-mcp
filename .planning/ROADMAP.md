@@ -80,7 +80,7 @@
   - [x] 03-01-PLAN.md — Foundation amendments (promote c1-hash.js to _shared/cascade-hash.js with keyed-buckets signature; verify findExistingMatches `streams` envelope) + read tools list_streams/get_stream/list_stream_rules (STREAM-01/02/07) + v2.3 list_streams displacement + U1-style live-smoke decision artifact for D-14
   - [x] 03-02-PLAN.md — create_stream (STREAM-03, CreateEntityRequest envelope + 3-bucket existingMatches per D-05/D-06 + numeric rule translation per D-11/S9) + update_stream (STREAM-04, D-14 partial-update + D-09 mutable) + start_stream + pause_stream (STREAM-06, D-12 lifecycle-as-mutation + D-09 mutable)
   - [x] 03-03-PLAN.md — delete_stream (STREAM-05) C2 mitigation centerpiece — 3-endpoint cascade pre-flight (rules + pipeline-connections + event-definitions paginated client-side-filtered per Pitfall S6) + sha-256 keyed-buckets hash (D-02) + apply-time re-fetch refusal (D-01..D-04) + D-09 mutable pre-flight
-  - [ ] 03-04-PLAN.md — create_stream_rule (STREAM-08, 8 variants per D-11 reconfirmed including match_input) + update_stream_rule (STREAM-09, D-14 partial-update + Pitfall S8 type-from-current) + delete_stream_rule (STREAM-10, leaf-delete per Discretion-04 with parent-mutable pre-flight) + test_stream_match (STREAM-11, server-side D-07/D-08)
+  - [x] 03-04-PLAN.md — create_stream_rule (STREAM-08, 8 variants per D-11 reconfirmed including match_input) + update_stream_rule (STREAM-09, D-14 partial-update + Pitfall S8 type-from-current) + delete_stream_rule (STREAM-10, leaf-delete per Discretion-04 with parent-mutable pre-flight) + test_stream_match (STREAM-11, server-side D-07/D-08)
   - [ ] 03-05-PLAN.md — 11 snapshot fixtures per RESEARCH §Snapshot Fixture Design + schema-parity audit (all 12 net-new tools) + auth-redaction lint inheritance + VALIDATION.md flip + human-verify checkpoint
 
 ### Phase 4: Pipelines, Pipeline Rules & Connections
@@ -159,7 +159,7 @@
 | 0. Foundation | 6/6 | Complete | 2026-05-15 |
 | 1. Inputs & Extractors | 5/5 | Complete | 2026-05-15 |
 | 2. Index Sets & Retention | 2/5 | In Progress | - |
-| 3. Streams & Stream Rules | 0/? | Not started | - |
+| 3. Streams & Stream Rules | 4/5 | In Progress | - |
 | 4. Pipelines, Pipeline Rules & Connections | 0/? | Not started | - |
 | 5. Events & Notifications | 0/? | Not started | - |
 | 6. Dashboards, Widget Templates & Blueprints | 0/? | Not started | - |
