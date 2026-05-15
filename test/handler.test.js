@@ -328,3 +328,62 @@ test("snapshot: defineMutatingHandler idempotency-key is deterministic", async (
     // Full payload is already covered by fixture 1.
     t.assert.snapshot({ idempotencyKey: k1, matched: k1 === k2 });
 });
+
+// =====================================================================
+// Plan 01-01: A4 amendment — defineMutatingHandler awaits build()
+// =====================================================================
+//
+// Phase 1's update_input needs `build()` to be async so it can pre-flight a
+// GET on the current input + the cached type catalogue. The Phase 0 wrapper
+// calls `build(args)` synchronously; widening to `await build(args)` is
+// backward-compatible (synchronous builds return plain objects which await
+// passes through unchanged).
+
+test("build() may be async — wrapper awaits result before dryRun branch", async () => {
+    const handler = defineMutatingHandler({
+        name: "create_stream",
+        schema: TestSchema,
+        build: async (args) => {
+            // Simulate a pre-flight async operation (e.g., GET current state).
+            await Promise.resolve();
+            return {
+                method: "POST",
+                path: "/p",
+                body: { x: args.title },
+            };
+        },
+        apply: async () => ({}),
+    });
+    const res = await handler({
+        params: { arguments: { title: "T", _testConnection: "fake" } },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(
+        payload.preview.body.x,
+        "T",
+        "async build() result must reach the preview emitter — proves await landed",
+    );
+});
+
+test("build() that returns a rejected promise → wrapper surfaces error (no unhandled rejection)", async () => {
+    const handler = defineMutatingHandler({
+        name: "create_stream",
+        schema: TestSchema,
+        build: async () => {
+            throw new Error("preflight failed");
+        },
+        apply: async () => ({}),
+    });
+    // dryRun: false to ensure we are testing the build-throw path (not the dry-run path).
+    // Either path should bubble the rejection up as an MCP error envelope.
+    const res = await handler({
+        params: { arguments: { title: "T", _testConnection: "fake", dryRun: false } },
+    });
+    // The wrapper today doesn't try/catch around build() — but once `await build()` lands,
+    // an unhandled rejection would crash the test runner. So this test BOTH proves the
+    // await is in place AND that the rejection is surfaced as an MCP error (not a crash).
+    // Either an isError envelope OR a process-level uncaught rejection acceptance — we
+    // assert the envelope form, which is the only safe one for the agent.
+    assert.equal(res.isError, true);
+    assert.match(res.content[0].text, /preflight failed/);
+});

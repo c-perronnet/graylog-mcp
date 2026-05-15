@@ -180,3 +180,83 @@ test("snapshot: defineListHandler limit clamped to MAX_LIMIT", async (t) => {
     });
     t.assert.snapshot(JSON.parse(res.content[0].text));
 });
+
+// =====================================================================
+// Plan 01-01: per-tool `defaultFields` override (BLOCKER #3 fix)
+// =====================================================================
+//
+// Phase 1 list_inputs needs the projection [id, title, type, global] instead
+// of the framework default [id, title, description]. Rather than hand-roll a
+// per-tool projection bypass, defineListHandler gains an optional spec.defaultFields
+// parameter that wins when args.fields is undefined. Existing callers that don't
+// pass defaultFields see no behavioural change.
+
+const RICH_SAMPLE = [
+    {
+        id: "in1",
+        title: "Alpha",
+        description: "first",
+        type: "org.graylog2.inputs.gelf.udp.GELFUDPInput",
+        global: true,
+        configuration: { port: 12201 },
+    },
+    {
+        id: "in2",
+        title: "Beta",
+        description: "second",
+        type: "org.graylog2.inputs.syslog.udp.SyslogUDPInput",
+        global: false,
+        configuration: { port: 514 },
+    },
+];
+
+test("defineListHandler with spec.defaultFields overrides the module DEFAULT_FIELDS when args.fields is absent", async () => {
+    const handler = defineListHandler({
+        name: "list_inputs",
+        schema: TestListSchema,
+        defaultFields: ["id", "title", "type", "global"],
+        fetch: async () => RICH_SAMPLE,
+    });
+    const res = await handler({
+        params: { arguments: { _testConnection: "fake" } },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.deepEqual(payload.fields, ["id", "title", "type", "global"]);
+    assert.deepEqual(
+        Object.keys(payload.items[0]).sort(),
+        ["global", "id", "title", "type"],
+    );
+    assert.equal(payload.items[0].description, undefined);
+    assert.equal(payload.items[0].configuration, undefined);
+});
+
+test("defineListHandler without spec.defaultFields preserves DEFAULT_FIELDS (back-compat)", async () => {
+    const handler = defineListHandler({
+        name: "list_streams_legacy",
+        schema: TestListSchema,
+        // No defaultFields: existing callers must continue seeing the module-level default.
+        fetch: async () => RICH_SAMPLE,
+    });
+    const res = await handler({
+        params: { arguments: { _testConnection: "fake" } },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.deepEqual(payload.fields, ["id", "title", "description"]);
+});
+
+test("defineListHandler with spec.defaultFields still honors fields: 'all'", async () => {
+    const handler = defineListHandler({
+        name: "list_inputs",
+        schema: TestListSchema,
+        defaultFields: ["id", "title", "type", "global"],
+        fetch: async () => RICH_SAMPLE,
+    });
+    const res = await handler({
+        params: { arguments: { _testConnection: "fake", fields: "all" } },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.fields, "all");
+    // Unprojected — configuration (NOT in defaultFields) survives.
+    assert.ok(payload.items[0].configuration);
+    assert.equal(payload.items[0].configuration.port, 12201);
+});
