@@ -462,7 +462,7 @@ afterEach(() => {
 
 // -------- Task 2 Test 1: time-based+delete dry-run emits the exact wire shape --------
 
-test("create_index_set time-based+delete dry-run emits the exact wire shape (D-08 + D-17)", async () => {
+test("create_index_set time-based+delete dry-run emits the exact wire shape (D-08 + D-17)", async (t) => {
     _setCaptureRequest(multiCapture([
         { method: "GET", pathPattern: "/api/system/indices/index_sets", response: { total: 0, index_sets: [], stats: {} } },
     ]));
@@ -507,6 +507,12 @@ test("create_index_set time-based+delete dry-run emits the exact wire shape (D-0
     assert.equal(body.retention_strategy.max_number_of_indices, 30);
     assert.equal(body.creation_date, FIXED_CREATION_DATE);
     assert.equal(payload.postApplyEstimate.id, "__SERVER_ASSIGNED__");
+    // Snapshot Fixture 1 (Plan 02-05): pins TimeBased+Delete FQCN pair +
+    // __SERVER_ASSIGNED__ id sentinel + existingMatches:[] + fixed creation_date
+    // from _setClockForTests (FIXED_CREATION_DATE). Determinism contract:
+    // _setClockForTests in beforeEach pins creation_date; static args ensure
+    // derived idempotencyKey is itself deterministic.
+    t.assert.snapshot(payload);
 });
 
 // -------- Task 2 Test 2: size-based+close dry-run mirror (different FQCNs) --------
@@ -772,7 +778,7 @@ test("update_index_set zod rejects empty changes object", () => {
 
 // -------- Task 3 Test 5: title-only change — merge-from-current emits full merged DTO --------
 
-test("update_index_set title-only change emits the full merged DTO (U1 MERGE_FROM_CURRENT)", async () => {
+test("update_index_set title-only change emits the full merged DTO (U1 MERGE_FROM_CURRENT)", async (t) => {
     _setCaptureRequest(multiCapture([
         { method: "GET", pathPattern: "/api/system/indices/index_sets/iset-1", response: CURRENT_INDEX_SET },
     ]));
@@ -803,11 +809,17 @@ test("update_index_set title-only change emits the full merged DTO (U1 MERGE_FRO
     // Immutable fields preserved from current (never sourced from agent changes):
     assert.equal(body.index_prefix, CURRENT_INDEX_SET.index_prefix);
     assert.equal(body.creation_date, CURRENT_INDEX_SET.creation_date);
+    // Snapshot Fixture 2 (Plan 02-05): pins the U1 MERGE_FROM_CURRENT shape per
+    // 02-U1-SMOKE.md UNREACHABLE_DEFAULT_MERGE — full DTO merged from current
+    // (immutable index_prefix + creation_date preserved; strategy blocks
+    // preserved; only title overridden). Drift here means MERGE_FROM_CURRENT
+    // semantics changed.
+    t.assert.snapshot(payload);
 });
 
 // -------- Task 3 Test 6: strategy-replace (D-11 atomic) emits new FQCNs + config --------
 
-test("update_index_set strategy-replace (D-11 atomic) emits new rotation FQCNs + config", async () => {
+test("update_index_set strategy-replace (D-11 atomic) emits new rotation FQCNs + config", async (t) => {
     _setCaptureRequest(multiCapture([
         { method: "GET", pathPattern: "/api/system/indices/index_sets/iset-1", response: CURRENT_INDEX_SET },
     ]));
@@ -824,7 +836,8 @@ test("update_index_set strategy-replace (D-11 atomic) emits new rotation FQCNs +
         },
     });
     assert.notEqual(res.isError, true);
-    const body = JSON.parse(res.content[0].text).preview.body;
+    const payload = JSON.parse(res.content[0].text);
+    const body = payload.preview.body;
     assert.equal(
         body.rotation_strategy_class,
         "org.graylog2.indexer.rotation.strategies.SizeBasedRotationStrategy",
@@ -836,6 +849,11 @@ test("update_index_set strategy-replace (D-11 atomic) emits new rotation FQCNs +
     assert.equal(body.rotation_strategy.max_size, 1073741824);
     // Retention block preserved from current.
     assert.equal(body.retention_strategy_class, CURRENT_INDEX_SET.retention_strategy_class);
+    // Snapshot Fixture 3 (Plan 02-05): pins D-11 atomic strategy-replace —
+    // BOTH rotation_strategy_class AND rotation_strategy.type FQCN replaced
+    // atomically; retention_strategy block preserved from current. Drift
+    // here means the strategy-replace pair contract broke.
+    t.assert.snapshot(payload);
 });
 
 // -------- Task 3 Test 7: ND2 pre-flight blocks writable:false on the default index set --------
@@ -1159,7 +1177,7 @@ test("DeleteIndexSetSchema accepts an optional confirm string (D-01 echo-the-tok
 
 // -------- Task 2 Test 4: deleteIndices:false dry-run — token-free metadata-only path --------
 
-test("delete_index_set deleteIndices:false dry-run emits the metadata-only path with NO confirmation token (D-03)", async () => {
+test("delete_index_set deleteIndices:false dry-run emits the metadata-only path with NO confirmation token (D-03)", async (t) => {
     _setCaptureRequest(multiCapture([
         { method: "GET", pathPattern: "/api/system/indices/index_sets/iset-1", response: NON_DEFAULT_INDEX_SET },
     ]));
@@ -1186,11 +1204,15 @@ test("delete_index_set deleteIndices:false dry-run emits the metadata-only path 
     assert.equal(payload.confirmationToken, undefined, "no token for the safe metadata-only path");
     assert.equal(payload.cascades, undefined, "no cascades for the safe metadata-only path");
     assert.equal(payload.postApplyEstimate.deletedIndices, false);
+    // Snapshot Fixture 4 (Plan 02-05): pins D-04 inversion of @DefaultValue(true)
+    // — deleteIndices:false is the safe metadata-only path. NO confirmationToken,
+    // NO cascades, NO async envelope. Drift here means the safety inversion broke.
+    t.assert.snapshot(payload);
 });
 
 // -------- Task 2 Test 5: deleteIndices:true dry-run against empty index set (hash + cascades) --------
 
-test("delete_index_set deleteIndices:true dry-run against an empty index set emits confirmation token + empty cascades + UPDATED D-15 no-job_id envelope", async () => {
+test("delete_index_set deleteIndices:true dry-run against an empty index set emits confirmation token + empty cascades + UPDATED D-15 no-job_id envelope", async (t) => {
     _setCaptureRequest(multiCapture([
         { method: "GET", pathPattern: "/api/system/indices/index_sets/iset-1", response: NON_DEFAULT_INDEX_SET },
         { method: "GET", pathPattern: "/api/system/indexer/indices/iset-1/list", response: EMPTY_INDEX_LIST },
@@ -1235,11 +1257,18 @@ test("delete_index_set deleteIndices:true dry-run against an empty index set emi
         undefined,
         "UPDATED D-15: job_id MUST be absent (Graylog DELETE returns 204 with no body)",
     );
+    // Snapshot Fixture 5 (Plan 02-05): C1 acceptance gate — pins the 64-hex
+    // confirmationToken for the empty-index-set case (frozen value:
+    // ed22c223...) + cascades.indices:[] + cascades.messageCount:0 + UPDATED
+    // D-15 envelope (async:true, no job_id). The confirmationToken is recognised
+    // by the auth-redaction allowlist's confirmationToken context — see Plan
+    // 02-05's extension to isAllowedMatch.
+    t.assert.snapshot(payload);
 });
 
 // -------- Task 2 Test 6: deleteIndices:true against populated index set — different hash --------
 
-test("delete_index_set deleteIndices:true dry-run against a populated index set surfaces real cascades + a different hash", async () => {
+test("delete_index_set deleteIndices:true dry-run against a populated index set surfaces real cascades + a different hash", async (t) => {
     const POPULATED_INDEX_LIST = {
         closed: { indices: ["graylog_0"] },
         reopened: { indices: ["graylog_1"] },
@@ -1278,6 +1307,12 @@ test("delete_index_set deleteIndices:true dry-run against a populated index set 
         "d5f10faaada8fc8f558b1a53cc8777a83fd73fa9172aa65fb36728ff246583c0",
         "populated-index-set hash drift — canonicalization regression",
     );
+    // Snapshot Fixture 6 (Plan 02-05): C1 acceptance gate — pins the *different*
+    // 64-hex confirmationToken for the populated case (frozen value:
+    // d5f10faa...) + cascades.indices sorted + cascades.indexCount:3. The two
+    // populated/empty fixtures together prove the hash is sensitive to BOTH
+    // indexNames AND messageCount — drift in either input changes the hash.
+    t.assert.snapshot(payload);
 });
 
 // -------- Task 2 Test 7: D-05 stats_unreachable hard-blocks dry-run --------
@@ -1542,7 +1577,7 @@ test("set_default_index_set against a regular index set emits the PUT dry-run pr
 
 // -------- Task 1 Test 3: ineligible (can_be_default:false) refused with reason default_eligibility_failed --------
 
-test("set_default_index_set against an ineligible (can_be_default:false) index set is refused with reason default_eligibility_failed — PUT never fires (UPDATED D-13 + m2)", async () => {
+test("set_default_index_set against an ineligible (can_be_default:false) index set is refused with reason default_eligibility_failed — PUT never fires (UPDATED D-13 + m2)", async (t) => {
     let putCallCount = 0;
     _setCaptureRequest((req) => {
         if (req.method === "PUT") {
@@ -1568,6 +1603,17 @@ test("set_default_index_set against an ineligible (can_be_default:false) index s
     assert.match(res.content[0].text, /Events Index/);
     assert.equal(res.reason, "default_eligibility_failed");
     assert.equal(putCallCount, 0, "PUT MUST NOT fire when wrapper-side eligibility check refuses");
+    // Snapshot Fixture 7 (Plan 02-05): UPDATED D-13 + m2 acceptance gate —
+    // pins the isError envelope: isError:true + reason:"default_eligibility_failed"
+    // + text mentions can_be_default:false. Pre-flight wrapper-side refusal
+    // BEFORE the would-be 409 from Graylog. ROADMAP success criterion 3
+    // provably met. Drift here means the wrapper started letting ineligibility
+    // through to the server.
+    t.assert.snapshot({
+        isError: res.isError,
+        reason: res.reason,
+        content: res.content,
+    });
 });
 
 // -------- Task 1 Test 4: apply path fires PUT + returns IndexSetResponse --------
@@ -1686,7 +1732,7 @@ test("CycleDeflectorSchema parses { indexSetId } and rejects missing indexSetId"
 
 // -------- Task 2 Test 2: writable index set dry-run preview (UPDATED D-14 sync) --------
 
-test("cycle_deflector against a writable index set emits the POST dry-run preview with UPDATED D-14 sync semantics + side_effects.observable_at", async () => {
+test("cycle_deflector against a writable index set emits the POST dry-run preview with UPDATED D-14 sync semantics + side_effects.observable_at", async (t) => {
     let postCallCount = 0;
     _setCaptureRequest((req) => {
         if (req.method === "POST") {
@@ -1730,6 +1776,12 @@ test("cycle_deflector against a writable index set emits the POST dry-run previe
         `side_effects.describes must name the range rebuild; got: ${payload.postApplyEstimate.side_effects.describes}`,
     );
     assert.equal(postCallCount, 0, "POST MUST NOT fire on dry-run");
+    // Snapshot Fixture 8 (Plan 02-05): UPDATED D-14 SYNC_OPTION_A acceptance
+    // gate — pins postApplyEstimate.async:false +
+    // side_effects.observable_at:"/system/jobs" + side_effects.describes mentions
+    // range rebuild. Critical: NOT the D-15 async envelope. Drift here would
+    // indicate cycle_deflector regressed back to the (incorrect) async wrapping.
+    t.assert.snapshot(payload);
 });
 
 // -------- Task 2 Test 3: non-writable refused with reason non_writable_index_set (ND3) --------

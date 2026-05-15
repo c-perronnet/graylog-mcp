@@ -59,7 +59,7 @@ afterEach(() => {
 // Test 1 — dry-run returns polling plan WITHOUT issuing GETs
 // =====================================================================
 
-test("await_system_job dry-run returns polling plan WITHOUT issuing GETs", async () => {
+test("await_system_job dry-run returns polling plan WITHOUT issuing GETs", async (t) => {
     _setCaptureRequest(() => {
         throw new Error("MUST NOT GET");
     });
@@ -78,6 +78,10 @@ test("await_system_job dry-run returns polling plan WITHOUT issuing GETs", async
     assert.equal(payload.postApplyEstimate.jobId, "job-1");
     assert.deepEqual(payload.postApplyEstimate.plan, [500, 1000, 2000, 4000, 5000]);
     assert.equal(payload.postApplyEstimate.timeoutMs, 60000);
+    // Snapshot Fixture 9 (Plan 02-05): D-06 + D-07 acceptance gate — pins the
+    // exponential-backoff polling plan [500,1000,2000,4000,5000] capped at 5s
+    // + 60s default timeout. Drift here means the backoff schedule changed.
+    t.assert.snapshot(payload);
 });
 
 // =====================================================================

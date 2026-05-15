@@ -45,6 +45,15 @@ const DENY_PATTERNS = [
  * Context-aware allowlist (narrow, surface-specific):
  *   1. A 32+ char alphanumeric match is allowed iff the surrounding text
  *      identifies it as an idempotencyKey field value.
+ *   2. A 32+ char alphanumeric match is allowed iff the surrounding text
+ *      identifies it as a confirmationToken field value (Plan 02-03 / D-01).
+ *      The 64-hex confirmationToken is a content-hash of public state
+ *      ({ indexSetId, deleteIndices, sorted indexNames, messageCount }) —
+ *      NOT a secret. Snapshotting it is intentional drift detection for
+ *      C1 canonicalization. The agent ECHOES the token back to apply a
+ *      delete_index_set with deleteIndices:true; it is not credential
+ *      material and cannot grant any capability that a re-issued dry-run
+ *      wouldn't issue again.
  *
  * The password-literal pattern is narrowed at the *regex* level (see
  * PASSWORD_LITERAL above) so placeholder syntax like `<redacted>` never
@@ -57,6 +66,9 @@ function isAllowedMatch(content, match, regex, matchIndex) {
         // Match the JSON-stringified shape: `"idempotencyKey": "<32 hex>"`
         // (with optional whitespace and the colon/equals separator).
         if (/idempotencyKey['"]?\s*[:=]\s*['"]?$/.test(context)) return true;
+        // Plan 02-05: 64-hex confirmationToken (D-01) is a sha-256 over public
+        // state, not a secret. Mirrors the idempotencyKey context check above.
+        if (/confirmationToken['"]?\s*[:=]\s*['"]?$/.test(context)) return true;
     }
     return false;
 }
