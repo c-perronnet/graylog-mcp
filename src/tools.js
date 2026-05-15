@@ -1388,4 +1388,58 @@ export const toolDefinitions = [
             required: ["ruleId"],
         },
     },
+    // ====================================================================
+    // Phase 4 Plan 04 — simulate_pipeline_rule (PIPE-12; M3 acceptance gate).
+    //
+    // POST /api/system/pipelines/rule/simulate. The returned Message DTO
+    // shows the post-rule field map — agent can verify semantic bugs the
+    // parser cannot (wrong function name passing parse but failing at
+    // runtime; type-coercion errors; set_field overwriting reserved fields).
+    //
+    // CRITICAL — Pitfall 1: body.message is JSON-STRINGIFIED on the wire.
+    // The wrapper accepts the friendly `{message: {field_map}}` form and
+    // emits the wire form `{message: '{"...":"..."}', rule_source: {source}}`.
+    //
+    // Pitfall 4: functions depending on Graylog internal `gl2_*` metadata
+    // (from_input, route_to_stream, remove_from_stream) cannot be
+    // meaningfully simulated — the simulator's createMessage(json) does
+    // NOT populate gl2_* fields.
+    // ====================================================================
+    {
+        name: "simulate_pipeline_rule",
+        description: "Simulate a pipeline rule against a sample message. Returns the post-rule message DTO so the agent can verify semantic bugs the parser cannot catch (wrong function names, type-coercion errors, set_field reserved-field collisions). Accepts either typed structured intent (compiles via emit.js) OR raw DSL `ruleSource` (mutually exclusive). Pre-flights POST /api/system/pipelines/rule/parse (C4 gate carried forward) — refuses with reason `rule_parse_failed` on parse error before /simulate fires. CRITICAL Pitfall 1: the wire body's `message` field is JSON-STRINGIFIED — agent passes `{message:{source,level,...}}`, wrapper emits `{message:'{\"source\":\"host\",\"level\":6}',rule_source:{source:\"...\"}}`. Pitfall 4: functions depending on Graylog internal `gl2_*` metadata (from_input, route_to_stream, remove_from_stream) cannot be meaningfully simulated — use only for set_field / type-coercion / field-comparison cases. No Graylog state mutation; routes through defineMutatingHandler for uniform dryRun + writable inheritance (D-09).",
+        inputSchema: {
+            type: "object",
+            properties: {
+                connectionName: { type: "string", description: "Optional per-call connection override" },
+                dryRun: { type: "boolean", description: "Default true. Set to false to actually call /simulate (no Graylog state mutation either way)." },
+                idempotencyKey: { type: "string", description: "Optional agent-supplied idempotency key" },
+                structured: { type: "object", description: "Typed structured intent (RuleSpec: {name, when, then}). Compiles to DSL via emit.js BEFORE /simulate. Mutually exclusive with ruleSource." },
+                ruleSource: { type: "string", description: "Raw rule DSL string. Mutually exclusive with structured." },
+                message: { type: "object", description: "Sample message field-map (e.g. {source:'host', level:6, payload:'test'}). Wrapper JSON.stringifies this before sending — see Pitfall 1." },
+            },
+            required: ["message"],
+        },
+    },
+    // ====================================================================
+    // Phase 4 Plan 04 — list_pipeline_functions (PIPE-11; ROADMAP SC3).
+    //
+    // Surfaces the merged static + live catalogue via Plan 04-01's
+    // getMergedCatalogue (1 GET per connection per process; live wins on
+    // collision; Pitfall 5 live-only names accepted).
+    // ====================================================================
+    {
+        name: "list_pipeline_functions",
+        description: "List Graylog pipeline-rule built-in functions (merged static catalogue + live overlay). The static baseline (133 hand-curated entries from RESEARCH §Built-in Function Catalogue) is overlaid with the live response from GET /api/system/pipelines/rule/functions — live wins on name collision (Graylog is authoritative); static fills description gaps; live-only names (newer Graylog versions) surface with source:'live' (Pitfall 5 fix). Cached per-connection per-process (1 GET per connection per server lifetime). Optional filters: `category` (e.g. 'strings', 'dates') and `deprecated_only` (boolean). Narrow projection [name, signature, category, source, deprecated]; use fields:'all' for the full entry including oneLineDescription + sourceRef.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                connectionName: { type: "string" },
+                fields: { type: ["array", "string"], description: "Projection: array of field names, or the literal string 'all' for the full entry." },
+                limit: { type: "number" },
+                category: { type: "string", description: "Optional filter by category (e.g. 'strings', 'dates', 'conversion')." },
+                deprecated_only: { type: "boolean", description: "If true, return only entries with deprecated:true." },
+            },
+        },
+    },
 ];

@@ -22,6 +22,8 @@ import { handleUpdatePipelineRule } from "./update-pipeline-rule.js";
 import { handleConnectPipelinesToStream } from "./connect-pipelines-to-stream.js";
 import { handleDisconnectPipelinesFromStream } from "./disconnect-pipelines-from-stream.js";
 import { handleDeletePipelineRule } from "./delete-pipeline-rule.js";
+import { handleSimulatePipelineRule } from "./simulate-pipeline-rule.js";
+import { handleListPipelineFunctions } from "./list-pipeline-functions.js";
 
 register("list_pipelines", handleListPipelines);
 register("get_pipeline", handleGetPipeline);
@@ -35,3 +37,5 @@ register("update_pipeline_rule", handleUpdatePipelineRule);
 register("connect_pipelines_to_stream", handleConnectPipelinesToStream);
 register("disconnect_pipelines_from_stream", handleDisconnectPipelinesFromStream);
 register("delete_pipeline_rule", handleDeletePipelineRule);
+register("simulate_pipeline_rule", handleSimulatePipelineRule);
+register("list_pipeline_functions", handleListPipelineFunctions);
