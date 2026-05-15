@@ -28,9 +28,9 @@ The load-bearing safety story this phase delivers is **C1 mitigation**: Graylog 
 - **D-10:** `create_index_set` REQUIRES both `rotation_strategy` + `rotation_strategy_config` AND `retention_strategy` + `retention_strategy_config`. NO sensible defaults — destruction policies must never be defaulted.
 - **D-11:** If `changes` includes `rotation_strategy`, the wrapper REQUIRES `rotation_strategy_config` in the same `changes` object — strategy class and config are atomic. Same rule for retention. Top-level fields (title, description, default, regular) use field-level partial-update per D-03 (Phase 1).
 - **D-12:** When neither strategy is in `changes`, the wire body's strategy blocks are absent (Phase 1 D-03 strict no-echo). Agent can update a title without re-asserting the rotation strategy. **(See Pitfall U1 — this is the load-bearing 7.0.6 verification item.)**
-- **D-13:** `set_default_index_set` pre-flights `GET /system/indices/index_sets/{id}` and reads the `regular`/`can_be_default` field. If `regular: false` (events-style index set), the dry-run returns a structured error with `reason: "non_regular_index_set"`. Mitigates pitfall m2.
-- **D-14:** `cycle_deflector` returns `{ async, job_id, job_id_observable_at, note: "Call await_system_job to wait for completion." }`. Does NOT auto-block. **(See §Cycle Deflector Behavior — this requires verification against 7.0.6; the source-of-record shows the endpoint is synchronous and returns void.)**
-- **D-15:** Every Phase 2 mutating tool that triggers a Graylog system job (today: `delete_index_set` with `deleteIndices: true`; conditionally `cycle_deflector` if it returns a job ID on 7.0.6) returns uniform async envelope: `{ async: true, job_id, job_id_observable_at: "/system/jobs", message }`. HTTP 204 from Graylog does NOT mean the work is done.
+- **D-13:** (UPDATED 2026-05-15 in CONTEXT.md) `set_default_index_set` pre-flights `GET /system/indices/index_sets/{id}` and reads `can_be_default: boolean`. If `can_be_default: false`, dry-run returns structured error with `reason: "default_eligibility_failed"`. Mitigates pitfall m2 and absorbs any future Graylog eligibility rules.
+- **D-14:** (UPDATED 2026-05-15 in CONTEXT.md) `cycle_deflector` is SYNCHRONOUS in 7.0.6 (source-verified). Returns `{ rotated, message, side_effects.observable_at: "/system/jobs", side_effects.describes: "closed-index range rebuild" }`. No async envelope on the primary tool.
+- **D-15:** (UPDATED 2026-05-15 in CONTEXT.md) Async envelope for tools that trigger Graylog system jobs (today: `delete_index_set` with `deleteIndices: true`) is `{ async: true, job_id_observable_at: "/system/jobs", message: "..." }`. `job_id` is DELIBERATELY ABSENT because Graylog's DELETE returns 204 with no body. `message` contains the target indexSetId so the agent can match the cleanup job's `info` field via `await_system_job(info_substring)`.
 - **D-16:** Phase 0 D-07 (writable-flag short-circuit) applies uniformly. `delete_index_set` cannot execute against a `writable: false` connection regardless of the `deleteIndices` value — writable gate fires BEFORE destruction-confirmation gate.
 - **D-17:** `create_index_set` dry-run uses the `__SERVER_ASSIGNED__` sentinel for the not-yet-known index-set ID. Established in Phase 0. Tool description warns against reusing the placeholder ID across a multi-step flow.
 
@@ -722,7 +722,7 @@ const current = await client.request("GET",
 
 if (current.can_be_default === false) {
     // Surface the 409 in dry-run BEFORE any PUT is attempted.
-    // The wrapper renders this as { isError: true, reason: "non_regular_index_set" }.
+    // The wrapper renders this as { isError: true, reason: "default_eligibility_failed" } (UPDATED D-13).
     throw new NonRegularIndexSetError(
         `Index set "${current.title}" (${args.indexSetId}) is not eligible as the default index set ` +
         `(can_be_default: false). This typically means it's an events-style or system index set. ` +
@@ -1001,7 +1001,7 @@ Phase 2 is **partly** rename/refactor-shaped (the cascades amendment to `handler
 
 **How to avoid:** D-13 pre-flight inside `set-default-index-set.js build()` — GET the target's IndexSetResponse, inspect `can_be_default: boolean`, surface a structured error in dry-run if false.
 
-**Warning signs:** Snapshot fixture for `set_default_index_set against non-regular index set` MUST show the dry-run error with `reason: "non_regular_index_set"` and a helpful message naming `can_be_default: false`.
+**Warning signs:** Snapshot fixture for `set_default_index_set against ineligible index set` MUST show the dry-run error with `reason: "default_eligibility_failed"` (UPDATED D-13) and a helpful message naming `can_be_default: false`.
 
 ### Pitfall m3: Deflector cycle is destructive of the current write index
 
@@ -1216,7 +1216,7 @@ Phase 1 shipped 5 fixtures (Plan 01-05 §"5 byte-identical snapshot fixtures"). 
 | 4 | `delete_index_set deleteIndices:false (no token)` | `preview.body === undefined`; `preview.path` ends `?delete_indices=false`; **no `confirmationToken` field in the preview JSON** (D-03); `applyHint: "Re-call with dryRun: false to apply"`; `cascades` ABSENT (no preflight needed) |
 | 5 | `delete_index_set deleteIndices:true against empty index set (token + messageCount:0)` | `confirmationToken: <64 hex>` present; `cascades.indices: []`; `cascades.messageCount: 0`; `cascades.indexCount: 0`; `postApplyEstimate.async: true` |
 | 6 | `delete_index_set deleteIndices:true against populated index set (token includes messageCount)` | `confirmationToken: <64 hex>` present; `cascades.indices: ["graylog_0","graylog_1","graylog_2"]` (sorted); `cascades.messageCount: 12345`; `cascades.indexCount: 3`; the token hash is DIFFERENT from fixture #5's by virtue of the messageCount and indexNames inputs |
-| 7 | `set_default_index_set against non-regular index set (m2 + D-13)` | Dry-run shows `{ isError: true, reason: "non_regular_index_set", content: [...]: }` — surfaces 409 BEFORE apply (ROADMAP success criterion 3) |
+| 7 | `set_default_index_set against ineligible index set (m2 + UPDATED D-13)` | Dry-run shows `{ isError: true, reason: "default_eligibility_failed", content: [...]: }` — surfaces 409 BEFORE apply (ROADMAP success criterion 3) |
 | 8 | `cycle_deflector dry-run` | `preview.method: "POST"`; `preview.path: "/api/system/deflector/<id>/cycle"`; `postApplyEstimate.async: false` (Option A); `postApplyEstimate.message` mentions the brief gap (m3 visibility); `postApplyEstimate.note` mentions async index-range rebuild |
 | 9 | `await_system_job dry-run shows polling plan` | `postApplyEstimate.jobId: <id>`; `postApplyEstimate.plan: [500,1000,2000,4000,5000]`; `postApplyEstimate.timeoutMs: 60000`; `postApplyEstimate.note` mentions the apply blocks |
 
