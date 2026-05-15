@@ -1,0 +1,67 @@
+exports[`regression: fetch_graylog_messages without active connection → error envelope 1`] = `
+{
+  "isError": true,
+  "contentType": "text",
+  "text": "No active connection. Use 'use_connection' first. Available: none"
+}
+`;
+
+exports[`regression: get_saved_search without name → error 1`] = `
+{
+  "isError": true,
+  "contentType": "text",
+  "text": "name is required"
+}
+`;
+
+exports[`regression: list_connections returns deterministic listing 1`] = `
+{
+  "isError": false,
+  "contentType": "text",
+  "text": "Available connections (* = active):\\n  test_a (http://test-a.example)\\n  test_b (http://test-b.example)"
+}
+`;
+
+exports[`regression: list_log_templates via _testConnection seam 1`] = `
+{
+  "isError": false,
+  "contentType": "text",
+  "hasText": true,
+  "topLevelKeys": [
+    "templates",
+    "total"
+  ]
+}
+`;
+
+exports[`regression: list_saved_searches returns deterministic shape 1`] = `
+{
+  "isError": false,
+  "contentType": "text",
+  "hasText": true
+}
+`;
+
+exports[`regression: use_connection rejects missing name 1`] = `
+{
+  "isError": true,
+  "contentType": "text",
+  "text": "Connection name is required"
+}
+`;
+
+exports[`regression: use_connection switches active connection 1`] = `
+{
+  "isError": false,
+  "contentType": "text",
+  "text": "Connected to \\"test_a\\" (http://test-a.example)"
+}
+`;
+
+exports[`regression: use_connection unknown name → not-found error response 1`] = `
+{
+  "isError": false,
+  "contentType": "text",
+  "text": "Connection \\"no_such_connection_xyz\\" not found. Available: test_a, test_b"
+}
+`;
