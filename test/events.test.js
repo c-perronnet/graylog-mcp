@@ -469,7 +469,11 @@ import {
     _setCaptureRequest as _setCaptureRequest_p2,
     _clearCaptureRequest as _clearCaptureRequest_p2,
 } from "../src/graylog/client.js";
-import { setActiveConnection as setActiveConnection_p2 } from "../src/config.js";
+import {
+    setActiveConnection as setActiveConnection_p2,
+    _setConnectionsForTests as _setConnectionsForTests_p2,
+    _clearConnectionsForTests as _clearConnectionsForTests_p2,
+} from "../src/config.js";
 import { GraylogNotFoundError as GraylogNotFoundError_p2 } from "../src/graylog/errors.js";
 
 beforeEach_p2(() => {
@@ -1096,4 +1100,218 @@ test_p2("dispatch resolves update_event_definition after Plan 05-02 Task 3 regis
     const payload = JSON.parse(res.content[0].text);
     assert.equal(payload.tool, "update_event_definition");
     assert.equal(payload.dryRun, true);
+});
+
+// =====================================================================
+// Plan 05-03 Task 1 — enable_event_definition + disable_event_definition
+// =====================================================================
+//
+// EVENT-06 (D-07 / Pitfall 4 — WILDCARD empty body). Both verbs:
+//   - compose through defineMutatingHandler (lifecycle-as-mutation contract;
+//     mirror of Phase 1 INPUT-07 start_input / stop_input D-08 precedent).
+//   - emit empty body per 05-U1-SMOKE.md `chosen_default` (UNREACHABLE →
+//     body: undefined).
+//   - inherit writable-gate + idempotency + dryRun:true default from
+//     mutatingBase + defineMutatingHandler.
+//
+// The wire paths diverge ONLY in the trailing segment:
+//   enable  → PUT /api/events/definitions/{id}/schedule
+//   disable → PUT /api/events/definitions/{id}/unschedule
+//
+// postApplyEstimate.state ENABLED / DISABLED makes the eventually-consistent
+// state transition visible to the agent in the dry-run preview.
+
+test_p2("enable_event_definition wire path: PUT /api/events/definitions/{id}/schedule", async () => {
+    const { handleEnableEventDefinition } = await import("../src/tools/events/enable-event-definition.js");
+    const res = await handleEnableEventDefinition({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                definitionId: "abc",
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.preview.method, "PUT");
+    assert.equal(payload.preview.path, "/api/events/definitions/abc/schedule");
+});
+
+test_p2("disable_event_definition wire path: PUT /api/events/definitions/{id}/unschedule", async () => {
+    const { handleDisableEventDefinition } = await import("../src/tools/events/disable-event-definition.js");
+    const res = await handleDisableEventDefinition({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                definitionId: "abc",
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.preview.method, "PUT");
+    assert.equal(payload.preview.path, "/api/events/definitions/abc/unschedule");
+});
+
+test_p2("enable_event_definition empty body per 05-U1-SMOKE.md chosen_default (UNREACHABLE → undefined)", async () => {
+    const { handleEnableEventDefinition } = await import("../src/tools/events/enable-event-definition.js");
+    const res = await handleEnableEventDefinition({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                definitionId: "abc",
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    // body_undefined: JSON.stringify drops `body: undefined` so the key is
+    // absent from preview. body_empty_string would set preview.body === "".
+    // Plan 05-01's 05-U1-SMOKE.md locked UNREACHABLE → body: undefined.
+    const previewHasBody = Object.prototype.hasOwnProperty.call(payload.preview, "body");
+    const bodyIsEmptyString = payload.preview.body === "";
+    assert.ok(
+        !previewHasBody || bodyIsEmptyString,
+        `enable_event_definition wire body must be undefined (omitted) OR "" per chosen_default; got ${JSON.stringify(payload.preview.body)}`,
+    );
+});
+
+test_p2("disable_event_definition empty body per 05-U1-SMOKE.md chosen_default", async () => {
+    const { handleDisableEventDefinition } = await import("../src/tools/events/disable-event-definition.js");
+    const res = await handleDisableEventDefinition({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                definitionId: "abc",
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    const previewHasBody = Object.prototype.hasOwnProperty.call(payload.preview, "body");
+    const bodyIsEmptyString = payload.preview.body === "";
+    assert.ok(
+        !previewHasBody || bodyIsEmptyString,
+        `disable_event_definition wire body must be undefined (omitted) OR "" per chosen_default; got ${JSON.stringify(payload.preview.body)}`,
+    );
+});
+
+test_p2("enable_event_definition postApplyEstimate: {id, state: ENABLED}", async () => {
+    const { handleEnableEventDefinition } = await import("../src/tools/events/enable-event-definition.js");
+    const res = await handleEnableEventDefinition({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                definitionId: "abc",
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.deepEqual(payload.postApplyEstimate, { id: "abc", state: "ENABLED" });
+});
+
+test_p2("disable_event_definition postApplyEstimate: {id, state: DISABLED}", async () => {
+    const { handleDisableEventDefinition } = await import("../src/tools/events/disable-event-definition.js");
+    const res = await handleDisableEventDefinition({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                definitionId: "abc",
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.deepEqual(payload.postApplyEstimate, { id: "abc", state: "DISABLED" });
+});
+
+test_p2("enable_event_definition writable=false short-circuits BEFORE build()", async () => {
+    _setConnectionsForTests_p2({
+        readonly: { baseUrl: "x", apiToken: "x", writable: false },
+    });
+    const { handleEnableEventDefinition } = await import("../src/tools/events/enable-event-definition.js");
+    const res = await handleEnableEventDefinition({
+        params: {
+            arguments: {
+                connectionName: "readonly",
+                definitionId: "abc",
+            },
+        },
+    });
+    assert.equal(res.isError, true);
+    assert.equal(res.reason, "connection_read_only");
+    _clearConnectionsForTests_p2();
+});
+
+test_p2("disable_event_definition writable=false short-circuits BEFORE build()", async () => {
+    _setConnectionsForTests_p2({
+        readonly: { baseUrl: "x", apiToken: "x", writable: false },
+    });
+    const { handleDisableEventDefinition } = await import("../src/tools/events/disable-event-definition.js");
+    const res = await handleDisableEventDefinition({
+        params: {
+            arguments: {
+                connectionName: "readonly",
+                definitionId: "abc",
+            },
+        },
+    });
+    assert.equal(res.isError, true);
+    assert.equal(res.reason, "connection_read_only");
+    _clearConnectionsForTests_p2();
+});
+
+test_p2("enable_event_definition inherits idempotencyKey auto-derive (32-hex)", async () => {
+    const { handleEnableEventDefinition } = await import("../src/tools/events/enable-event-definition.js");
+    const res = await handleEnableEventDefinition({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                definitionId: "abc",
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.match(payload.idempotencyKey, /^[0-9a-f]{32}$/);
+});
+
+test_p2("enable_event_definition inherits dryRun:true default (no args.dryRun)", async () => {
+    const { handleEnableEventDefinition } = await import("../src/tools/events/enable-event-definition.js");
+    const res = await handleEnableEventDefinition({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                definitionId: "abc",
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.dryRun, true);
+});
+
+// ---------- dispatch + tool-count ----------
+
+test_p2("dispatch resolves enable_event_definition + disable_event_definition after Plan 05-03 Task 1 registration", async () => {
+    const { dispatch } = await import("../src/dispatch.js");
+    await import("../src/tools/_register.js");
+    const resEnable = await dispatch({
+        params: {
+            name: "enable_event_definition",
+            arguments: {
+                _testConnection: "fake",
+                definitionId: "abc",
+            },
+        },
+    });
+    const payloadEnable = JSON.parse(resEnable.content[0].text);
+    assert.equal(payloadEnable.tool, "enable_event_definition");
+    assert.equal(payloadEnable.dryRun, true);
+
+    const resDisable = await dispatch({
+        params: {
+            name: "disable_event_definition",
+            arguments: {
+                _testConnection: "fake",
+                definitionId: "abc",
+            },
+        },
+    });
+    const payloadDisable = JSON.parse(resDisable.content[0].text);
+    assert.equal(payloadDisable.tool, "disable_event_definition");
+    assert.equal(payloadDisable.dryRun, true);
 });
