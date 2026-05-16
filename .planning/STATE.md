@@ -2,19 +2,19 @@
 gsd_state_version: 1.0
 milestone: v2.3
 milestone_name: milestone
-status: Ready to execute
-last_updated: "2026-05-16T04:25:46.152Z"
+status: Phase complete — ready for verification
+last_updated: "2026-05-16T04:44:27.281Z"
 progress:
   total_phases: 8
-  completed_phases: 7
+  completed_phases: 8
   total_plans: 41
-  completed_plans: 40
-  percent: 98
+  completed_plans: 41
+  percent: 100
 ---
 
 # Project Memory: Graylog MCP — Full Admin Surface
 
-**Last updated:** 2026-05-16 (Plan 07-02 complete — HARD-02 `list_admin_tools` meta-tool + HARD-04 c8 coverage baseline: pure-static handler in `src/tools/meta/list-admin-tools.js` classifies all 91 tools into 9 domains via DOMAIN_OVERRIDES + DOMAIN_FROM_SEGMENT (singular AND plural keys) with zero "uncategorized" fallthrough; 6 RED→GREEN contract tests + 1 schema-parity test in `test/list-admin-tools.test.js` + `test/schema-parity.test.js`; tool count 90 → 91 (the +1 net-new tool for Phase 7 per CONTEXT D-12); c8@^10.1.3 added as the ONLY new npm dep this milestone; `npm run coverage` baseline = 92.53% statements / 79.74% branches / 86.9% functions / 92.53% lines; 4 deviations auto-fixed in Task 1 GREEN (all targeting domain-classification maps — create_app_health_dashboard mis-keyed, cycle_deflector uncategorized, plural-segment misses, connect/disconnect_pipelines_* mis-routed to streams); tests 1055 → 1062; Phase 7 Plan 3 (HARD-03 read-tool smoke + MILESTONE-SUMMARY aggregation + HARD-05 streams-paginated migration doc) up next)
+**Last updated:** 2026-05-16 (Plan 07-03 complete — HARD-03 v7-vs-v6 read-tool smoke + HARD-05 streams-paginated migration doc + MILESTONE-SUMMARY aggregation: 5 v7.2 response fixtures + 11 smoke tests in test/v7-read-tool-smoke.test.js cover the 5 critical drift surfaces from PITFALLS.md backward-compat — GET /api/streams (deprecated bare path), POST /api/views/search/sync messages envelope, POST /api/views/search/sync histogram with each of the 4 fallback strategies exercised individually via failFirstNThenSucceed factory + all-exhausted clean-isError path, POST /api/events/search, GET /api/events/definitions, GET /api/events/notifications + structural-coverage assertion via assertAllToolsRegistered pinning the v2.3 read-tool dispatch count at 20; 2 auto-fixed deviations (1 Rule-3 blocking: v2.3 read tools use raw axios via src/query.js + src/events.js, not the FOUND-02 client.js — added minimal _setHttpOverride/_clearHttpOverride seams mirroring src/clustering/_test_hooks.js's _setSearchOverride pattern; 1 Rule-1 bug: initial structural-coverage test caused 4 ENOTFOUND network leaks, switched to side-effect-free assertAllToolsRegistered helper); docs/STREAMS_DEPRECATION_MIGRATION.md publishes HARD-05 migration plan with v7.2 response-shape diff + "delete dead code" alternative (~20 min) recommended over full /paginated migration (~75 min) since the only fetchStreams consumer was displaced by Phase 3's list_streams; .planning/phases/07-final-hardening/MILESTONE-SUMMARY.md aggregates 91 tools across 9 domains / 85 v1 requirements / 1073 tests / c8 baseline 93.58% statements / 79.13% branches / 89.93% functions / 93.58% lines / 11 outstanding human-UAT items across phases 2/4/6/7 (all deferred verification, not failures); 07-VALIDATION.md flipped to status:complete, wave_0_complete:true, nyquist_compliant:true; tests 1062 → 1073; MILESTONE v3.0.0 admin-surface CLOSED)
 
 ## Project Reference
 
@@ -27,13 +27,13 @@ progress:
 
 ## Current Position
 
-Phase: 07 (final-hardening) — EXECUTING
-Plan: 3 of 3
+Phase: 07 (final-hardening) — COMPLETE (MILESTONE CLOSED)
+Plan: 3 of 3 — all closed; ready for verifier pass
 
 - **Phase**: 6 — Dashboards, Widget Templates & Blueprints (foundation landed Plan 06-01; Dashboard CRUD landed Plan 06-02 — DASH-01..05 + DASH-07 ship the C7 ACCEPTANCE GATE; widget-template library + DASH-06 add_widget_from_template landed Plan 06-03 — M7 ACCEPTANCE GATE + DASH-08 finalized + Q3 TEXT_WIDGET_PLACEHOLDER for top_error_clusters; Blueprints A landed Plan 06-04 — BLUE-04/05/06 ship setup_pipeline_for_stream (variable-length N+2 chain) + setup_long_term_archival_index (1-step chain) + setup_debug_log_dropping (3-step chain with syslog inversion); Blueprints B landed Plan 06-05 — BLUE-01/02/03 close the wire-tool surface for Phase 6: BLUE-01 setup_app_monitoring_stack HEADLINE 6-step multi-domain chain with composite step 5 preserving C7 mitigation + custom apply walker for stream_id-key resolution + BLUE-02 setup_error_alerting 1-step error-rate event def + BLUE-03 create_app_health_dashboard thin wrapper over create_dashboard with 4 default widgets pre-wired; Plan 06-06 (snapshot freeze) is the final phase plan)
 - **Plan**: 2 of 6 complete (Plan 06-02 ships the 6 dashboard CRUD tools — DASH-01 list_dashboards (narrow projection [id, title, summary, description] + Q1 WRAPPER_SIDE_TYPE_FILTER drops saved-searches even if upstream ?query=type:DASHBOARD leaks + response.views envelope unwrap per Pitfall 1), DASH-02 get_dashboard (full ViewDTO via plain async handler; 404 via wrapGraylogError; load-bearing for remove_widget pre-flight + update_dashboard GET-current overlay), DASH-03 create_dashboard (THE C7 ACCEPTANCE GATE — internal Search+View 2-step chain via executeChain; agent NEVER sees the intermediate Search ID; D-01 chain transcript surfaced via handler.js req.chain spread amendment; D-02 .strict() schema rejects agent-supplied searchId at zod parse; D-03 widget-position validator runs BEFORE the FOUND-11 existingMatches probe — orphan widget/position refuses with widget_position_integrity_violation and NO HTTP fires; wrapper-generated UUID widget IDs via randomUUID() + leading-underscore _setUUIDGeneratorForTests test seam; FOUND-11 existingMatches probe filters on view.type==="DASHBOARD" so saved-search title collisions don't count as duplicates), DASH-04 update_dashboard (STRICT_NO_ECHO partial-update with GET-current pre-flight + overlay covering title/description/summary only; UpdateDashboardSchema.changes is .strict() so searchId is rejected at parse — search-ID immutable post-creation; Pitfall 8 body.id matches URL; CreateEntityRequest envelope mirrors createDashboard), DASH-05 delete_dashboard (LEAF DELETE Phase 5 D-08 informational-cascade pattern — NO cascade-hash, NO confirmationToken, NO requireConfirm; informational cascades.widgets.count via best-effort GET pre-flight; 404/403/network failure falls through to count:0 and DELETE surfaces real error on apply), DASH-07 remove_widget (symmetric Search+View atomic two-step PUT chain — PUT /api/views/search/{searchId} FIRST stripping widget's search_types from queries[stateKey].search_types so View never references a removed search_type, then PUT /api/views/{id} stripping widget+position+widget_mapping entry; D-03 validator runs on prospective post-remove sets BEFORE wire emission; widget_not_found refusal + dashboard_missing_search_binding refusal before any PUT; Pitfall 9 acceptance — no transactional rollback; transcript surfaces failed_at_step). handler.js gained TWO amendments in Plan 06-02: req.chain spread onto dry-run preview JSON (reused by every BLUE-XX blueprint in Plans 06-04/05); _testConnection stripped from rawArgs BEFORE schema.parse so .strict() schemas don't reject the test seam (Rule 3 unblocker — landed inside Task 2 GREEN atomically). errors.js wrapGraylogError plain-Error reason surface (Rule 2 cross-cutting — surfaces [reason: <tag>] suffix + response.reason field for client-side plain Errors with structured reasons; widget_not_found, widget_position_integrity_violation, dashboard_missing_search_binding all get agent-programmatic identification parity with GraylogError instances). 42 net-new tests in test/dashboards.test.js covering all 6 tools including all C7/D-02/D-03 acceptance gates pinned by named tests. Closes DASH-01, DASH-02, DASH-03, DASH-04, DASH-05, DASH-07 (6 of 8 phase 6 dashboard requirements; DASH-06 add_widget_from_template lands in Plan 06-03; DASH-08 closed by Plan 06-01's widget-template skeleton).
 - **Status**: 1062 tests / 18 suites green (+7 net-new over Plan 07-01 baseline of 1055: 6 list_admin_tools + 1 zod-less schema-parity for list_admin_tools). All Phase 0/1/2/3/4/5/6 + Plan 07-01 contracts preserved. Tool count 90 → 91 (Plan 07-02 end; +list_admin_tools meta-tool — the +1 net-new tool for Phase 7 per CONTEXT D-12). src/graylog/errors.js NOT modified in any Plan 07-02 commit. ONE new npm dep added: c8@^10.1.3 (devDependency, per CONTEXT D-09 — the only allowed new dep this milestone). HARD-04 coverage baseline captured: 92.53% statements (16354/17674), 79.74% branches (1524/1911), 86.9% functions (385/443), 92.53% lines (16354/17674). list_admin_tools is pure-static — no Graylog connection required, the agent calls it BEFORE set_active_connection at session start to orient on the 91-tool admin surface (Pitfall M7 mitigation #3). 4 deviations auto-fixed inside Task 1 GREEN (all targeting DOMAIN_OVERRIDES + DOMAIN_FROM_SEGMENT classification maps; same "no uncategorized fallthrough" regression-test drove all fixes; net effect: full 91-tool coverage across 9 domains). assertAllToolsRegistered passes against 91 tools. HARD-02 + HARD-04 closed. Plan 07-03 (HARD-03 read-tool smoke + HARD-05 streams-paginated migration doc + MILESTONE-SUMMARY aggregation) is the milestone-closing plan.
-- **Progress bar**: `[██████████] 98%` (40 of 41 milestone plans complete after 07-02)
+- **Progress bar**: `[██████████] 100%` (41 of 41 milestone plans complete — milestone CLOSED)
 
 ## Performance Metrics
 
@@ -80,6 +80,7 @@ Plan: 3 of 3
 | Phase 06 P06 | 10min | 4 tasks | 8 files |
 | Phase 07-final-hardening P01 | ~19min | 2 tasks | 5 files |
 | Phase 07-final-hardening P02 | 7min | 2 tasks | 10 files |
+| Phase 07 P03 | 12min | 2 tasks | 11 files |
 
 ## Accumulated Context
 

@@ -13,8 +13,8 @@
 - [x] **Phase 3: Streams & Stream Rules** — Stream CRUD + stream-rule CRUD with `test_stream_match` validation and pre-delete cascade preview (rules + pipeline connections + event defs).
 - [x] **Phase 4: Pipelines, Pipeline Rules & Connections** — Pipeline CRUD + the `src/pipeline-dsl/` subsystem (emit/escape/validate/builtins), server-authoritative parse pre-flight, and `simulate_pipeline_rule`.
 - [x] **Phase 5: Events & Notifications** — Full CRUD upgrade for event definitions and notifications, with `schedule: false` default and v6→v7 aggregation-syntax migration helper.
-- [ ] **Phase 6: Dashboards, Widget Templates & Blueprints** — Dashboard CRUD via internal Search+View chain, the 8-template curated widget library, and the 6 cross-domain blueprints composed from services.
-- [ ] **Phase 7: Final Hardening** — Tool-description audit, `list_admin_tools` meta-tool, v7-vs-v6 read-tool smoke pass, c8 coverage baseline, and `/api/streams` deprecation plan.
+- [x] **Phase 6: Dashboards, Widget Templates & Blueprints** — Dashboard CRUD via internal Search+View chain, the 8-template curated widget library, and the 6 cross-domain blueprints composed from services.
+- [x] **Phase 7: Final Hardening** — Tool-description audit, `list_admin_tools` meta-tool, v7-vs-v6 read-tool smoke pass, c8 coverage baseline, and `/api/streams` deprecation plan.
 
 ## Phase Details
 
@@ -150,7 +150,7 @@
 **Plans**: 3 plans
   - [x] 07-01-PLAN.md — HARD-01 tool-description audit script + wholesale-fix pass over 96 over-budget descriptions in src/tools.js + node:test regression gate + package.json audit:tool-descriptions runner
   - [x] 07-02-PLAN.md — HARD-02 list_admin_tools meta-tool (+1 net-new tool; 90→91) + HARD-04 c8 coverage integration (only new npm devDep this milestone) + baseline % capture
-  - [ ] 07-03-PLAN.md — HARD-03 v7-vs-v6 read-tool smoke (5 fixtures, 9 tests covering critical drift surfaces from PITFALLS.md) + HARD-05 /api/streams deprecation migration doc + 07-VALIDATION.md flip + MILESTONE-SUMMARY.md
+  - [x] 07-03-PLAN.md — HARD-03 v7-vs-v6 read-tool smoke (5 fixtures, 9 tests covering critical drift surfaces from PITFALLS.md) + HARD-05 /api/streams deprecation migration doc + 07-VALIDATION.md flip + MILESTONE-SUMMARY.md
 
 ## Progress
 
