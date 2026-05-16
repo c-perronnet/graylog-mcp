@@ -18,9 +18,11 @@ import { register } from "../../dispatch.js";
 import { handleSetupLongTermArchivalIndex } from "./setup-long-term-archival-index.js";
 // Plan 06-04 Task 2 — BLUE-06.
 import { handleSetupDebugLogDropping } from "./setup-debug-log-dropping.js";
+// Plan 06-04 Task 3 — BLUE-04.
+import { handleSetupPipelineForStream } from "./setup-pipeline-for-stream.js";
 
 register("setup_long_term_archival_index", handleSetupLongTermArchivalIndex);
 register("setup_debug_log_dropping", handleSetupDebugLogDropping);
+register("setup_pipeline_for_stream", handleSetupPipelineForStream);
 
-// Plan 06-04 Task 3 — BLUE-04 (setup_pipeline_for_stream) registers here.
 // Plan 06-05 — BLUE-01/02/03 register here.

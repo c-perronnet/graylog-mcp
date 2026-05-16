@@ -1655,11 +1655,11 @@ test("add_widget_from_template surfaces builder error when field_value_distribut
 // The pipelines.test.js count assertion pins the Plan 06-02 baseline at 83;
 // this test pins the Plan 06-04 delta.
 
-test("assertAllToolsRegistered passes after Plan 06-04 Task 2 (count = 86; +BLUE-05 + BLUE-06)", async () => {
+test("assertAllToolsRegistered passes after Plan 06-04 (count = 87; +BLUE-04/05/06 blueprints A)", async () => {
     const { dispatch, assertAllToolsRegistered } = await import("../src/dispatch.js");
     await import("../src/tools/_register.js");
     const { toolDefinitions } = await import("../src/tools.js");
     assertAllToolsRegistered(toolDefinitions);
     assert.equal(typeof dispatch, "function");
-    assert.equal(toolDefinitions.length, 86, `Expected 86 tools after Plan 06-04 Task 2 (BLUE-05 + BLUE-06 shipped); got ${toolDefinitions.length}`);
+    assert.equal(toolDefinitions.length, 87, `Expected 87 tools after Plan 06-04 end (BLUE-04/05/06 blueprints A shipped); got ${toolDefinitions.length}`);
 });

@@ -10,6 +10,7 @@
 
 import { z } from "zod";
 import { mutatingBase } from "../_shared/schemas.js";
+import { RuleSpecSchema } from "../pipelines/schemas.js";
 
 // =====================================================================
 // BLUE-05 — setup_long_term_archival_index
@@ -43,5 +44,21 @@ export const SetupDebugLogDroppingSchema = mutatingBase.extend({
     ruleTitle: z.string().optional(),           // default: "drop_sub_${minLevel}"
 });
 
-// BLUE-04 (setup_pipeline_for_stream) schema lands in Plan 06-04 Task 3.
+// =====================================================================
+// BLUE-04 — setup_pipeline_for_stream (Plan 06-04 Task 3)
+// Variable-length chain: N createRule steps (one per transform) +
+// 1 createPipeline + 1 connectToStream → N+2 total.
+// Reuses Phase 4's RuleSpecSchema for each transform; emitRule compiles
+// structured intent → DSL source string at build() time.
+// =====================================================================
+
+export const SetupPipelineForStreamSchema = mutatingBase.extend({
+    streamId: z.string().min(1),
+    pipelineTitle: z.string().min(1),
+    pipelineDescription: z.string().optional(),
+    transforms: z.array(RuleSpecSchema)
+        .min(1, "at least one transform")
+        .max(20, "max 20 transforms"),
+});
+
 // Plan 06-05 adds the remaining 3 schemas (BLUE-01/02/03).

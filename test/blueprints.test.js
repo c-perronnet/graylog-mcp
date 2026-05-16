@@ -9,7 +9,11 @@
 //     inversion in rule source, pipeline references rule by title, step 3
 //     placeholder + dependsOn for pipeline id, apply-time substitution,
 //     zod bounds on minLevel.
-//   - (Task 3) BLUE-04 setup_pipeline_for_stream — appends below
+//   - BLUE-04 setup_pipeline_for_stream: variable-length chain (N+2 for
+//     N=1 and N=3), emitRule reuse, pipeline source references each rule
+//     by title in order, final-step placeholder + dependsOn, apply-time
+//     substitution, zod bounds (min/max transforms), services-layer
+//     compose contract (grep-pinned).
 //
 // Test patterns mirror test/dashboards.test.js + test/blueprint-chain.test.js:
 //   - _testConnection seam + _setCaptureRequest mocks substitute for axios.
@@ -24,10 +28,12 @@ import "./snapshot-config.js";
 
 import { handleSetupLongTermArchivalIndex } from "../src/tools/blueprints/setup-long-term-archival-index.js";
 import { handleSetupDebugLogDropping } from "../src/tools/blueprints/setup-debug-log-dropping.js";
+import { handleSetupPipelineForStream } from "../src/tools/blueprints/setup-pipeline-for-stream.js";
 
 import {
     SetupLongTermArchivalIndexSchema,
     SetupDebugLogDroppingSchema,
+    SetupPipelineForStreamSchema,
 } from "../src/tools/blueprints/schemas.js";
 
 import {
@@ -327,12 +333,235 @@ test("setup_debug_log_dropping zod rejects minLevel:8 and minLevel:-1", async ()
 });
 
 // =====================================================================
-// Services-layer compose contract (D-09).
-// Covers BLUE-05 + BLUE-06 after Task 2. Task 3 will extend with BLUE-04.
+// BLUE-04 — setup_pipeline_for_stream
 // =====================================================================
 
-test("BLUE-05/06 source files import ONLY from src/services/* (D-09 contract)", () => {
+// Simple RuleSpec fixture (has_field condition + set_field action).
+const SIMPLE_TRANSFORM = {
+    name: "set_status",
+    when: { type: "has_field", field: "status" },
+    then: [{
+        type: "set_field",
+        field: "is_complete",
+        value: { type: "literal", value: true },
+    }],
+};
+
+function makeNamedTransform(name) {
+    return {
+        name,
+        when: { type: "has_field", field: "x" },
+        then: [{ type: "function_call_statement", name: "drop_message", args: { positional: [] } }],
+    };
+}
+
+test("setup_pipeline_for_stream with 1 transform emits 3-step chain (N+2 where N=1)", async () => {
+    const res = await handleSetupPipelineForStream({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                streamId: "stream-1",
+                pipelineTitle: "App Errors Pipeline",
+                transforms: [SIMPLE_TRANSFORM],
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.tool, "setup_pipeline_for_stream");
+    assert.ok(Array.isArray(payload.chain));
+    assert.equal(payload.chain.length, 3);  // N+2 with N=1
+    assert.equal(payload.chain[0].tool, "create_pipeline_rule");
+    assert.equal(payload.chain[1].tool, "create_pipeline");
+    assert.equal(payload.chain[2].tool, "connect_pipelines_to_stream");
+});
+
+test("setup_pipeline_for_stream with 3 transforms emits 5-step chain (N+2 where N=3)", async () => {
+    const res = await handleSetupPipelineForStream({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                streamId: "stream-1",
+                pipelineTitle: "Triple Transform Pipeline",
+                transforms: [
+                    makeNamedTransform("a"),
+                    makeNamedTransform("b"),
+                    makeNamedTransform("c"),
+                ],
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.chain.length, 5);
+    // Steps 1..3 = create_pipeline_rule, step 4 = create_pipeline, step 5 = connect.
+    assert.equal(payload.chain[0].tool, "create_pipeline_rule");
+    assert.equal(payload.chain[1].tool, "create_pipeline_rule");
+    assert.equal(payload.chain[2].tool, "create_pipeline_rule");
+    assert.equal(payload.chain[3].tool, "create_pipeline");
+    assert.equal(payload.chain[4].tool, "connect_pipelines_to_stream");
+});
+
+test("setup_pipeline_for_stream step 1 rule source compiled via emitRule (reuses Phase 4 emitter)", async () => {
+    const res = await handleSetupPipelineForStream({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                streamId: "stream-1",
+                pipelineTitle: "Status-tagged",
+                transforms: [SIMPLE_TRANSFORM],
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    const ruleSource = payload.chain[0].request.body.source;
+    // emitRule outputs: `rule "set_status"\nwhen\n    has_field("status")\nthen\n    set_field(...);\nend`
+    assert.match(ruleSource, /^rule "set_status"/);
+    assert.match(ruleSource, /has_field\("status"\)/);
+    assert.match(ruleSource, /set_field\(/);
+    assert.match(ruleSource, /\nend$/);
+});
+
+test("setup_pipeline_for_stream pipeline source references each rule by title in array order", async () => {
+    const res = await handleSetupPipelineForStream({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                streamId: "stream-1",
+                pipelineTitle: "Ordered Transforms",
+                transforms: [
+                    makeNamedTransform("a"),
+                    makeNamedTransform("b"),
+                    makeNamedTransform("c"),
+                ],
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    const pipelineSource = payload.chain[3].request.body.source;
+    assert.match(pipelineSource, /rule "a"/);
+    assert.match(pipelineSource, /rule "b"/);
+    assert.match(pipelineSource, /rule "c"/);
+    // Order: index of "a" must be before "b" must be before "c".
+    const idxA = pipelineSource.indexOf('rule "a"');
+    const idxB = pipelineSource.indexOf('rule "b"');
+    const idxC = pipelineSource.indexOf('rule "c"');
+    assert.ok(idxA < idxB, "rule a must appear before rule b");
+    assert.ok(idxB < idxC, "rule b must appear before rule c");
+});
+
+test("setup_pipeline_for_stream final step is connectToStream with placeholder for pipeline id", async () => {
+    const res = await handleSetupPipelineForStream({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                streamId: "stream-XYZ",
+                pipelineTitle: "Two transforms",
+                transforms: [
+                    makeNamedTransform("first"),
+                    makeNamedTransform("second"),
+                ],
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    const N = 2;
+    const finalStep = payload.chain[payload.chain.length - 1];
+    assert.equal(finalStep.step, N + 2);
+    assert.equal(finalStep.tool, "connect_pipelines_to_stream");
+    assert.equal(finalStep.request.body.stream_id, "stream-XYZ");
+    assert.equal(finalStep.request.body.pipeline_ids[0], `__SERVER_ASSIGNED__step${N + 1}`);
+    assert.equal(finalStep.dependsOn.from, `step${N + 1}.response.id`);
+    assert.equal(finalStep.dependsOn.as, "pipeline_ids[0]");
+});
+
+test("setup_pipeline_for_stream apply walks chain; final body's pipeline_ids substituted", async () => {
+    // 2 transforms → 4-step chain (2 rules + 1 pipeline + 1 connect)
+    const route = multiCapture([
+        {
+            method: "POST",
+            pathPattern: "/api/system/pipelines/rule",
+            response: (req) => ({ id: `r-${req.body.title}`, title: req.body.title }),
+        },
+        {
+            method: "POST",
+            pathPattern: "/api/system/pipelines/pipeline",
+            response: { id: "p-99", title: "Two transforms" },
+        },
+        {
+            method: "POST",
+            pathPattern: "/api/system/pipelines/connections/to_stream",
+            response: (req) => req.body,
+        },
+    ]);
+    _setCaptureRequest(route);
+
+    const res = await handleSetupPipelineForStream({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                streamId: "stream-1",
+                pipelineTitle: "Two transforms",
+                transforms: [
+                    makeNamedTransform("first"),
+                    makeNamedTransform("second"),
+                ],
+                dryRun: false,
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.applied, true);
+    // 4 HTTP calls (2 rules + 1 pipeline + 1 connect)
+    assert.equal(route.calls.length, 4);
+    // Final connect call: pipeline_ids must contain the real id "p-99", NOT the placeholder.
+    const connectCall = route.calls[3];
+    assert.equal(connectCall.path, "/api/system/pipelines/connections/to_stream");
+    assert.deepEqual(connectCall.body, {
+        stream_id: "stream-1",
+        pipeline_ids: ["p-99"],
+    });
+});
+
+test("setup_pipeline_for_stream zod rejects empty transforms", async () => {
+    const res = await handleSetupPipelineForStream({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                streamId: "stream-1",
+                pipelineTitle: "Empty",
+                transforms: [],
+            },
+        },
+    });
+    assert.equal(res.isError, true);
+    assert.match(res.content[0].text, /at least one transform/i);
+});
+
+test("setup_pipeline_for_stream zod rejects 21 transforms (max 20)", async () => {
+    const transforms = Array.from({ length: 21 }, (_, i) => makeNamedTransform(`t${i}`));
+    const res = await handleSetupPipelineForStream({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                streamId: "stream-1",
+                pipelineTitle: "Too many",
+                transforms,
+            },
+        },
+    });
+    assert.equal(res.isError, true);
+    assert.match(res.content[0].text, /max 20 transforms/i);
+});
+
+// =====================================================================
+// Services-layer compose contract (D-09 / Task 3 done-criterion).
+// Architectural boundary: blueprints MUST compose from src/services/* only,
+// never from src/tools/<domain>/*. This test reads each blueprint source
+// file and greps for forbidden imports.
+// =====================================================================
+
+test("BLUE-04/05/06 source files import ONLY from src/services/* (D-09 contract)", () => {
     const files = [
+        "src/tools/blueprints/setup-pipeline-for-stream.js",
         "src/tools/blueprints/setup-long-term-archival-index.js",
         "src/tools/blueprints/setup-debug-log-dropping.js",
     ];
@@ -370,6 +599,17 @@ test("SetupLongTermArchivalIndexSchema rejects missing name", () => {
 test("SetupDebugLogDroppingSchema rejects non-integer minLevel", () => {
     assert.throws(
         () => SetupDebugLogDroppingSchema.parse({ streamId: "s-1", minLevel: 3.5 }),
+        (err) => err?.name === "ZodError",
+    );
+});
+
+test("SetupPipelineForStreamSchema rejects malformed transform (missing then)", () => {
+    assert.throws(
+        () => SetupPipelineForStreamSchema.parse({
+            streamId: "s-1",
+            pipelineTitle: "X",
+            transforms: [{ name: "broken", when: { type: "has_field", field: "x" } }],
+        }),
         (err) => err?.name === "ZodError",
     );
 });

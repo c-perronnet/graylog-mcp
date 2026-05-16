@@ -1793,5 +1793,27 @@ export const toolDefinitions = [
             required: ["streamId", "minLevel"],
         },
     },
-    // Plan 06-04 Task 3 — setup_pipeline_for_stream appends here.
+    {
+        name: "setup_pipeline_for_stream",
+        description: "Blueprint (BLUE-04): create a pipeline (with N rules from structured-intent transforms) and connect it to a stream. Variable-length N+2-step chain: N createRule steps (one per transform, DSL compiled via Phase 4's pipeline-dsl/emit.js — every literal escape-routed) + 1 createPipeline (single-stage referencing all N rule titles in order) + 1 connectToStream. Apply walks executeChain — pipeline_ids substituted from step N+1's pipeline id at apply-time. transforms is bounded 1..20 (DoS cap); for >20 transforms partition across multiple invocations. Schema: { streamId, pipelineTitle, pipelineDescription?, transforms: RuleSpec[1..20] } where RuleSpec = {name, when:Condition, then:Action[]} (same shape as create_pipeline_rule's `structured`).",
+        inputSchema: {
+            type: "object",
+            properties: {
+                connectionName: { type: "string", description: "Optional per-call connection override" },
+                dryRun: { type: "boolean", description: "Default true. Set to false to apply." },
+                idempotencyKey: { type: "string", description: "Optional agent-supplied idempotency key" },
+                streamId: { type: "string", description: "Target stream ID (from list_streams) to attach the new pipeline to." },
+                pipelineTitle: { type: "string", description: "Title for the new pipeline (REQUIRED)." },
+                pipelineDescription: { type: "string", description: "Optional pipeline description." },
+                transforms: {
+                    type: "array",
+                    description: "Array of 1..20 RuleSpec structured-intent transforms. Each RuleSpec = {name, when: Condition, then: Action[]} — same shape as create_pipeline_rule's `structured` arg. Each transform becomes one pipeline rule + a stage entry in the new pipeline (in array order).",
+                    items: { type: "object" },
+                    minItems: 1,
+                    maxItems: 20,
+                },
+            },
+            required: ["streamId", "pipelineTitle", "transforms"],
+        },
+    },
 ];
