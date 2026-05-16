@@ -130,13 +130,16 @@ export const handleDeleteEventNotification = defineMutatingHandler({
             cascades: { event_definitions: eventDefs },
             postApplyEstimate: { id: args.notificationId, deleted: true },
             _confirmationToken: confirmationToken,
+            _notificationId: args.notificationId,
         };
     },
     async apply(client, req) {
-        // D-03 re-fetch + drift refusal. notificationId is extracted from
-        // req.path so apply() is fully driven by the build()-emitted descriptor.
-        const m = req.path.match(/notifications\/([^/?]+)/);
-        const notificationId = m ? m[1] : "unknown";
+        // D-03 re-fetch + drift refusal. notificationId is stashed on the
+        // request descriptor at build() time (WR-02 fix 2026-05-16); the
+        // legacy path-regex fallback remains for back-compat with any
+        // hand-constructed descriptors.
+        const notificationId = req._notificationId
+            ?? (req.path.match(/notifications\/([^/?]+)/)?.[1] ?? "unknown");
 
         // Re-fetch may throw GraylogValidationError(reason:cascade_preflight_failed);
         // the wrapper's outer try/catch routes that through wrapGraylogError.

@@ -9,8 +9,10 @@
 //   src/tools/pipelines/update-pipeline-rule.js for prior landings): the wire
 //   body is built ONLY from args.changes.{title, description, priority, alert,
 //   config, field_spec, key_spec, notification_settings, notifications, storage,
-//   state, remediation_steps, event_procedure, event_summary_template}. NO
-//   round-trip from a GET — scheduler READ_ONLY contamination is impossible.
+//   remediation_steps, event_procedure, event_summary_template}. NO round-trip
+//   from a GET — scheduler READ_ONLY contamination is impossible. `state` is
+//   intentionally NOT in this set — call enable_event_definition /
+//   disable_event_definition to flip state.
 //
 // Pitfall 5: scheduler field is @JsonProperty.Access.READ_ONLY; round-tripping
 //   a GET response back as PUT body returns 400. STRICT_NO_ECHO prevents this
