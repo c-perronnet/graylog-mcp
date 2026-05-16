@@ -24,15 +24,33 @@ import "./snapshot-config.js";
 // recognised at the *regex* level rather than allowlisted as a specific string.
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const SNAPSHOTS_DIR = join(__dirname, "__snapshots__");
-// Plan 04-06: Phase 4 snapshot fixtures live under test/snapshots/ (a NEW
-// per-domain layout for the closing plan). The node:test snapshot resolver
-// puts the .snapshot file in a sibling `__snapshots__/` directory, so the
-// Phase 4 fixtures land at test/snapshots/__snapshots__/. The auth-redaction
-// scan must cover both directories so the lint inherits automatically.
-const ADDITIONAL_SNAPSHOT_DIRS = [
-    join(__dirname, "snapshots", "__snapshots__"),
-];
+// Phase 0 WR-03 / F-03: the auth-redaction scanner used to walk a
+// hand-maintained list of `__snapshots__/` directories. That list missed
+// `test/regression/__snapshots__/` and would silently miss every per-domain
+// snapshot directory landed by future phases. The list is now derived by
+// recursively walking `test/` and collecting every `__snapshots__/`
+// directory found, so the lint inherits the new directory automatically
+// whenever a new test domain lands its first snapshot.
+function findAllSnapshotDirs(root) {
+    const dirs = [];
+    let entries;
+    try {
+        entries = readdirSync(root, { withFileTypes: true });
+    } catch {
+        return dirs;
+    }
+    for (const entry of entries) {
+        if (!entry.isDirectory()) continue;
+        if (entry.name === "node_modules") continue;
+        const child = join(root, entry.name);
+        if (entry.name === "__snapshots__") {
+            dirs.push(child);
+        } else {
+            dirs.push(...findAllSnapshotDirs(child));
+        }
+    }
+    return dirs;
+}
 
 // Password-literal regex. The value is captured in group 1 so a structural
 // "is this a `<...>` placeholder?" check can be applied without growing a
@@ -94,7 +112,7 @@ function isAllowedMatch(content, match, regex, matchIndex) {
 }
 
 test("no snapshot fixture contains Authorization header, apiToken-like strings, or password literals", () => {
-    const dirsToScan = [SNAPSHOTS_DIR, ...ADDITIONAL_SNAPSHOT_DIRS];
+    const dirsToScan = findAllSnapshotDirs(__dirname);
     const violations = [];
 
     for (const dir of dirsToScan) {
