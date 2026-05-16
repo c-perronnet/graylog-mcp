@@ -168,7 +168,10 @@ export const handleAwaitSystemJob = defineMutatingHandler({
         const deadline = Date.now() + timeoutMs;
         let i = 0;
         while (Date.now() < deadline) {
-            const delay = BACKOFF_SCHEDULE[Math.min(i, BACKOFF_SCHEDULE.length - 1)];
+            const remaining = deadline - Date.now();
+            const scheduled = BACKOFF_SCHEDULE[Math.min(i, BACKOFF_SCHEDULE.length - 1)];
+            const delay = Math.min(scheduled, remaining);
+            if (delay <= 0) break;
             await _sleepImpl(delay);
             i++;
             try {
