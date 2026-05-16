@@ -2395,7 +2395,7 @@ test("disconnect_pipelines_from_stream no-op detach (already-not-connected): exi
     assert.equal(payload.existingMatches[0].similarity_reason, "not_currently_connected");
 });
 
-test("disconnect_pipelines_from_stream 404 on GET → currentSet empty; existingMatches lists all args as not_currently_connected; POST fires with empty set", async () => {
+test("disconnect_pipelines_from_stream 404 on GET → no-op apply: NO POST fires (WR-03 fix); existingMatches lists args as not_currently_connected", async () => {
     const captured = [];
     _setCaptureRequest((req) => {
         captured.push(req);
@@ -2424,8 +2424,10 @@ test("disconnect_pipelines_from_stream 404 on GET → currentSet empty; existing
     });
     assert.equal(res.isError, undefined);
     const posts = captured.filter((r) => r.method === "POST");
-    assert.equal(posts.length, 1, "POST still fires on 404 path (consistency)");
-    assert.deepEqual(posts[0].body.pipeline_ids, []);
+    assert.equal(posts.length, 0, "WR-03: POST does NOT fire when no existing record + reduced is empty");
+    // Apply result should still surface the no-op envelope
+    const body = JSON.parse(res.content[0].text);
+    assert.equal(body.result.body.noop, true);
 });
 
 test("disconnect_pipelines_from_stream 404 case dry-run: existingMatches lists all args as not_currently_connected", async () => {

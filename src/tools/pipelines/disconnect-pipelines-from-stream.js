@@ -7,11 +7,13 @@
 // and Z that were also attached to the stream).
 //
 // 404 on the GET means there's no connection record yet → currentSet is
-// empty → reduced is empty → POST still fires with pipeline_ids: []
-// (idempotent no-op; Graylog accepts an empty pipeline_ids set, just stores
-// the record). The POST is issued for CONSISTENCY with the connect path —
-// agents see the same wire-shape regardless of whether the connection record
-// existed before.
+// empty. The wrapper does NOT issue the POST in this case (WR-03 fix
+// 2026-05-16): firing POST {pipeline_ids: []} would CREATE a connection row
+// where none existed, producing a server-side state change for what was
+// otherwise a no-op disconnect. Instead we surface `noop: true` in
+// postApplyEstimate so the agent sees the operation was structurally
+// performed without a wire write. The connect path (PIPE-13) does NOT have
+// this concern because it always grows the set.
 //
 // Idempotency: pipelines that were already NOT connected surface in
 // existingMatches with similarity_reason: "not_currently_connected" — agent
@@ -34,11 +36,13 @@ export const handleDisconnectPipelinesFromStream = defineMutatingHandler({
         // Pre-flight GET — fetch current pipeline_ids set. 404 = no record
         // (nothing to subtract from). Any other error propagates.
         let current;
+        let hadExistingRecord = true;
         try {
             current = await client.request("GET", getPath, null);
         } catch (err) {
             if (err?.isGraylogError && err.status === 404) {
                 current = { stream_id: args.streamId, pipeline_ids: [] };
+                hadExistingRecord = false;
             } else {
                 throw err;
             }
@@ -60,15 +64,31 @@ export const handleDisconnectPipelinesFromStream = defineMutatingHandler({
         }
         const reduced = [...currentSet].sort();
 
+        // WR-03 (verify-work 02..06): if NO existing connection record and
+        // the reduction yielded an empty set, the POST would CREATE a row
+        // where none existed — that's the silent server-side state change we
+        // want to avoid. Mark as noop.
+        const noop = !hadExistingRecord && reduced.length === 0;
+
         return {
             method: "POST",
             path: "/api/system/pipelines/connections/to_stream",
             body: { stream_id: args.streamId, pipeline_ids: reduced },
             existingMatches,
-            postApplyEstimate: { stream_id: args.streamId, pipeline_ids: reduced },
+            postApplyEstimate: {
+                stream_id: args.streamId,
+                pipeline_ids: reduced,
+                ...(noop ? { noop: true, reason: "no_existing_connection_record" } : {}),
+            },
+            _noop: noop,
         };
     },
-    apply: (client, req) => client.request(req.method, req.path, req.body),
+    apply: (client, req) => {
+        if (req._noop) {
+            return { stream_id: req.body.stream_id, pipeline_ids: [], noop: true };
+        }
+        return client.request(req.method, req.path, req.body);
+    },
     summarize: (args) =>
         `Disconnect ${args.pipelineIds.length} pipeline(s) from stream ${args.streamId}`,
 });
