@@ -1652,14 +1652,18 @@ test("add_widget_from_template surfaces builder error when field_value_distribut
 // (setup_pipeline_for_stream + setup_long_term_archival_index +
 // setup_debug_log_dropping) incrementally across 3 commits: Task 1 → 85
 // (BLUE-05), Task 2 → 86 (+BLUE-06), Task 3 → 87 (+BLUE-04).
-// The pipelines.test.js count assertion pins the Plan 06-02 baseline at 83;
-// this test pins the Plan 06-04 delta.
+// Plan 06-05 adds BLUE-01/02/03 across 3 atomic commits:
+//   Task 1 → 88 (+BLUE-01 setup_app_monitoring_stack)
+//   Task 2 → 89 (+BLUE-02 setup_error_alerting)
+//   Task 3 → 90 (+BLUE-03 create_app_health_dashboard)
+// The pipelines.test.js count assertion pins the cumulative count; this
+// test mirrors it.
 
-test("assertAllToolsRegistered passes after Plan 06-04 (count = 87; +BLUE-04/05/06 blueprints A)", async () => {
+test("assertAllToolsRegistered passes after Plan 06-05 Task 1 (count = 88; +BLUE-01 setup_app_monitoring_stack)", async () => {
     const { dispatch, assertAllToolsRegistered } = await import("../src/dispatch.js");
     await import("../src/tools/_register.js");
     const { toolDefinitions } = await import("../src/tools.js");
     assertAllToolsRegistered(toolDefinitions);
     assert.equal(typeof dispatch, "function");
-    assert.equal(toolDefinitions.length, 87, `Expected 87 tools after Plan 06-04 end (BLUE-04/05/06 blueprints A shipped); got ${toolDefinitions.length}`);
+    assert.equal(toolDefinitions.length, 88, `Expected 88 tools after Plan 06-05 Task 1 (BLUE-01 setup_app_monitoring_stack shipped); got ${toolDefinitions.length}`);
 });

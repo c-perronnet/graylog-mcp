@@ -1816,4 +1816,50 @@ export const toolDefinitions = [
             required: ["streamId", "pipelineTitle", "transforms"],
         },
     },
+    // ====================================================================
+    // Phase 6 Plan 05 — Blueprints B (BLUE-01/02/03).
+    //
+    // BLUE-01 (setup_app_monitoring_stack) is the HEADLINE blueprint —
+    // a 6-step multi-domain chain producing a complete monitoring
+    // environment (stream + pipeline + dashboard + error alert) from a
+    // single agent intent. BLUE-02 (setup_error_alerting) is a 1-step
+    // event-definition wiring. BLUE-03 (create_app_health_dashboard) is
+    // a 1-conceptual-step (2 HTTP via Search+View internal) 4-widget
+    // dashboard pre-wired to a stream. All 3 compose from src/services/*
+    // (D-09 architectural boundary, grep-pinned in test/blueprints.test.js).
+    // ====================================================================
+    {
+        name: "setup_app_monitoring_stack",
+        description: "Headline blueprint (BLUE-01): set up full app monitoring (stream + drop-debug pipeline + 4-widget health dashboard + error-rate alert) from one intent. 6-step chain composed from src/services/. Default widgets: error_rate_over_time, top_sources_by_volume, level_distribution, recent_events_table.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                connectionName: { type: "string", description: "Optional per-call connection override" },
+                dryRun: { type: "boolean", description: "Default true. Set false to apply the 6-step chain." },
+                idempotencyKey: { type: "string", description: "Optional agent-supplied idempotency key" },
+                app_name: { type: "string", description: "Service name (alphanumeric + underscore/hyphen only). Used as the prefix for the stream/pipeline/dashboard titles." },
+                source_pattern: { type: "string", description: "Regex matched against the `source` field to scope the stream (e.g. 'payment-*')." },
+                indexSetId: { type: "string", description: "Existing index_set id (obtain from list_index_sets). The new stream binds to this index set." },
+                errorRateThreshold: { type: "number", description: "Error events per 5-minute window before the alert fires. Default 50." },
+                defaultDashboardWidgets: {
+                    type: "array",
+                    description: "Optional override of the 4 default widget templates. Closed-set enum from the curated 8-template library.",
+                    items: {
+                        type: "string",
+                        enum: [
+                            "error_rate_over_time",
+                            "top_sources_by_volume",
+                            "level_distribution",
+                            "top_error_clusters",
+                            "request_rate_over_time",
+                            "field_value_distribution",
+                            "recent_events_table",
+                            "stream_activity_overview",
+                        ],
+                    },
+                },
+            },
+            required: ["app_name", "source_pattern", "indexSetId"],
+        },
+    },
 ];

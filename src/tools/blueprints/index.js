@@ -21,8 +21,13 @@ import { handleSetupDebugLogDropping } from "./setup-debug-log-dropping.js";
 // Plan 06-04 Task 3 — BLUE-04.
 import { handleSetupPipelineForStream } from "./setup-pipeline-for-stream.js";
 
+// Plan 06-05 Task 1 — BLUE-01 (HEADLINE 6-step chain).
+import { handleSetupAppMonitoringStack } from "./setup-app-monitoring-stack.js";
+
 register("setup_long_term_archival_index", handleSetupLongTermArchivalIndex);
 register("setup_debug_log_dropping", handleSetupDebugLogDropping);
 register("setup_pipeline_for_stream", handleSetupPipelineForStream);
 
-// Plan 06-05 — BLUE-01/02/03 register here.
+register("setup_app_monitoring_stack", handleSetupAppMonitoringStack);
+
+// Plan 06-05 Task 2 + 3 — BLUE-02 + BLUE-03 register below.

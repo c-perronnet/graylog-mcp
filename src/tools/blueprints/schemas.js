@@ -11,6 +11,7 @@
 import { z } from "zod";
 import { mutatingBase } from "../_shared/schemas.js";
 import { RuleSpecSchema } from "../pipelines/schemas.js";
+import { TEMPLATE_NAMES } from "../../widget-templates/index.js";
 
 // =====================================================================
 // BLUE-05 — setup_long_term_archival_index
@@ -61,4 +62,38 @@ export const SetupPipelineForStreamSchema = mutatingBase.extend({
         .max(20, "max 20 transforms"),
 });
 
-// Plan 06-05 adds the remaining 3 schemas (BLUE-01/02/03).
+// =====================================================================
+// Plan 06-05 — BLUE-01/02/03 schemas (HEADLINE 6-step chain + 1-step
+// error-alert + 1-conceptual-step app-health dashboard).
+// =====================================================================
+
+// =====================================================================
+// BLUE-01 — setup_app_monitoring_stack (HEADLINE 6-step chain).
+// Composes streams + pipeline rule + pipeline + connect + dashboard
+// (internal Search+View 2-step) + event definition. T-06-05-01:
+// app_name is regex-clamped to alphanumeric + hyphen/underscore at
+// parse time — defense against shell-injection-like chars BEFORE any
+// path concatenation or DSL emission.
+// =====================================================================
+const TEMPLATE_NAME_TUPLE = /** @type {[string, ...string[]]} */ (TEMPLATE_NAMES);
+
+export const SetupAppMonitoringStackSchema = mutatingBase.extend({
+    app_name: z.string().min(1).regex(
+        /^[a-zA-Z0-9_-]+$/,
+        "app_name must be alphanumeric + underscore/hyphen",
+    ),
+    source_pattern: z.string().min(1),  // e.g. "payment-*"
+    indexSetId: z.string().min(
+        1,
+        "indexSetId required — agent must pass an existing index_set id (get from list_index_sets)",
+    ),
+    errorRateThreshold: z.number().int().positive().default(50),  // events per 5 minutes
+    defaultDashboardWidgets: z.array(z.enum(TEMPLATE_NAME_TUPLE)).default([
+        "error_rate_over_time",
+        "top_sources_by_volume",
+        "level_distribution",
+        "recent_events_table",
+    ]),
+});
+
+// Plan 06-05 Task 2 + 3 — BLUE-02 + BLUE-03 schemas land in subsequent commits.

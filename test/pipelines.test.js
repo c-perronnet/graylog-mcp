@@ -393,7 +393,7 @@ test("dispatch resolves list_pipelines/get_pipeline/delete_pipeline via the new 
     assert.ok(Array.isArray(payload.items));
 });
 
-test("assertAllToolsRegistered passes after Plan 06-04 end (count = 87; +BLUE-04/05/06 blueprints A)", async () => {
+test("assertAllToolsRegistered passes after Plan 06-05 Task 1 (count = 88; +BLUE-01 setup_app_monitoring_stack)", async () => {
     const { dispatch, assertAllToolsRegistered } = await import("../src/dispatch.js");
     await import("../src/tools/_register.js");
     const { toolDefinitions } = await import("../src/tools.js");
@@ -420,7 +420,10 @@ test("assertAllToolsRegistered passes after Plan 06-04 end (count = 87; +BLUE-04
     // Plan 06-04 Task 1 adds BLUE-05 setup_long_term_archival_index → 85.
     // Plan 06-04 Task 2 adds BLUE-06 setup_debug_log_dropping → 86.
     // Plan 06-04 Task 3 adds BLUE-04 setup_pipeline_for_stream → 87.
-    assert.equal(toolDefinitions.length, 87, `Expected 87 tools after Plan 06-04 end (Phase 6 Plan 04 complete: BLUE-04/05/06 blueprints A shipped); got ${toolDefinitions.length}`);
+    // Plan 06-05 Task 1 adds BLUE-01 setup_app_monitoring_stack → 88.
+    // Plan 06-05 Task 2 adds BLUE-02 setup_error_alerting → 89.
+    // Plan 06-05 Task 3 adds BLUE-03 create_app_health_dashboard → 90.
+    assert.equal(toolDefinitions.length, 88, `Expected 88 tools after Plan 06-05 Task 1 (BLUE-01 setup_app_monitoring_stack shipped); got ${toolDefinitions.length}`);
 });
 
 // =====================================================================
