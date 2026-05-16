@@ -85,6 +85,10 @@ import "./dashboards/index.js";
 // setup_pipeline_for_stream, setup_long_term_archival_index,
 // setup_debug_log_dropping. Plan 05 extends this barrel with BLUE-01/02/03.
 import "./blueprints/index.js";
+// Phase 7 Plan 02 — HARD-02 list_admin_tools meta-tool. Pure-static (no
+// Graylog connection); the agent calls this at session start to orient on
+// the 91-tool admin surface without paying for every full description.
+import "./meta/index.js";
 
 // Names that already fit `<verb>_<domain>_<noun>` (10 of 23 — list_streams
 // displaced; the new Phase 3 handler is registered via ./streams/index.js

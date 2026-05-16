@@ -1912,4 +1912,17 @@ export const toolDefinitions = [
             required: ["streamId"],
         },
     },
+    {
+        name: "list_admin_tools",
+        description: "List every MCP tool grouped by domain (inputs/streams/pipelines/etc.) with a one-line summary. Use this vs. dumping the full /tools list when you need to orient at session start.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                domain: {
+                    type: "string",
+                    description: "Optional domain filter (inputs, index_sets, streams, pipelines, events, dashboards, blueprints, meta, search). Omit for the full inventory grouped by domain.",
+                },
+            },
+        },
+    },
 ];

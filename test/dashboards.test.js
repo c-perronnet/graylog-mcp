@@ -1656,14 +1656,15 @@ test("add_widget_from_template surfaces builder error when field_value_distribut
 //   Task 1 → 88 (+BLUE-01 setup_app_monitoring_stack)
 //   Task 2 → 89 (+BLUE-02 setup_error_alerting)
 //   Task 3 → 90 (+BLUE-03 create_app_health_dashboard)
+// Plan 07-02 adds HARD-02 list_admin_tools → 91 (final milestone count).
 // The pipelines.test.js count assertion pins the cumulative count; this
 // test mirrors it.
 
-test("assertAllToolsRegistered passes after Plan 06-05 end (count = 90; +BLUE-01/02/03 blueprints B)", async () => {
+test("assertAllToolsRegistered passes after Plan 07-02 end (count = 91; +HARD-02 list_admin_tools)", async () => {
     const { dispatch, assertAllToolsRegistered } = await import("../src/dispatch.js");
     await import("../src/tools/_register.js");
     const { toolDefinitions } = await import("../src/tools.js");
     assertAllToolsRegistered(toolDefinitions);
     assert.equal(typeof dispatch, "function");
-    assert.equal(toolDefinitions.length, 90, `Expected 90 tools after Plan 06-05 end (BLUE-01/02/03 blueprints B shipped); got ${toolDefinitions.length}`);
+    assert.equal(toolDefinitions.length, 91, `Expected 91 tools after Plan 07-02 end (HARD-02 list_admin_tools shipped); got ${toolDefinitions.length}`);
 });

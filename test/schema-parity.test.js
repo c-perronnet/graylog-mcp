@@ -592,3 +592,24 @@ test("schema-parity: setup_debug_log_dropping", async () => {
     const { SetupDebugLogDroppingSchema } = await import("../src/tools/blueprints/schemas.js");
     await assertSchemaParityForTool("setup_debug_log_dropping", SetupDebugLogDroppingSchema);
 });
+
+// ---------------------------------------------------------------------------
+// Plan 07-02 enrichment — list_admin_tools (HARD-02 meta-tool).
+//
+// list_admin_tools is pure-static and has no zod schema (no runtime
+// validation needed — the only input is an optional string `domain`). The
+// parity check therefore pins the JSON-Schema shape directly: properties
+// must be exactly `["domain"]` and the property must be optional (not in
+// `required`). Future edits to the meta-tool's JSON-Schema fail this test
+// loudly.
+// ---------------------------------------------------------------------------
+
+test("schema-parity: list_admin_tools (no zod schema; JSON-Schema shape pinned)", async () => {
+    const { toolDefinitions } = await import("../src/tools.js");
+    const tool = toolDefinitions.find((t) => t.name === "list_admin_tools");
+    assert.ok(tool, "Tool list_admin_tools missing from tools.js");
+    const props = Object.keys(tool.inputSchema.properties).sort();
+    assert.deepEqual(props, ["domain"], `list_admin_tools JSON-Schema must expose exactly ["domain"]; got [${props.join(",")}]`);
+    assert.ok(!tool.inputSchema.required, "list_admin_tools must not declare any required fields (domain is optional)");
+    assert.equal(tool.inputSchema.properties.domain.type, "string");
+});
