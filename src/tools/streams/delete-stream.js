@@ -220,15 +220,18 @@ export const handleDeleteStream = defineMutatingHandler({
             cascades,
             postApplyEstimate: { id: args.streamId, deleted: true },
             _confirmationToken: confirmationToken,
+            _streamId: args.streamId,
         };
     },
     async apply(client, req) {
         // D-03: re-fetch cascades, re-compute hash, refuse on drift. The
-        // streamId is extracted from req.path so apply() is fully driven
-        // by the build()-emitted descriptor — no closure capture of
-        // build()'s args.
-        const m = req.path.match(/streams\/([^/?]+)/);
-        const streamId = m ? m[1] : "unknown";
+        // streamId is stashed on the request descriptor at build() time
+        // (WR-01 fix 2026-05-16); the legacy path-regex fallback remains
+        // for back-compat with any hand-constructed descriptors so a
+        // future path-format drift can never silently change the
+        // apply-time hash input.
+        const streamId = req._streamId
+            ?? (req.path.match(/streams\/([^/?]+)/)?.[1] ?? "unknown");
 
         // Re-fetch may throw GraylogValidationError(cascade_preflight_failed);
         // the wrapper's outer try/catch routes that through wrapGraylogError
