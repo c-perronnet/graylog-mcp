@@ -200,7 +200,7 @@ test("dashboards.buildSearchDTO assembles QueryDTO with widget searchTypes", () 
     assert.equal(dto.queries[0].query.query_string, "level:>=4");
 });
 
-test("dashboards.buildViewDTO emits titles + displayModeSettings explicitly (Q2 default)", () => {
+test("dashboards.buildViewDTO emits titles explicitly and omits display_mode_settings (MT4-BUG7)", () => {
     const widgets = [
         { widget: { id: "w1" }, position: { col: 1, row: 1, height: 2, width: 6 }, searchType: { id: "st-1" } },
     ];
@@ -214,11 +214,12 @@ test("dashboards.buildViewDTO emits titles + displayModeSettings explicitly (Q2 
     assert.equal(dto.search_id, "srch-1");
     // 06-U1-SMOKE Q2 default — Pitfall 6
     assert.deepEqual(dto.state["q-1"].titles, { titles: {} });
-    assert.deepEqual(dto.state["q-1"].display_mode_settings, {
-        positions_inferred: false,
-        show_summary: false,
-        show_message_row: false,
-    });
+    // MT4-BUG7: display_mode_settings is intentionally omitted — Graylog 7.x
+    // rejects the view-state positions_inferred field.
+    assert.equal(
+        Object.prototype.hasOwnProperty.call(dto.state["q-1"], "display_mode_settings"),
+        false,
+    );
     // widget_mapping shape per Pitfall 5
     assert.deepEqual(dto.state["q-1"].widget_mapping, { w1: ["st-1"] });
     // positions keyed by widget.id

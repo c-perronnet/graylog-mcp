@@ -102,7 +102,7 @@ exports[`snapshot: create_app_health_dashboard BLUE-03 2-step Search+View chain 
                   "sort": [
                     {
                       "type": "series",
-                      "id": "count()",
+                      "field": "count()",
                       "direction": "Descending"
                     }
                   ],
@@ -177,8 +177,9 @@ exports[`snapshot: create_app_health_dashboard BLUE-03 2-step Search+View chain 
                   "decorators": [],
                   "sort": [
                     {
+                      "type": "pivot",
                       "field": "timestamp",
-                      "order": "DESC"
+                      "direction": "Descending"
                     }
                   ]
                 },
@@ -201,9 +202,7 @@ exports[`snapshot: create_app_health_dashboard BLUE-03 2-step Search+View chain 
             },
             "positions": {
               "UUID-1": {
-                "col": {
-                  "type": "infinity"
-                },
+                "col": 1,
                 "row": 1,
                 "height": 4,
                 "width": 6
@@ -221,20 +220,13 @@ exports[`snapshot: create_app_health_dashboard BLUE-03 2-step Search+View chain 
                 "width": 4
               },
               "UUID-4": {
-                "col": {
-                  "type": "infinity"
-                },
+                "col": 1,
                 "row": 9,
                 "height": 6,
                 "width": 12
               }
             },
-            "formatting": null,
-            "display_mode_settings": {
-              "positions_inferred": false,
-              "show_summary": false,
-              "show_message_row": false
-            }
+            "formatting": null
           }
         },
         "favorite": false
@@ -329,7 +321,7 @@ exports[`snapshot: create_app_health_dashboard BLUE-03 2-step Search+View chain 
                   "sort": [
                     {
                       "type": "series",
-                      "id": "count()",
+                      "field": "count()",
                       "direction": "Descending"
                     }
                   ],
@@ -414,7 +406,7 @@ exports[`snapshot: create_app_health_dashboard BLUE-03 2-step Search+View chain 
             }
           ],
           "parameters": [],
-          "skipNoStreamsCheck": false
+          "skip_no_streams_check": false
         }
       },
       "postApplyEstimate": {
@@ -521,7 +513,7 @@ exports[`snapshot: create_app_health_dashboard BLUE-03 2-step Search+View chain 
                       "sort": [
                         {
                           "type": "series",
-                          "id": "count()",
+                          "field": "count()",
                           "direction": "Descending"
                         }
                       ],
@@ -596,8 +588,9 @@ exports[`snapshot: create_app_health_dashboard BLUE-03 2-step Search+View chain 
                       "decorators": [],
                       "sort": [
                         {
+                          "type": "pivot",
                           "field": "timestamp",
-                          "order": "DESC"
+                          "direction": "Descending"
                         }
                       ]
                     },
@@ -620,9 +613,7 @@ exports[`snapshot: create_app_health_dashboard BLUE-03 2-step Search+View chain 
                 },
                 "positions": {
                   "UUID-1": {
-                    "col": {
-                      "type": "infinity"
-                    },
+                    "col": 1,
                     "row": 1,
                     "height": 4,
                     "width": 6
@@ -640,20 +631,13 @@ exports[`snapshot: create_app_health_dashboard BLUE-03 2-step Search+View chain 
                     "width": 4
                   },
                   "UUID-4": {
-                    "col": {
-                      "type": "infinity"
-                    },
+                    "col": 1,
                     "row": 9,
                     "height": 6,
                     "width": 12
                   }
                 },
-                "formatting": null,
-                "display_mode_settings": {
-                  "positions_inferred": false,
-                  "show_summary": false,
-                  "show_message_row": false
-                }
+                "formatting": null
               }
             },
             "favorite": false
@@ -885,7 +869,7 @@ exports[`snapshot: setup_app_monitoring_stack BLUE-01 ACCEPTANCE GATE 6-step cha
                         "sort": [
                           {
                             "type": "series",
-                            "id": "count()",
+                            "field": "count()",
                             "direction": "Descending"
                           }
                         ],
@@ -970,7 +954,7 @@ exports[`snapshot: setup_app_monitoring_stack BLUE-01 ACCEPTANCE GATE 6-step cha
                   }
                 ],
                 "parameters": [],
-                "skipNoStreamsCheck": false
+                "skip_no_streams_check": false
               }
             },
             {
@@ -1071,7 +1055,7 @@ exports[`snapshot: setup_app_monitoring_stack BLUE-01 ACCEPTANCE GATE 6-step cha
                             "sort": [
                               {
                                 "type": "series",
-                                "id": "count()",
+                                "field": "count()",
                                 "direction": "Descending"
                               }
                             ],
@@ -1146,8 +1130,9 @@ exports[`snapshot: setup_app_monitoring_stack BLUE-01 ACCEPTANCE GATE 6-step cha
                             "decorators": [],
                             "sort": [
                               {
+                                "type": "pivot",
                                 "field": "timestamp",
-                                "order": "DESC"
+                                "direction": "Descending"
                               }
                             ]
                           },
@@ -1170,9 +1155,7 @@ exports[`snapshot: setup_app_monitoring_stack BLUE-01 ACCEPTANCE GATE 6-step cha
                       },
                       "positions": {
                         "UUID-5": {
-                          "col": {
-                            "type": "infinity"
-                          },
+                          "col": 1,
                           "row": 1,
                           "height": 4,
                           "width": 6
@@ -1190,20 +1173,13 @@ exports[`snapshot: setup_app_monitoring_stack BLUE-01 ACCEPTANCE GATE 6-step cha
                           "width": 4
                         },
                         "UUID-8": {
-                          "col": {
-                            "type": "infinity"
-                          },
+                          "col": 1,
                           "row": 9,
                           "height": 6,
                           "width": 12
                         }
                       },
-                      "formatting": null,
-                      "display_mode_settings": {
-                        "positions_inferred": false,
-                        "show_summary": false,
-                        "show_message_row": false
-                      }
+                      "formatting": null
                     }
                   },
                   "favorite": false

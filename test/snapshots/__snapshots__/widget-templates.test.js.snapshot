@@ -42,9 +42,7 @@ exports[`snapshot: error_rate_over_time builder emits bar-viz pivot with level:>
     "description": "Error rate over time (level >= 4)"
   },
   "position": {
-    "col": {
-      "type": "infinity"
-    },
+    "col": 1,
     "row": 1,
     "height": 4,
     "width": 6
@@ -126,7 +124,7 @@ exports[`snapshot: field_value_distribution builder emits values-bucket on agent
       "sort": [
         {
           "type": "series",
-          "id": "count()",
+          "field": "count()",
           "direction": "Descending"
         }
       ],
@@ -167,7 +165,7 @@ exports[`snapshot: field_value_distribution builder emits values-bucket on agent
     "sort": [
       {
         "type": "series",
-        "id": "count()",
+        "field": "count()",
         "direction": "Descending"
       }
     ],
@@ -299,17 +297,16 @@ exports[`snapshot: recent_events_table builder emits MessageList shape (DASH-08 
       "decorators": [],
       "sort": [
         {
+          "type": "pivot",
           "field": "timestamp",
-          "order": "DESC"
+          "direction": "Descending"
         }
       ]
     },
     "description": "Recent messages (most-recent first)"
   },
   "position": {
-    "col": {
-      "type": "infinity"
-    },
+    "col": 1,
     "row": 9,
     "height": 6,
     "width": 12
@@ -613,7 +610,7 @@ exports[`snapshot: top_sources_by_volume builder emits table-viz values-bucket o
       "sort": [
         {
           "type": "series",
-          "id": "count()",
+          "field": "count()",
           "direction": "Descending"
         }
       ],
@@ -654,7 +651,7 @@ exports[`snapshot: top_sources_by_volume builder emits table-viz values-bucket o
     "sort": [
       {
         "type": "series",
-        "id": "count()",
+        "field": "count()",
         "direction": "Descending"
       }
     ],

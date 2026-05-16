@@ -115,9 +115,14 @@ test("recent_events_table emits widget.type === 'messages' + MessageListConfigDT
         result.widget.config.fields,
         ["timestamp", "source", "level", "message"],
     );
-    // sort by timestamp DESC (most-recent first)
+    // sort by timestamp descending (most-recent first). MT4-BUG5: the WIDGET
+    // config.sort uses the SortConfigDTO discriminated shape {type,field,direction}.
+    assert.equal(result.widget.config.sort[0].type, "pivot");
     assert.equal(result.widget.config.sort[0].field, "timestamp");
-    assert.equal(result.widget.config.sort[0].order, "DESC");
+    assert.equal(result.widget.config.sort[0].direction, "Descending");
+    // the messages search_type sort stays {field, order}
+    assert.equal(result.searchType.sort[0].field, "timestamp");
+    assert.equal(result.searchType.sort[0].order, "DESC");
 });
 
 // Test 8 — stream_activity_overview

@@ -101,20 +101,13 @@ exports[`snapshot: add_widget_from_template error_rate_over_time 2-step PUT chai
                 "width": 4
               },
               "w-new-fixed": {
-                "col": {
-                  "type": "infinity"
-                },
+                "col": 1,
                 "row": 1,
                 "height": 4,
                 "width": 6
               }
             },
-            "formatting": null,
-            "display_mode_settings": {
-              "positions_inferred": false,
-              "show_summary": false,
-              "show_message_row": false
-            }
+            "formatting": null
           }
         }
       },
@@ -193,7 +186,7 @@ exports[`snapshot: add_widget_from_template error_rate_over_time 2-step PUT chai
             }
           ],
           "parameters": [],
-          "skipNoStreamsCheck": false
+          "skip_no_streams_check": false
         }
       }
     },
@@ -284,20 +277,13 @@ exports[`snapshot: add_widget_from_template error_rate_over_time 2-step PUT chai
                     "width": 4
                   },
                   "w-new-fixed": {
-                    "col": {
-                      "type": "infinity"
-                    },
+                    "col": 1,
                     "row": 1,
                     "height": 4,
                     "width": 6
                   }
                 },
-                "formatting": null,
-                "display_mode_settings": {
-                  "positions_inferred": false,
-                  "show_summary": false,
-                  "show_message_row": false
-                }
+                "formatting": null
               }
             }
           },
@@ -407,12 +393,7 @@ exports[`snapshot: create_dashboard dry-run C7 ACCEPTANCE GATE 2-step Search+Vie
                 "width": 12
               }
             },
-            "formatting": null,
-            "display_mode_settings": {
-              "positions_inferred": false,
-              "show_summary": false,
-              "show_message_row": false
-            }
+            "formatting": null
           }
         },
         "favorite": false
@@ -466,7 +447,7 @@ exports[`snapshot: create_dashboard dry-run C7 ACCEPTANCE GATE 2-step Search+Vie
             }
           ],
           "parameters": [],
-          "skipNoStreamsCheck": false
+          "skip_no_streams_check": false
         }
       },
       "postApplyEstimate": {
@@ -553,12 +534,7 @@ exports[`snapshot: create_dashboard dry-run C7 ACCEPTANCE GATE 2-step Search+Vie
                     "width": 12
                   }
                 },
-                "formatting": null,
-                "display_mode_settings": {
-                  "positions_inferred": false,
-                  "show_summary": false,
-                  "show_message_row": false
-                }
+                "formatting": null
               }
             },
             "favorite": false
@@ -684,12 +660,7 @@ exports[`snapshot: get_dashboard full ViewDTO pass-through with 4 widgets (DASH-
             "width": 12
           }
         },
-        "formatting": null,
-        "display_mode_settings": {
-          "positions_inferred": false,
-          "show_summary": false,
-          "show_message_row": false
-        }
+        "formatting": null
       }
     }
   }
@@ -792,12 +763,7 @@ exports[`snapshot: remove_widget symmetric 2-step PUT chain strips widget from S
                 "width": 12
               }
             },
-            "formatting": null,
-            "display_mode_settings": {
-              "positions_inferred": false,
-              "show_summary": false,
-              "show_message_row": false
-            }
+            "formatting": null
           }
         }
       },
@@ -847,7 +813,7 @@ exports[`snapshot: remove_widget symmetric 2-step PUT chain strips widget from S
             }
           ],
           "parameters": [],
-          "skipNoStreamsCheck": false
+          "skip_no_streams_check": false
         }
       }
     },
@@ -920,12 +886,7 @@ exports[`snapshot: remove_widget symmetric 2-step PUT chain strips widget from S
                     "width": 12
                   }
                 },
-                "formatting": null,
-                "display_mode_settings": {
-                  "positions_inferred": false,
-                  "show_summary": false,
-                  "show_message_row": false
-                }
+                "formatting": null
               }
             }
           },
@@ -1024,12 +985,7 @@ exports[`snapshot: update_dashboard STRICT_NO_ECHO title-only overlay (DASH-04 F
                 "width": 12
               }
             },
-            "formatting": null,
-            "display_mode_settings": {
-              "positions_inferred": false,
-              "show_summary": false,
-              "show_message_row": false
-            }
+            "formatting": null
           }
         }
       },

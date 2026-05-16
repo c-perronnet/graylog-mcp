@@ -152,11 +152,6 @@ const FULL_VIEW_FIXTURE = {
                 "w-D": { col: 1, row: 9, height: 6, width: 12 },
             },
             formatting: null,
-            display_mode_settings: {
-                positions_inferred: false,
-                show_summary: false,
-                show_message_row: false,
-            },
         },
     },
 };
@@ -409,7 +404,7 @@ test("snapshot: add_widget_from_template error_rate_over_time 2-step PUT chain (
             search_types: [{ id: "st-existing", type: "pivot" }],
         }],
         parameters: [],
-        skipNoStreamsCheck: false,
+        skip_no_streams_check: false,
     };
     _setCaptureRequest(dashboardsMultiCapture([
         { method: "GET", pathPattern: "/api/views/v-fixed-2", response: view },
@@ -501,7 +496,7 @@ test("snapshot: remove_widget symmetric 2-step PUT chain strips widget from Sear
             ],
         }],
         parameters: [],
-        skipNoStreamsCheck: false,
+        skip_no_streams_check: false,
     };
     _setCaptureRequest(dashboardsMultiCapture([
         { method: "GET", pathPattern: "/api/views/v-fixed-2", response: FULL_VIEW_FIXTURE },
