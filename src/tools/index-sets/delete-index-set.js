@@ -101,14 +101,24 @@ export const handleDeleteIndexSet = defineMutatingHandler({
         //      stats_unreachable. The agent MUST see the blast radius.
 
         let allIndices = { closed: { indices: [] }, reopened: { indices: [] }, all: { indices: {} } };
+        let listPreflightError = null;
         try {
             allIndices = await client.request(
                 "GET",
                 `/api/system/indexer/indices/${args.indexSetId}/list`,
                 null,
             );
-        } catch (_err) {
-            // Best-effort: leave allIndices as the empty default.
+        } catch (err) {
+            // Best-effort: leave allIndices as the empty default, but capture
+            // the failure so the dry-run cascade preview can honestly signal
+            // that the blast radius enumeration is incomplete (F-10 / WR-01).
+            // The C1 hash is still computed over the (possibly empty)
+            // indexNames; the apply-time drift-refusal is the structural
+            // backstop if /list later recovers.
+            listPreflightError = err?.message ?? String(err);
+            console.error(
+                `[delete_index_set] /indexer/indices/${args.indexSetId}/list pre-flight failed: ${listPreflightError}`,
+            );
         }
 
         let stats;
@@ -157,6 +167,15 @@ export const handleDeleteIndexSet = defineMutatingHandler({
                 indices: [...indexNames].sort(),
                 messageCount,
                 indexCount: indexNames.length,
+                // F-10 / WR-01: when /list pre-flight failed, signal that the
+                // enumerated blast radius is incomplete. The happy-path shape
+                // is unchanged (conditional spread). The C1 hash is still
+                // computed over indexNames as-is; apply-time drift-refusal
+                // remains the structural backstop if /list recovers.
+                ...(listPreflightError !== null && {
+                    degraded: true,
+                    degraded_reason: listPreflightError,
+                }),
             },
             postApplyEstimate: {
                 id: args.indexSetId,
