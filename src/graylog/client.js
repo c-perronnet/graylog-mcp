@@ -46,19 +46,30 @@ export function makeClient(conn) {
             }
 
             try {
-                const res = await axios({
+                // Bodyless requests (null/undefined body, e.g. GET/DELETE) must
+                // NOT carry `data` or a Content-Type header — otherwise axios's
+                // transformRequest runs JSON.stringify(null) and sends a literal
+                // `null` body, which Graylog 7.x rejects with 400 Bad Request.
+                const hasBody = body !== null && body !== undefined;
+                const headers = {
+                    "Accept": "application/json",
+                    "X-Requested-By": "graylog-mcp",
+                };
+                if (hasBody) {
+                    headers["Content-Type"] = "application/json";
+                }
+                const axiosConfig = {
                     method,
                     url: `${conn.baseUrl}${path}`,
-                    data: body,
-                    headers: {
-                        "Accept": "application/json",
-                        "Content-Type": "application/json",
-                        "X-Requested-By": "graylog-mcp",
-                    },
+                    headers,
                     auth: buildAuth(conn.apiToken),
                     validateStatus: () => true, // we map status codes ourselves
                     timeout: 60_000,
-                });
+                };
+                if (hasBody) {
+                    axiosConfig.data = body;
+                }
+                const res = await axios(axiosConfig);
                 if (res.status >= 400) {
                     throw mapGraylogError(res, { method, path });
                 }
