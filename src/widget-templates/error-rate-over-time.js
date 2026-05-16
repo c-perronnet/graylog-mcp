@@ -4,6 +4,11 @@
 // renders as a bar chart so the agent can spot error spikes. Mirrors
 // 06-RESEARCH.md §"Template 1".
 //
+// The base `level:>=4` filter AND-combines with a caller-supplied
+// options.queryString: `(level:>=4) AND (<options.queryString>)`. When
+// options.queryString is absent or empty the query stays exactly
+// `level:>=4` — no `() AND ()` wrapping.
+//
 // Wire-shape contract (per Plan 06-03 D-04):
 //   - Returns Object.freeze({widget, position, searchType}); searchType is a
 //     full PivotConfigDTO (non-null).
@@ -19,7 +24,12 @@ export function buildErrorRateOverTime(options = {}) {
     const widgetId = options.widgetId ?? randomUUID();
     const searchTypeId = options.searchTypeId ?? randomUUID();
     const streamIds = options.streamIds ?? [];
-    const queryString = "level:>=4";
+    // Base filter AND-combines with a caller-supplied options.queryString.
+    // Empty/absent userQuery → query stays exactly "level:>=4" (no wrap).
+    const userQuery = options.queryString ?? "";
+    const queryString = userQuery
+        ? `(level:>=4) AND (${userQuery})`
+        : "level:>=4";
 
     const searchType = {
         type: "pivot",
