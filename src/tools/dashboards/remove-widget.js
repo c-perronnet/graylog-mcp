@@ -131,6 +131,20 @@ export const handleRemoveWidget = defineMutatingHandler({
         //    futures).
         const queries = Array.isArray(search?.queries) ? search.queries : [];
         const queryIndex = queries.findIndex((q) => q?.id === stateKey);
+        // search_query_not_found refusal: the dashboard state-key has no
+        // matching query.id on the bound SearchDTO. Without this gate, the
+        // .map below silently no-ops the search_types strip (i !==
+        // queryIndex is true for every entry) and we'd PUT an unchanged
+        // SearchDTO + a View with widget_mapping entries already deleted —
+        // leaving orphan search_types on the Search forever.
+        if (queryIndex === -1) {
+            const err = new Error(
+                `Search ${searchId} has no query with id "${stateKey}" — cannot strip widget's search_types`,
+            );
+            err.reason = "search_query_not_found";
+            err.isClientSide = true;
+            throw err;
+        }
         const newQueries = queries.map((q, i) => {
             if (i !== queryIndex) return q;
             const currentSearchTypes = Array.isArray(q?.search_types) ? q.search_types : [];

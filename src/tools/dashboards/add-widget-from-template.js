@@ -177,6 +177,21 @@ export const handleAddWidgetFromTemplate = defineMutatingHandler({
             //         searchType to queries[stateKey].search_types.
             const queries = Array.isArray(search?.queries) ? search.queries : [];
             const queryIndex = queries.findIndex((q) => q?.id === stateKey);
+            // search_query_not_found refusal: the dashboard's state-key
+            // didn't match any query.id on the bound SearchDTO. Without this
+            // gate, findIndex returning -1 silently drops the searchType
+            // append (the .map below would never hit `i !== queryIndex`),
+            // producing a wire body identical to the pre-fetch search and
+            // a widget that renders blank because widget_mapping points at
+            // a SearchType that was never written.
+            if (queryIndex === -1) {
+                const err = new Error(
+                    `Search ${searchId} has no query with id "${stateKey}" — cannot append widget's searchType`,
+                );
+                err.reason = "search_query_not_found";
+                err.isClientSide = true;
+                throw err;
+            }
             const newQueries = queries.map((q, i) => {
                 if (i !== queryIndex) return q;
                 const currentSearchTypes = Array.isArray(q?.search_types) ? q.search_types : [];
