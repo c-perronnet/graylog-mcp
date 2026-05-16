@@ -1640,4 +1640,24 @@ export const toolDefinitions = [
             required: ["dashboardId"],
         },
     },
+    {
+        name: "create_dashboard",
+        description: "Create a Graylog dashboard via an internal Search+View 2-step chain (POST /api/views/search → POST /api/views). C7 mitigation: agent never sees the intermediate Search ID; widget IDs are wrapper-generated UUIDs. Dry-run surfaces the full chain transcript. Schema rejects agent-supplied `searchId` (D-02 structural). Widget-position integrity validated before any HTTP (D-03 bidirectional).",
+        inputSchema: {
+            type: "object",
+            properties: {
+                connectionName: { type: "string" },
+                dryRun: { type: "boolean", description: "Default true. Set false to apply the 2-step Search+View chain." },
+                idempotencyKey: { type: "string" },
+                title: { type: "string", description: "Dashboard title (required, min 1 char)." },
+                description: { type: "string" },
+                summary: { type: "string" },
+                timerange: { type: "object", description: "Dashboard-level timerange (Graylog wire shape; default {type:'relative', from:300})." },
+                query: { type: "string", description: "Dashboard-level Lucene query (default empty)." },
+                streamIds: { type: "array", items: { type: "string" } },
+                widgets: { type: "array", description: "Widget triplets [{widget, position, searchType|null}]. Wrapper supplies widget.id + searchType.id as UUIDs when absent.", items: { type: "object" } },
+            },
+            required: ["title", "widgets"],
+        },
+    },
 ];

@@ -31,10 +31,18 @@ import "./snapshot-config.js";
 
 import { handleListDashboards } from "../src/tools/dashboards/list-dashboards.js";
 import { handleGetDashboard } from "../src/tools/dashboards/get-dashboard.js";
+import {
+    handleCreateDashboard,
+    _setUUIDGeneratorForTests,
+    _clearUUIDGeneratorForTests,
+    _setWidgetPositionValidatorForTests,
+    _clearWidgetPositionValidatorForTests,
+} from "../src/tools/dashboards/create-dashboard.js";
 
 import {
     ListDashboardsSchema,
     GetDashboardSchema,
+    CreateDashboardSchema,
 } from "../src/tools/dashboards/schemas.js";
 
 import {
@@ -56,7 +64,40 @@ afterEach(() => {
     _clearCaptureRequest();
     _clearConnectionsForTests();
     setActiveConnection(null);
+    _clearUUIDGeneratorForTests();
+    _clearWidgetPositionValidatorForTests();
 });
+
+// Seeded deterministic UUID generator for byte-stable snapshot fixtures.
+// Increments a counter on each call and emits a recognizable UUID-shaped
+// string. Tests that care about the EXACT UUID assert against this; tests
+// that only care about UUID shape match against the regex.
+function makeSeededUUIDGenerator(start = 1) {
+    let n = start;
+    return () => {
+        const hex = (n++).toString(16).padStart(12, "0");
+        // Canonical UUID v4 shape: 8-4-4-4-12 (37 chars incl. dashes; 36
+        // chars excl.). Matches /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
+        return `00000000-0000-4000-8000-${hex}`;
+    };
+}
+
+// Multi-route capture for handlers that fire MORE than one HTTP request
+// from build() (e.g. create_dashboard fires GET /api/views for the
+// FOUND-11 existingMatches probe, then in apply walks the 2-step chain).
+function dashboardsMultiCapture(routes) {
+    return (req) => {
+        for (const r of routes) {
+            const matches = typeof r.pathPattern === "string"
+                ? req.path === r.pathPattern
+                : (r.pathPattern instanceof RegExp ? r.pathPattern.test(req.path) : false);
+            if (req.method === r.method && matches) {
+                return typeof r.response === "function" ? r.response(req) : r.response;
+            }
+        }
+        throw new Error(`No route matched ${req.method} ${req.path}`);
+    };
+}
 
 // =====================================================================
 // Fixtures — verified shapes per 06-RESEARCH.md §"Endpoint Catalogue"
@@ -302,4 +343,421 @@ test("GetDashboardSchema rejects empty dashboardId", () => {
         () => GetDashboardSchema.parse({ dashboardId: "" }),
         (err) => err?.name === "ZodError",
     );
+});
+
+// =====================================================================
+// DASH-03 create_dashboard — C7 ACCEPTANCE GATE + D-02 + D-03
+// =====================================================================
+//
+// The crown jewel of Phase 6: the internal Search+View 2-step chain that
+// forecloses the C7 attack vector. Tests below pin every load-bearing
+// guarantee:
+//   - chain transcript shape (Tests 1-4)
+//   - D-02 structural reject of searchId (Test 5)
+//   - D-03 widget-position-integrity refusal BEFORE HTTP (Test 6)
+//   - wrapper-generated UUID widget IDs (Test 7)
+//   - FOUND-11 title-collision existingMatches (Test 8)
+//   - apply-time chain walk + dependsOn substitution (Tests 9-10)
+
+// Fixture widget triplet — minimal valid shape.
+const WIDGET_TRIPLET_A = {
+    widget: { id: "w-fixed-1", type: "messages" },
+    position: { col: 1, row: 1, height: 2, width: 4 },
+    searchType: { id: "st-fixed-1", type: "messages" },
+};
+
+const WIDGET_TRIPLET_B = {
+    widget: { id: "w-fixed-2", type: "aggregation" },
+    position: { col: 5, row: 1, height: 2, width: 4 },
+    searchType: { id: "st-fixed-2", type: "pivot" },
+};
+
+// =====================================================================
+// Test 1 — create_dashboard dry-run chain shape (2 steps + dependsOn)
+// =====================================================================
+
+test("create_dashboard dry-run emits a 2-step chain with dependsOn on step 2 (C7 acceptance)", async () => {
+    _setCaptureRequest(dashboardsMultiCapture([
+        { method: "GET", pathPattern: /^\/api\/views\?query=/, response: { total: 0, views: [] } },
+    ]));
+    const res = await handleCreateDashboard({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                title: "Test Dashboard",
+                widgets: [WIDGET_TRIPLET_A],
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.dryRun, true);
+    assert.equal(payload.tool, "create_dashboard");
+    // C7 chain: 2 steps with dependsOn on step 2.
+    assert.ok(Array.isArray(payload.chain), "chain MUST be present in dry-run preview");
+    assert.equal(payload.chain.length, 2);
+    assert.equal(payload.chain[0].step, 1);
+    assert.equal(payload.chain[1].step, 2);
+    assert.equal(payload.chain[1].dependsOn.from, "step1.response.id");
+    assert.equal(payload.chain[1].dependsOn.as, "searchId");
+});
+
+// =====================================================================
+// Test 2 — chain step 1 = POST /api/views/search with SearchDTO body
+// =====================================================================
+
+test("create_dashboard chain step 1 = POST /api/views/search with BARE SearchDTO body (Pitfall 3)", async () => {
+    _setCaptureRequest(dashboardsMultiCapture([
+        { method: "GET", pathPattern: /^\/api\/views\?query=/, response: { total: 0, views: [] } },
+    ]));
+    const res = await handleCreateDashboard({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                title: "Test Dashboard",
+                widgets: [WIDGET_TRIPLET_A],
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    const step1 = payload.chain[0];
+    assert.equal(step1.request.method, "POST");
+    assert.equal(step1.request.path, "/api/views/search");
+    // BARE SearchDTO body — NOT envelope-wrapped (Pitfall 3).
+    assert.equal(step1.request.body.entity, undefined);
+    assert.ok(Array.isArray(step1.request.body.queries));
+    assert.equal(step1.request.body.queries[0].id, "q-1");
+    assert.equal(step1.request.body.queries[0].search_types.length, 1);
+    assert.equal(step1.request.body.queries[0].search_types[0].id, "st-fixed-1");
+});
+
+// =====================================================================
+// Test 3 — chain step 2 = POST /api/views with CreateEntityRequest envelope
+// =====================================================================
+
+test("create_dashboard chain step 2 = POST /api/views with CreateEntityRequest envelope + __SERVER_ASSIGNED__step1 placeholder", async () => {
+    _setCaptureRequest(dashboardsMultiCapture([
+        { method: "GET", pathPattern: /^\/api\/views\?query=/, response: { total: 0, views: [] } },
+    ]));
+    const res = await handleCreateDashboard({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                title: "Test Dashboard",
+                widgets: [WIDGET_TRIPLET_A],
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    const step2 = payload.chain[1];
+    assert.equal(step2.request.method, "POST");
+    assert.equal(step2.request.path, "/api/views");
+    // CreateEntityRequest envelope (Pitfall 3 standard pattern).
+    assert.equal(step2.request.body.share_request, null);
+    assert.equal(step2.request.body.entity.type, "DASHBOARD");
+    // searchId is the apply-time placeholder; executeChain replaces it
+    // with step 1's response.id at apply time.
+    assert.equal(step2.request.body.entity.search_id, "__SERVER_ASSIGNED__step1");
+});
+
+// =====================================================================
+// Test 4 — primary preview mirrors step 2 (agent's mental model)
+// =====================================================================
+
+test("create_dashboard primary preview mirrors step 2 (POST /api/views — agent's mental model)", async () => {
+    _setCaptureRequest(dashboardsMultiCapture([
+        { method: "GET", pathPattern: /^\/api\/views\?query=/, response: { total: 0, views: [] } },
+    ]));
+    const res = await handleCreateDashboard({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                title: "Test Dashboard",
+                widgets: [WIDGET_TRIPLET_A],
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.preview.method, "POST");
+    assert.equal(payload.preview.path, "/api/views");
+    assert.equal(payload.preview.body.entity.type, "DASHBOARD");
+});
+
+// =====================================================================
+// Test 5 — D-02 STRUCTURAL: schema REJECTS agent-supplied searchId
+// =====================================================================
+
+test("create_dashboard schema REJECTS agent-supplied searchId (D-02 structural .strict() reject)", async () => {
+    const res = await handleCreateDashboard({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                title: "Test Dashboard",
+                searchId: "malicious-search-id",  // <-- D-02 violation
+                widgets: [WIDGET_TRIPLET_A],
+            },
+        },
+    });
+    assert.equal(res.isError, true);
+    // zod .strict() emits "Unrecognized key(s) in object: 'searchId'"
+    assert.match(res.content[0].text, /searchId|[Uu]nrecognized/);
+});
+
+// Defense-in-depth: the schema itself MUST reject searchId at parse time.
+test("CreateDashboardSchema parse-level rejects searchId via .strict() (D-02 contract assertion)", () => {
+    assert.throws(
+        () => CreateDashboardSchema.parse({
+            title: "x",
+            searchId: "any-value",
+            widgets: [WIDGET_TRIPLET_A],
+        }),
+        (err) => err?.name === "ZodError"
+            && err.issues.some((iss) => /[Uu]nrecognized/.test(iss.message) || iss.path.includes("searchId")),
+    );
+});
+
+// =====================================================================
+// Test 6 — D-03 widget-position integrity violation refused BEFORE HTTP
+// =====================================================================
+
+test("create_dashboard D-03 widget-position integrity violation refused BEFORE any HTTP fires", async () => {
+    let httpCalls = 0;
+    _setCaptureRequest(() => {
+        httpCalls++;
+        return { total: 0, views: [] };
+    });
+    // Inject a validator stub that ALWAYS throws to simulate the D-03 refusal
+    // path. The structural guarantee (build() synthesizes widgetPositions from
+    // widget IDs so the inputs are internally consistent) makes a real
+    // mismatch unreachable from the agent surface — this seam is the only
+    // way to pin the refusal-before-HTTP contract. Threat-model T-06-02-03.
+    _setWidgetPositionValidatorForTests(() => {
+        const err = new Error("Widget/position integrity violation: simulated");
+        err.reason = "widget_position_integrity_violation";
+        err.isClientSide = true;
+        throw err;
+    });
+    const res = await handleCreateDashboard({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                title: "Test Dashboard",
+                widgets: [WIDGET_TRIPLET_A],
+            },
+        },
+    });
+    assert.equal(res.isError, true);
+    assert.match(res.content[0].text, /widget_position_integrity_violation|integrity/i);
+    // NO HTTP must have fired — the validator is positioned BEFORE the
+    // FOUND-11 existingMatches probe in build() (D-03 ACCEPTANCE GATE).
+    assert.equal(httpCalls, 0, "D-03 must refuse BEFORE any HTTP fires (existingMatches probe gated behind integrity check)");
+});
+
+// Defense-in-depth: pin that the integrity validator IS called (not just
+// imported) by giving it a side effect we can detect. Without this check
+// a future refactor could accidentally skip the validator and the
+// structural guarantee would silently disappear.
+test("create_dashboard build() calls the widget-position integrity validator (D-03 path is wired)", async () => {
+    let validatorCalled = false;
+    _setWidgetPositionValidatorForTests((widgets, positions) => {
+        validatorCalled = true;
+        assert.ok(Array.isArray(widgets));
+        assert.equal(typeof positions, "object");
+        // No throw — let the happy path proceed.
+    });
+    _setCaptureRequest(dashboardsMultiCapture([
+        { method: "GET", pathPattern: /^\/api\/views\?query=/, response: { total: 0, views: [] } },
+    ]));
+    await handleCreateDashboard({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                title: "Test Dashboard",
+                widgets: [WIDGET_TRIPLET_A],
+            },
+        },
+    });
+    assert.equal(validatorCalled, true, "validateWidgetPositionIntegrity MUST be called from build()");
+});
+
+// =====================================================================
+// Test 7 — wrapper-generated UUID widget IDs (UUID-per-instance)
+// =====================================================================
+
+test("create_dashboard widget.id is wrapper-generated UUID when agent omits it", async () => {
+    _setCaptureRequest(dashboardsMultiCapture([
+        { method: "GET", pathPattern: /^\/api\/views\?query=/, response: { total: 0, views: [] } },
+    ]));
+    _setUUIDGeneratorForTests(makeSeededUUIDGenerator(1));
+    const res = await handleCreateDashboard({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                title: "Test Dashboard",
+                widgets: [{
+                    widget: { type: "messages" },  // NO id
+                    position: { col: 1, row: 1, height: 2, width: 4 },
+                    searchType: { type: "messages" },  // NO id either
+                }],
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    const widgetId = payload.chain[1].request.body.entity.state["q-1"].widgets[0].id;
+    assert.match(
+        widgetId,
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+        `widget.id should be UUID-shaped; got ${widgetId}`,
+    );
+    // Position key matches the wrapper-generated widget id (D-03 integrity
+    // self-check).
+    const positions = payload.chain[1].request.body.entity.state["q-1"].positions;
+    assert.ok(positions[widgetId], "position key MUST match wrapper-generated widget.id");
+});
+
+// =====================================================================
+// Test 8 — FOUND-11 existingMatches surfaces title-collision
+// =====================================================================
+
+test("create_dashboard surfaces title-collision via FOUND-11 existingMatches probe", async () => {
+    _setCaptureRequest(dashboardsMultiCapture([
+        {
+            method: "GET",
+            pathPattern: /^\/api\/views\?query=/,
+            response: {
+                total: 1,
+                views: [{ id: "v-existing", title: "My Dashboard", type: "DASHBOARD" }],
+            },
+        },
+    ]));
+    const res = await handleCreateDashboard({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                title: "My Dashboard",
+                widgets: [WIDGET_TRIPLET_A],
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.existingMatches.length, 1);
+    assert.equal(payload.existingMatches[0].id, "v-existing");
+    assert.equal(payload.existingMatches[0].similarity_reason, "exact");
+});
+
+test("create_dashboard existingMatches DROPS saved-search title hits (DASHBOARD-only matchFn)", async () => {
+    _setCaptureRequest(dashboardsMultiCapture([
+        {
+            method: "GET",
+            pathPattern: /^\/api\/views\?query=/,
+            response: {
+                total: 2,
+                views: [
+                    { id: "v-saved", title: "My Dashboard", type: "SEARCH" },  // saved search — must NOT match
+                    { id: "v-dash", title: "My Dashboard", type: "DASHBOARD" },  // dashboard — must match
+                ],
+            },
+        },
+    ]));
+    const res = await handleCreateDashboard({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                title: "My Dashboard",
+                widgets: [WIDGET_TRIPLET_A],
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    // Only the DASHBOARD-typed match surfaces; saved-search filtered out.
+    assert.equal(payload.existingMatches.length, 1);
+    assert.equal(payload.existingMatches[0].id, "v-dash");
+});
+
+// =====================================================================
+// Test 9 — apply walks chain via executeChain
+// =====================================================================
+
+test("create_dashboard apply walks the 2-step chain via executeChain in sequence", async () => {
+    const captured = [];
+    _setCaptureRequest(dashboardsMultiCapture([
+        // build() pre-flight GET for existingMatches
+        { method: "GET", pathPattern: /^\/api\/views\?query=/, response: { total: 0, views: [] } },
+        // step 1: create Search
+        {
+            method: "POST",
+            pathPattern: "/api/views/search",
+            response: (req) => {
+                captured.push({ step: 1, method: req.method, path: req.path, body: req.body });
+                return { id: "S-real-1", queries: req.body.queries };
+            },
+        },
+        // step 2: create View
+        {
+            method: "POST",
+            pathPattern: "/api/views",
+            response: (req) => {
+                captured.push({ step: 2, method: req.method, path: req.path, body: req.body });
+                return { id: "V-real-1", type: "DASHBOARD", title: req.body.entity.title };
+            },
+        },
+    ]));
+    const res = await handleCreateDashboard({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                title: "Real Dashboard",
+                widgets: [WIDGET_TRIPLET_A],
+                dryRun: false,
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.applied, true);
+    assert.equal(payload.result.id, "V-real-1");
+    // Chain walked in order — step 1 first, then step 2.
+    assert.equal(captured.length, 2);
+    assert.equal(captured[0].step, 1);
+    assert.equal(captured[0].path, "/api/views/search");
+    assert.equal(captured[1].step, 2);
+    assert.equal(captured[1].path, "/api/views");
+});
+
+// =====================================================================
+// Test 10 — apply substitutes step1.response.id into step2.body.entity.search_id
+// =====================================================================
+
+test("create_dashboard apply substitutes step1.response.id into step2 body.entity.search_id (C7 wiring)", async () => {
+    let step2Body = null;
+    _setCaptureRequest(dashboardsMultiCapture([
+        { method: "GET", pathPattern: /^\/api\/views\?query=/, response: { total: 0, views: [] } },
+        {
+            method: "POST",
+            pathPattern: "/api/views/search",
+            response: () => ({ id: "S-substituted-id" }),
+        },
+        {
+            method: "POST",
+            pathPattern: "/api/views",
+            response: (req) => {
+                step2Body = req.body;
+                return { id: "V-1", type: "DASHBOARD" };
+            },
+        },
+    ]));
+    const res = await handleCreateDashboard({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                title: "Real Dashboard",
+                widgets: [WIDGET_TRIPLET_A],
+                dryRun: false,
+            },
+        },
+    });
+    assert.equal(JSON.parse(res.content[0].text).applied, true);
+    assert.ok(step2Body, "step 2 must have fired");
+    // The placeholder __SERVER_ASSIGNED__step1 must have been substituted
+    // with the REAL Search ID from step 1's response.
+    assert.equal(step2Body.entity.search_id, "S-substituted-id");
+    assert.notEqual(step2Body.entity.search_id, "__SERVER_ASSIGNED__step1");
 });

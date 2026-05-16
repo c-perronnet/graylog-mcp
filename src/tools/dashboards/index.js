@@ -17,6 +17,9 @@ import { register } from "../../dispatch.js";
 // Plan 06-02 Task 1 — DASH-01 + DASH-02 read tools.
 import { handleListDashboards } from "./list-dashboards.js";
 import { handleGetDashboard } from "./get-dashboard.js";
+// Plan 06-02 Task 2 — DASH-03 create_dashboard (C7 ACCEPTANCE GATE).
+import { handleCreateDashboard } from "./create-dashboard.js";
 
 register("list_dashboards", handleListDashboards);
 register("get_dashboard", handleGetDashboard);
+register("create_dashboard", handleCreateDashboard);

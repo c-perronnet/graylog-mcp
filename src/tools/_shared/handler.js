@@ -61,10 +61,17 @@ export function defineMutatingHandler(spec) {
     return async function handler(request) {
         const rawArgs = request?.params?.arguments ?? {};
 
-        // 1. Validate input (FOUND-05)
+        // 1. Validate input (FOUND-05). Strip framework-internal seam args
+        //    BEFORE schema.parse so .strict() schemas (Plan 06-02 D-02
+        //    enforcement on CreateDashboardSchema/UpdateDashboardSchema) don't
+        //    reject the test seam at parse time. The seam is re-merged onto
+        //    `args` below for resolveConnection. Without this strip, .strict()
+        //    schemas would reject `_testConnection` as Unrecognized key —
+        //    breaking every test that uses the project-standard seam.
+        const { _testConnection, ...rawArgsForParse } = rawArgs;
         let args;
         try {
-            args = schema.parse(rawArgs);
+            args = schema.parse(rawArgsForParse);
         } catch (err) {
             return errorResponse(formatZodError(err));
         }
@@ -171,6 +178,18 @@ export function defineMutatingHandler(spec) {
                         // lean on the v7 happy path). Consumed by create_event_definition
                         // + update_event_definition.
                         ...(req.migration ? { migration: req.migration } : {}),
+                        // Plan 06-02 / D-01 (C7 mitigation — RESEARCH §"Pattern 3:
+                        // Blueprint Chain-Transcript"): build() may populate a
+                        // `chain` transcript of [{step, tool, request, dependsOn?,
+                        // postApplyEstimate?}] entries. The agent sees the FULL
+                        // multi-step plan up-front in the dry-run preview without
+                        // ever having to compose intermediate IDs. Apply-time, the
+                        // chain is walked by executeChain (src/tools/_shared/blueprint-chain.js).
+                        // Opt-in only — absent when build() didn't set it (e.g.
+                        // single-step mutating tools). Consumed by create_dashboard,
+                        // remove_widget (Plan 06-02), and every BLUE-XX blueprint
+                        // (Plans 06-04 / 06-05).
+                        ...(req.chain ? { chain: req.chain } : {}),
                         applyHint: "Re-call with dryRun: false to apply",
                     }),
                 }],
