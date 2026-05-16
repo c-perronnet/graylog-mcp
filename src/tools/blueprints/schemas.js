@@ -96,4 +96,19 @@ export const SetupAppMonitoringStackSchema = mutatingBase.extend({
     ]),
 });
 
-// Plan 06-05 Task 2 + 3 — BLUE-02 + BLUE-03 schemas land in subsequent commits.
+// =====================================================================
+// BLUE-02 — setup_error_alerting (1-step chain wrapping
+// createEventDefinition with an agent-supplied notification reference).
+// =====================================================================
+export const SetupErrorAlertingSchema = mutatingBase.extend({
+    streamId: z.string().min(1),
+    notificationId: z.string().min(
+        1,
+        "notificationId required — agent must obtain from list_event_notifications",
+    ),
+    title: z.string().optional(),
+    errorRateThreshold: z.number().int().positive().default(50),
+    searchWithinMinutes: z.number().int().positive().default(5),
+});
+
+// Plan 06-05 Task 3 — BLUE-03 schema lands next.

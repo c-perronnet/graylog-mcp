@@ -23,11 +23,14 @@ import { handleSetupPipelineForStream } from "./setup-pipeline-for-stream.js";
 
 // Plan 06-05 Task 1 — BLUE-01 (HEADLINE 6-step chain).
 import { handleSetupAppMonitoringStack } from "./setup-app-monitoring-stack.js";
+// Plan 06-05 Task 2 — BLUE-02 (1-step error-alert).
+import { handleSetupErrorAlerting } from "./setup-error-alerting.js";
 
 register("setup_long_term_archival_index", handleSetupLongTermArchivalIndex);
 register("setup_debug_log_dropping", handleSetupDebugLogDropping);
 register("setup_pipeline_for_stream", handleSetupPipelineForStream);
 
 register("setup_app_monitoring_stack", handleSetupAppMonitoringStack);
+register("setup_error_alerting", handleSetupErrorAlerting);
 
-// Plan 06-05 Task 2 + 3 — BLUE-02 + BLUE-03 register below.
+// Plan 06-05 Task 3 — BLUE-03 register below.

@@ -1862,4 +1862,22 @@ export const toolDefinitions = [
             required: ["app_name", "source_pattern", "indexSetId"],
         },
     },
+    {
+        name: "setup_error_alerting",
+        description: "Blueprint (BLUE-02): create an error-rate event definition (aggregation-v1 query 'level:>=4') on a stream, wired to an existing notification. 1-step chain. Schedule defaults to false (Phase 5 M1 carry-forward — flip via enable_event_definition). Agent supplies notificationId from list_event_notifications.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                connectionName: { type: "string", description: "Optional per-call connection override" },
+                dryRun: { type: "boolean", description: "Default true. Set false to apply." },
+                idempotencyKey: { type: "string", description: "Optional agent-supplied idempotency key" },
+                streamId: { type: "string", description: "Target stream id (from list_streams)." },
+                notificationId: { type: "string", description: "Existing notification id (from list_event_notifications)." },
+                title: { type: "string", description: "Optional event-definition title (default: 'Error alert for stream {streamId}')." },
+                errorRateThreshold: { type: "number", description: "Threshold count of error events per window. Default 50." },
+                searchWithinMinutes: { type: "number", description: "Aggregation window in minutes (search_within_ms = N*60_000; execute_every_ms identical). Default 5." },
+            },
+            required: ["streamId", "notificationId"],
+        },
+    },
 ];

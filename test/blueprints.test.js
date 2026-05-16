@@ -30,12 +30,14 @@ import { handleSetupLongTermArchivalIndex } from "../src/tools/blueprints/setup-
 import { handleSetupDebugLogDropping } from "../src/tools/blueprints/setup-debug-log-dropping.js";
 import { handleSetupPipelineForStream } from "../src/tools/blueprints/setup-pipeline-for-stream.js";
 import { handleSetupAppMonitoringStack } from "../src/tools/blueprints/setup-app-monitoring-stack.js";
+import { handleSetupErrorAlerting } from "../src/tools/blueprints/setup-error-alerting.js";
 
 import {
     SetupLongTermArchivalIndexSchema,
     SetupDebugLogDroppingSchema,
     SetupPipelineForStreamSchema,
     SetupAppMonitoringStackSchema,
+    SetupErrorAlertingSchema,
 } from "../src/tools/blueprints/schemas.js";
 
 import {
@@ -901,12 +903,96 @@ test("setup_app_monitoring_stack apply on failure at step 4 returns transcript w
 });
 
 // =====================================================================
-// D-09 services-layer compose contract — extended to BLUE-01.
+// Plan 06-05 Task 2 — BLUE-02 setup_error_alerting
 // =====================================================================
 
-test("BLUE-01 source file imports ONLY from src/services/* (D-09 contract, Plan 06-05)", () => {
+test("setup_error_alerting dry-run emits 1-step chain (BLUE-02)", async () => {
+    const res = await handleSetupErrorAlerting({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                streamId: "stream-1",
+                notificationId: "notif-A",
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.tool, "setup_error_alerting");
+    assert.ok(Array.isArray(payload.chain));
+    assert.equal(payload.chain.length, 1);
+    assert.equal(payload.chain[0].tool, "create_event_definition");
+    assert.match(payload.chain[0].request.path, /^\/api\/events\/definitions\?schedule=false$/);
+});
+
+test("setup_error_alerting body wires aggregation-v1 with level:>=4 query (BLUE-02)", async () => {
+    const res = await handleSetupErrorAlerting({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                streamId: "stream-7",
+                notificationId: "notif-A",
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    const body = payload.chain[0].request.body;
+    assert.equal(body.config.type, "aggregation-v1");
+    assert.equal(body.config.query, "level:>=4");
+    assert.deepEqual(body.config.streams, ["stream-7"]);
+});
+
+test("setup_error_alerting body.notifications references agent-supplied notificationId (BLUE-02)", async () => {
+    const res = await handleSetupErrorAlerting({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                streamId: "stream-1",
+                notificationId: "notif-XYZ",
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    const body = payload.chain[0].request.body;
+    assert.equal(body.notifications.length, 1);
+    assert.equal(body.notifications[0].notification_id, "notif-XYZ");
+    assert.equal(body.notifications[0].notification_parameters, null);
+});
+
+test("setup_error_alerting respects custom errorRateThreshold + searchWithinMinutes (BLUE-02)", async () => {
+    const res = await handleSetupErrorAlerting({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                streamId: "stream-1",
+                notificationId: "notif-A",
+                errorRateThreshold: 100,
+                searchWithinMinutes: 10,
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    const body = payload.chain[0].request.body;
+    assert.equal(body.config.conditions.expression.right.value, 100);
+    assert.equal(body.config.search_within_ms, 10 * 60 * 1000);
+    assert.equal(body.config.execute_every_ms, 10 * 60 * 1000);
+});
+
+test("setup_error_alerting zod rejects missing notificationId (BLUE-02)", async () => {
+    const res = await handleSetupErrorAlerting({
+        params: { arguments: { _testConnection: "fake", streamId: "s-1" } },
+    });
+    assert.equal(res.isError, true);
+    assert.match(res.content[0].text, /notificationId/i);
+});
+
+// =====================================================================
+// D-09 services-layer compose contract — BLUE-01 + BLUE-02.
+// =====================================================================
+
+test("BLUE-01/02 source files import ONLY from src/services/* (D-09 contract, Plan 06-05)", () => {
     const files = [
         "src/tools/blueprints/setup-app-monitoring-stack.js",
+        "src/tools/blueprints/setup-error-alerting.js",
     ];
     for (const file of files) {
         const src = readFileSync(file, "utf8");
@@ -928,7 +1014,7 @@ test("BLUE-01 source file imports ONLY from src/services/* (D-09 contract, Plan 
 });
 
 // =====================================================================
-// Schema parity (defense-in-depth — Plan 06-05 Task 1 schema exported)
+// Schema parity (defense-in-depth — Plan 06-05 Task 1 + Task 2 schemas)
 // =====================================================================
 
 test("SetupAppMonitoringStackSchema rejects app_name with shell chars (BLUE-01 T-06-05-01)", () => {
@@ -947,6 +1033,16 @@ test("SetupAppMonitoringStackSchema rejects missing indexSetId (BLUE-01)", () =>
         () => SetupAppMonitoringStackSchema.parse({
             app_name: "x",
             source_pattern: "y",
+        }),
+        (err) => err?.name === "ZodError",
+    );
+});
+
+test("SetupErrorAlertingSchema rejects empty notificationId (BLUE-02)", () => {
+    assert.throws(
+        () => SetupErrorAlertingSchema.parse({
+            streamId: "s-1",
+            notificationId: "",
         }),
         (err) => err?.name === "ZodError",
     );
