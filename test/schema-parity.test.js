@@ -477,3 +477,118 @@ test("schema-parity: delete_event_notification", async () => {
     const { DeleteEventNotificationSchema } = await import("../src/tools/events/schemas.js");
     await assertSchemaParityForTool("delete_event_notification", DeleteEventNotificationSchema);
 });
+
+// ---------------------------------------------------------------------------
+// Plan 06-02 — 6 net-new dashboard CRUD tools (DASH-01..05 + DASH-07).
+//
+// CreateDashboardSchema uses .strict() so .shape is direct (NOT wrapped in
+// ZodEffects; .strict() flips the unknown-key handling mode but leaves the
+// ZodObject intact). UpdateDashboardSchema uses .extend({changes: ...refine})
+// at the changes-level; the OUTER schema is plain extend() with direct .shape.
+// All other schemas use plain mutatingBase/listBase extends — no superRefine.
+// ---------------------------------------------------------------------------
+
+test("schema-parity: list_dashboards", async () => {
+    const { ListDashboardsSchema } = await import("../src/tools/dashboards/schemas.js");
+    await assertSchemaParityForTool("list_dashboards", ListDashboardsSchema);
+});
+
+test("schema-parity: get_dashboard", async () => {
+    const { GetDashboardSchema } = await import("../src/tools/dashboards/schemas.js");
+    await assertSchemaParityForTool("get_dashboard", GetDashboardSchema);
+});
+
+test("schema-parity: create_dashboard", async () => {
+    const { CreateDashboardSchema } = await import("../src/tools/dashboards/schemas.js");
+    await assertSchemaParityForTool("create_dashboard", CreateDashboardSchema);
+});
+
+test("schema-parity: update_dashboard", async () => {
+    const { UpdateDashboardSchema } = await import("../src/tools/dashboards/schemas.js");
+    await assertSchemaParityForTool("update_dashboard", UpdateDashboardSchema);
+});
+
+test("schema-parity: delete_dashboard", async () => {
+    const { DeleteDashboardSchema } = await import("../src/tools/dashboards/schemas.js");
+    await assertSchemaParityForTool("delete_dashboard", DeleteDashboardSchema);
+});
+
+test("schema-parity: remove_widget", async () => {
+    const { RemoveWidgetSchema } = await import("../src/tools/dashboards/schemas.js");
+    await assertSchemaParityForTool("remove_widget", RemoveWidgetSchema);
+});
+
+// ---------------------------------------------------------------------------
+// Plan 06-02 / Plan 06-03 — D-02 STRUCTURAL ENFORCEMENT.
+//
+// CreateDashboardSchema's `.strict()` is the C7 mitigation backstop. The schema
+// MUST refuse any agent-supplied `searchId` at zod.parse — D-02 LOAD-BEARING.
+// A standalone .shape check pins the absence of the key even if a future
+// refactor accidentally re-exposed it. UpdateDashboardSchema.changes is also
+// `.strict()` — searchId is immutable post-creation (no rebinding path).
+// ---------------------------------------------------------------------------
+
+test("schema-parity: create_dashboard schema does NOT expose searchId (D-02 structural)", async () => {
+    const { CreateDashboardSchema } = await import("../src/tools/dashboards/schemas.js");
+    assert.equal(CreateDashboardSchema.shape.searchId, undefined,
+        "D-02: CreateDashboardSchema.shape.searchId MUST be undefined (.strict() rejects it at parse)");
+});
+
+test("schema-parity: update_dashboard.changes does NOT expose searchId (D-02 structural)", async () => {
+    const { UpdateDashboardSchema } = await import("../src/tools/dashboards/schemas.js");
+    // changes is a sub-ZodObject wrapped in .refine; reach through _def.schema.shape
+    const changesSchema = UpdateDashboardSchema.shape.changes;
+    const changesShape = changesSchema._def?.schema?.shape ?? changesSchema.shape;
+    assert.equal(changesShape.searchId, undefined,
+        "D-02: UpdateDashboardSchema.changes.shape.searchId MUST be undefined");
+});
+
+// ---------------------------------------------------------------------------
+// Plan 06-03 — DASH-06 add_widget_from_template (M7 ACCEPTANCE GATE).
+//
+// Uses z.enum(TEMPLATE_NAMES) for templateName — closed-set rejection at
+// parse. Plain mutatingBase.extend() so .shape is direct.
+// ---------------------------------------------------------------------------
+
+test("schema-parity: add_widget_from_template", async () => {
+    const { AddWidgetFromTemplateSchema } = await import("../src/tools/dashboards/schemas.js");
+    await assertSchemaParityForTool("add_widget_from_template", AddWidgetFromTemplateSchema);
+});
+
+// ---------------------------------------------------------------------------
+// Plan 06-04 + 06-05 — 6 net-new blueprint tools (BLUE-01..06).
+//
+// All six blueprint schemas use plain mutatingBase.extend() without
+// superRefine wrapping (BLUE-01's app_name regex is a .regex() refinement
+// on the field, not a top-level .refine on the object). .shape is direct.
+// ---------------------------------------------------------------------------
+
+test("schema-parity: setup_app_monitoring_stack", async () => {
+    const { SetupAppMonitoringStackSchema } = await import("../src/tools/blueprints/schemas.js");
+    await assertSchemaParityForTool("setup_app_monitoring_stack", SetupAppMonitoringStackSchema);
+});
+
+test("schema-parity: setup_error_alerting", async () => {
+    const { SetupErrorAlertingSchema } = await import("../src/tools/blueprints/schemas.js");
+    await assertSchemaParityForTool("setup_error_alerting", SetupErrorAlertingSchema);
+});
+
+test("schema-parity: create_app_health_dashboard", async () => {
+    const { CreateAppHealthDashboardSchema } = await import("../src/tools/blueprints/schemas.js");
+    await assertSchemaParityForTool("create_app_health_dashboard", CreateAppHealthDashboardSchema);
+});
+
+test("schema-parity: setup_pipeline_for_stream", async () => {
+    const { SetupPipelineForStreamSchema } = await import("../src/tools/blueprints/schemas.js");
+    await assertSchemaParityForTool("setup_pipeline_for_stream", SetupPipelineForStreamSchema);
+});
+
+test("schema-parity: setup_long_term_archival_index", async () => {
+    const { SetupLongTermArchivalIndexSchema } = await import("../src/tools/blueprints/schemas.js");
+    await assertSchemaParityForTool("setup_long_term_archival_index", SetupLongTermArchivalIndexSchema);
+});
+
+test("schema-parity: setup_debug_log_dropping", async () => {
+    const { SetupDebugLogDroppingSchema } = await import("../src/tools/blueprints/schemas.js");
+    await assertSchemaParityForTool("setup_debug_log_dropping", SetupDebugLogDroppingSchema);
+});
