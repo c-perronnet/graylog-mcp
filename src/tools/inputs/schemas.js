@@ -158,7 +158,7 @@ export const CreateInputSchema = mutatingBase.extend({
 export const UpdateInputSchema = mutatingBase.extend({
     inputId: z.string().min(1, "inputId is required"),
     changes: z.object({
-        title: z.string().optional(),
+        title: z.string().min(1, "title cannot be empty").optional(),
         global: z.boolean().optional(),
         node: z.string().optional(),
         configuration: z.record(z.unknown()).optional(),
@@ -337,9 +337,9 @@ export const UpdateExtractorSchema = mutatingBase.extend({
     inputId: z.string().min(1, "inputId is required"),
     extractorId: z.string().min(1, "extractorId is required"),
     changes: z.object({
-        title: z.string().optional(),
-        source_field: z.string().optional(),
-        target_field: z.string().optional(),
+        title: z.string().min(1, "title cannot be empty").optional(),
+        source_field: z.string().min(1, "source_field cannot be empty").optional(),
+        target_field: z.string().min(1, "target_field cannot be empty").optional(),
         extractor_config: z.record(z.unknown()).optional(),
         cursor_strategy: z.enum(["copy", "cut"]).optional(),
         converters: z.array(z.object({
