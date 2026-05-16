@@ -8,7 +8,8 @@
         "start": "node src/index.js",
         "dev": "node --watch src/index.js",
         "test": "node --test 'test/**/*.test.js'",
-        "test:manual": "echo \"Error: no test specified\" && exit 1"
+        "test:manual": "echo \"Error: no test specified\" && exit 1",
+        "audit:tool-descriptions": "node scripts/audit-tool-descriptions.js"
     },
     "keywords": [
         "mcp",

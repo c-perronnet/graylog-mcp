@@ -97,7 +97,8 @@ logs
 .dockerignore
 # Claude Code
 .claude/
-scripts/
+scripts/*
+!scripts/audit-tool-descriptions.js
 
 # Read-only Graylog server reference clone (used by researchers for API shape)
 source-code/
