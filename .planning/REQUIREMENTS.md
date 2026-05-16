@@ -97,8 +97,8 @@ Currently read-only in v2.3; this milestone makes them full CRUD.
 - [x] **EVENT-02**: `get_event_definition`
 - [x] **EVENT-03**: `create_event_definition` — **`schedule` defaults to `false`** (not Graylog's `true`); v7 aggregation syntax only; helper warns if input matches v6 syntax (C5)
 - [x] **EVENT-04**: `update_event_definition`
-- [ ] **EVENT-05**: `delete_event_definition`
-- [ ] **EVENT-06**: `enable_event_definition` / `disable_event_definition` — wrapper handles the `WILDCARD` empty-body quirk
+- [x] **EVENT-05**: `delete_event_definition`
+- [x] **EVENT-06**: `enable_event_definition` / `disable_event_definition` — wrapper handles the `WILDCARD` empty-body quirk
 - [ ] **EVENT-07**: `list_event_notifications`
 - [ ] **EVENT-08**: `create_event_notification` — discriminated-union zod schemas per notification type (email, HTTP, Slack, PagerDuty, etc.)
 - [ ] **EVENT-09**: `update_event_notification` / `delete_event_notification`
@@ -266,8 +266,8 @@ Populated by the roadmapper on 2026-05-13. Every v1 requirement maps to exactly 
 | EVENT-02 | Phase 5 | Complete |
 | EVENT-03 | Phase 5 | Complete |
 | EVENT-04 | Phase 5 | Complete |
-| EVENT-05 | Phase 5 | Pending |
-| EVENT-06 | Phase 5 | Pending |
+| EVENT-05 | Phase 5 | Complete |
+| EVENT-06 | Phase 5 | Complete |
 | EVENT-07 | Phase 5 | Pending |
 | EVENT-08 | Phase 5 | Pending |
 | EVENT-09 | Phase 5 | Pending |
