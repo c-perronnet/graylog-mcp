@@ -393,7 +393,7 @@ test("dispatch resolves list_pipelines/get_pipeline/delete_pipeline via the new 
     assert.ok(Array.isArray(payload.items));
 });
 
-test("assertAllToolsRegistered passes after Plan 05-04 Task 2 (count = 76; update_event_notification shipped)", async () => {
+test("assertAllToolsRegistered passes after Plan 05-04 phase-end (count = 77; event-notification CRUD complete; Phase 5 done)", async () => {
     const { dispatch, assertAllToolsRegistered } = await import("../src/dispatch.js");
     await import("../src/tools/_register.js");
     const { toolDefinitions } = await import("../src/tools.js");
@@ -412,7 +412,7 @@ test("assertAllToolsRegistered passes after Plan 05-04 Task 2 (count = 76; updat
     // → 72; Task 2 adds delete_event_definition → 73. Plan 05-04 adds
     // list_event_notifications + 3 more → 77 (Phase 5 end). Plans 06/07
     // are out of scope for this milestone.
-    assert.equal(toolDefinitions.length, 76, `Expected 76 tools after Plan 05-04 Task 2 (update_event_notification shipped); got ${toolDefinitions.length}`);
+    assert.equal(toolDefinitions.length, 77, `Expected 77 tools after Plan 05-04 phase-end (Phase 5 complete: 4 event-notification tools + 7 event-definition tools shipped); got ${toolDefinitions.length}`);
 });
 
 // =====================================================================

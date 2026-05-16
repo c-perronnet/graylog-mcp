@@ -901,6 +901,21 @@ export const toolDefinitions = [
         },
     },
     {
+        name: "delete_event_notification",
+        description: "Delete an event notification on the active Graylog connection. LOAD-BEARING delete (contrast delete_event_definition which is D-08 informational): notifications are referenced by event_defs via notification_id; deleting a notification breaks any alert that fires that def. D-09 cascade-hash + apply-time drift refusal (Phase 3 delete_stream analog): dry-run pre-flights /api/events/definitions/paginated to enumerate referencing event_defs (client-side filter on def.notifications[].notification_id; no server-side filter exists on 7.2 — mirror Pitfall S6); freezes them into a 64-hex sha-256 confirmationToken via computeNotificationCascadeHash. Apply requires args.confirm:<token>; the wrapper re-fetches + recomputes + refuses with isError reason:cascade_changed_since_preview on ANY drift. Refuses with reason:cascade_preflight_failed if the paginated GET errors (DELETE NEVER fires). Apply envelope is SYNC {deleted:true, notificationId}. Safety cap 1000 pages × 50/page (T-05-04-07). dryRun:true by default.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                connectionName: { type: "string", description: "Optional connection name; defaults to active" },
+                dryRun: { type: "boolean", description: "Preview without applying. Default: true" },
+                idempotencyKey: { type: "string", description: "Optional retry-window dedupe key" },
+                notificationId: { type: "string", description: "Notification id from list_event_notifications" },
+                confirm: { type: "string", description: "On apply (dryRun:false): the 64-hex confirmationToken from the immediately-prior dry-run. Required when dryRun:false; refuses with reason `confirmation_mismatch` if absent or stale, `cascade_changed_since_preview` if drift detected." },
+            },
+            required: ["notificationId"],
+        },
+    },
+    {
         name: "cluster_log_messages",
         description: "Cluster similar log messages into Drain3-style templates. Fetches messages with the same args as search_messages_graylog, then groups them by structural similarity. Templates are persisted per connection and reused across calls.",
         inputSchema: {

@@ -2461,3 +2461,456 @@ test_p2("dispatch resolves update_event_notification after Plan 05-04 Task 2 reg
     assert.equal(payload.tool, "update_event_notification");
     assert.equal(payload.dryRun, true);
 });
+
+// =====================================================================
+// Plan 05-04 Task 3 — delete_event_notification (D-09 cascade-hash + drift)
+// =====================================================================
+//
+// EVENT-09 part B — direct analog of Phase 3 delete_stream:
+//   - Paginated walk over /api/events/definitions/paginated; client-side filter
+//     on def.notifications[].notification_id (no server-side filter on 7.2 —
+//     mirror Pitfall S6 from Phase 3).
+//   - confirmationToken = computeNotificationCascadeHash (Plan 05-01 thin
+//     wrapper; canonical JSON byte-identical to computeCascadeHash).
+//   - Apply re-fetches + recomputes + refuses with isError reason
+//     `cascade_changed_since_preview` on drift (D-03).
+//   - requireConfirm gate refuses apply with `confirmation_mismatch` when
+//     args.confirm absent/stale (handler.js Plan 02-01 amendment).
+//   - cascade_preflight_failed hard-blocks the dry-run when the paginated
+//     GET errors (D-04 stance).
+//   - Safety cap 1000 pages × 50/page = 50000 defs max (T-05-04-07).
+
+test_p2("delete_event_notification D-09 cascade pre-flight populates event_definitions; confirmationToken is 64-hex", async () => {
+    const { handleDeleteEventNotification } = await import(
+        "../src/tools/events/delete-event-notification.js"
+    );
+    _setCaptureRequest_p2(eventsMultiCapture_p2([
+        {
+            method: "GET",
+            pathPattern: /^\/api\/events\/definitions\/paginated\?/,
+            response: {
+                elements: [
+                    {
+                        id: "def-1",
+                        title: "Spike Alert",
+                        notifications: [{ notification_id: "target-notif" }],
+                    },
+                    {
+                        id: "def-2",
+                        title: "Quota Alert",
+                        notifications: [{ notification_id: "other-notif" }],
+                    },
+                ],
+                total: 2,
+            },
+        },
+    ]));
+    const res = await handleDeleteEventNotification({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                notificationId: "target-notif",
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.deepEqual(payload.cascades.event_definitions, [
+        { id: "def-1", title: "Spike Alert" },
+    ]);
+    assert.match(payload.confirmationToken, /^[0-9a-f]{64}$/);
+});
+
+test_p2("delete_event_notification D-09 byte-identity with computeNotificationCascadeHash output", async () => {
+    const { handleDeleteEventNotification } = await import(
+        "../src/tools/events/delete-event-notification.js"
+    );
+    const { computeNotificationCascadeHash } = await import(
+        "../src/tools/_shared/cascade-hash.js"
+    );
+    _setCaptureRequest_p2(eventsMultiCapture_p2([
+        {
+            method: "GET",
+            pathPattern: /^\/api\/events\/definitions\/paginated\?/,
+            response: {
+                elements: [
+                    {
+                        id: "def-1",
+                        title: "Spike Alert",
+                        notifications: [{ notification_id: "target-notif" }],
+                    },
+                ],
+                total: 1,
+            },
+        },
+    ]));
+    const res = await handleDeleteEventNotification({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                notificationId: "target-notif",
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    const expected = computeNotificationCascadeHash({
+        notificationId: "target-notif",
+        eventDefIds: ["def-1"],
+    });
+    assert.equal(payload.confirmationToken, expected);
+});
+
+test_p2("delete_event_notification D-09 empty cascade still issues a confirmationToken (frozen literal)", async () => {
+    const { handleDeleteEventNotification } = await import(
+        "../src/tools/events/delete-event-notification.js"
+    );
+    _setCaptureRequest_p2(eventsMultiCapture_p2([
+        {
+            method: "GET",
+            pathPattern: /^\/api\/events\/definitions\/paginated\?/,
+            response: { elements: [], total: 0 },
+        },
+    ]));
+    const res = await handleDeleteEventNotification({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                notificationId: "target-notif",
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.deepEqual(payload.cascades.event_definitions, []);
+    // Empty-cascade hash for target-notif — frozen literal for Plan 05-05.
+    // Equivalent to computeNotificationCascadeHash({ notificationId: "target-notif", eventDefIds: [] }).
+    assert.equal(
+        payload.confirmationToken,
+        "de6f0611eedf13b44f3267dbc02b07edbd822ef803d6af4702facf1bc88e538c",
+    );
+});
+
+test_p2("delete_event_notification D-09 multi-page walk collects matches across pages", async () => {
+    const { handleDeleteEventNotification } = await import(
+        "../src/tools/events/delete-event-notification.js"
+    );
+    // Page 1: 50 defs (full page → walk continues); page 2: 3 defs (partial → exit).
+    // One match on page 1, none on page 2.
+    let callCount = 0;
+    _setCaptureRequest_p2((req) => {
+        callCount += 1;
+        if (req.path.includes("page=1")) {
+            const elements = [];
+            for (let i = 0; i < 50; i += 1) {
+                const matches = i === 17;
+                elements.push({
+                    id: `p1-def-${i}`,
+                    title: `Def ${i}`,
+                    notifications: matches
+                        ? [{ notification_id: "target-notif" }]
+                        : [{ notification_id: "other" }],
+                });
+            }
+            return { elements, total: 53 };
+        }
+        if (req.path.includes("page=2")) {
+            const elements = [];
+            for (let i = 0; i < 3; i += 1) {
+                elements.push({
+                    id: `p2-def-${i}`,
+                    title: `Def ${i + 50}`,
+                    notifications: [{ notification_id: "other" }],
+                });
+            }
+            return { elements, total: 53 };
+        }
+        throw new Error(`Unexpected ${req.method} ${req.path}`);
+    });
+    const res = await handleDeleteEventNotification({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                notificationId: "target-notif",
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.deepEqual(payload.cascades.event_definitions, [
+        { id: "p1-def-17", title: "Def 17" },
+    ]);
+    assert.equal(callCount, 2, "must walk both pages");
+});
+
+test_p2("delete_event_notification D-09 safety cap stops after 1000 pages on a stuck pagination", async () => {
+    const { handleDeleteEventNotification } = await import(
+        "../src/tools/events/delete-event-notification.js"
+    );
+    let callCount = 0;
+    _setCaptureRequest_p2(() => {
+        callCount += 1;
+        // Always return 50 defs (full page) — pagination would never terminate
+        // without the safety cap. None reference the target.
+        const elements = [];
+        for (let i = 0; i < 50; i += 1) {
+            elements.push({
+                id: `def-${callCount}-${i}`,
+                title: "X",
+                notifications: [{ notification_id: "other" }],
+            });
+        }
+        return { elements, total: 999_999 };
+    });
+    const res = await handleDeleteEventNotification({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                notificationId: "target-notif",
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(callCount, 1000, "safety cap stops the walk at 1000 pages");
+    assert.deepEqual(payload.cascades.event_definitions, []);
+});
+
+test_p2("delete_event_notification D-09 confirmation_mismatch refuses apply BEFORE DELETE fires", async () => {
+    const { handleDeleteEventNotification } = await import(
+        "../src/tools/events/delete-event-notification.js"
+    );
+    const captured = [];
+    _setCaptureRequest_p2((req) => {
+        captured.push({ method: req.method, path: req.path });
+        // The cascade pre-flight (GET paginated) MAY fire (for build()), but
+        // a DELETE on the notification MUST NOT fire when confirm is absent.
+        if (req.method === "GET" && req.path.startsWith("/api/events/definitions/paginated")) {
+            return { elements: [], total: 0 };
+        }
+        if (req.method === "DELETE") {
+            throw new Error("DELETE fired despite missing confirm token");
+        }
+        throw new Error(`Unexpected ${req.method} ${req.path}`);
+    });
+    const res = await handleDeleteEventNotification({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                notificationId: "target-notif",
+                dryRun: false,
+                // No `confirm` arg → requireConfirm gate must refuse.
+            },
+        },
+    });
+    assert.equal(res.isError, true);
+    assert.equal(res.reason, "confirmation_mismatch");
+    // DELETE was NEVER attempted — captured contains only GET(s).
+    assert.equal(captured.some((c) => c.method === "DELETE"), false);
+});
+
+test_p2("delete_event_notification D-09 ACCEPTANCE GATE — drift refusal: cascade changes between build() and apply() re-fetch", async () => {
+    // The drift-refusal test pattern (mirror Phase 3 delete_stream test 11):
+    // build() runs ON THE APPLY CALL too — it sees the cascade as it is NOW.
+    // The agent provides the dry-run-issued token in `confirm`. So we set up
+    // the mock to return:
+    //   call #1 (build at apply-time): the same cascade the dry-run saw (token X
+    //     matches → requireConfirm gate passes).
+    //   call #2 (apply's re-fetch): a drifted cascade (token Y differs → apply()
+    //     returns isError reason:cascade_changed_since_preview).
+    const { handleDeleteEventNotification } = await import(
+        "../src/tools/events/delete-event-notification.js"
+    );
+    const { computeNotificationCascadeHash } = await import(
+        "../src/tools/_shared/cascade-hash.js"
+    );
+
+    // Compute the dry-run token directly — the same cascade build() will see.
+    const dryRunToken = computeNotificationCascadeHash({
+        notificationId: "target-notif",
+        eventDefIds: ["def-1"],
+    });
+
+    let getCalls = 0;
+    const deleteCalls = [];
+    _setCaptureRequest_p2((req) => {
+        if (req.method === "DELETE") {
+            deleteCalls.push({ method: req.method, path: req.path });
+            return { id: "target-notif", deleted: true };
+        }
+        if (req.method === "GET" && req.path.startsWith("/api/events/definitions/paginated")) {
+            getCalls += 1;
+            if (getCalls === 1) {
+                // build() at apply-time: same cascade the dry-run saw → token X.
+                return {
+                    elements: [{
+                        id: "def-1",
+                        title: "A",
+                        notifications: [{ notification_id: "target-notif" }],
+                    }],
+                    total: 1,
+                };
+            }
+            // apply()'s re-fetch: drifted cascade (def-2 now references).
+            return {
+                elements: [
+                    {
+                        id: "def-1",
+                        title: "A",
+                        notifications: [{ notification_id: "target-notif" }],
+                    },
+                    {
+                        id: "def-2",
+                        title: "B",
+                        notifications: [{ notification_id: "target-notif" }],
+                    },
+                ],
+                total: 2,
+            };
+        }
+        throw new Error(`Unexpected ${req.method} ${req.path}`);
+    });
+
+    // Apply with the matching dry-run token; the drift hits in apply()'s re-fetch.
+    const applyRes = await handleDeleteEventNotification({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                notificationId: "target-notif",
+                dryRun: false,
+                confirm: dryRunToken,
+            },
+        },
+    });
+    assert.equal(applyRes.isError, true);
+    assert.equal(applyRes.reason, "cascade_changed_since_preview");
+    // DELETE was NEVER fired — the drift refusal aborts before the verb.
+    assert.equal(deleteCalls.length, 0);
+    // Two paginated GETs: build() at apply-time + apply()'s re-fetch.
+    assert.equal(getCalls, 2);
+});
+
+test_p2("delete_event_notification D-09 happy path: apply re-fetch matches; DELETE fires; applied:true", async () => {
+    const { handleDeleteEventNotification } = await import(
+        "../src/tools/events/delete-event-notification.js"
+    );
+    const captured = [];
+    _setCaptureRequest_p2((req) => {
+        captured.push({ method: req.method, path: req.path });
+        if (req.method === "GET" && req.path.startsWith("/api/events/definitions/paginated")) {
+            return {
+                elements: [{
+                    id: "def-1",
+                    title: "A",
+                    notifications: [{ notification_id: "target-notif" }],
+                }],
+                total: 1,
+            };
+        }
+        if (req.method === "DELETE" && req.path === "/api/events/notifications/target-notif") {
+            return null;  // Graylog DELETE returns 204 no-content.
+        }
+        throw new Error(`Unexpected ${req.method} ${req.path}`);
+    });
+
+    // Phase 1: dry-run → grab token.
+    const dryRunRes = await handleDeleteEventNotification({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                notificationId: "target-notif",
+            },
+        },
+    });
+    const token = JSON.parse(dryRunRes.content[0].text).confirmationToken;
+
+    // Phase 2: apply with matching token — cascade unchanged → DELETE fires.
+    const applyRes = await handleDeleteEventNotification({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                notificationId: "target-notif",
+                dryRun: false,
+                confirm: token,
+            },
+        },
+    });
+    const applyPayload = JSON.parse(applyRes.content[0].text);
+    assert.equal(applyPayload.applied, true);
+    assert.equal(applyPayload.result.body.deleted, true);
+    assert.equal(applyPayload.result.body.notificationId, "target-notif");
+    // DELETE fired exactly once.
+    const deleteCalls = captured.filter((c) => c.method === "DELETE");
+    assert.equal(deleteCalls.length, 1);
+});
+
+test_p2("delete_event_notification cascade_preflight_failed: paginated GET throws → isError reason:cascade_preflight_failed", async () => {
+    const { handleDeleteEventNotification } = await import(
+        "../src/tools/events/delete-event-notification.js"
+    );
+    _setCaptureRequest_p2((req) => {
+        if (req.method === "GET" && req.path.startsWith("/api/events/definitions/paginated")) {
+            throw new Error("ES is on fire");
+        }
+        throw new Error(`Unexpected ${req.method} ${req.path}`);
+    });
+    const res = await handleDeleteEventNotification({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                notificationId: "target-notif",
+            },
+        },
+    });
+    assert.equal(res.isError, true);
+    // wrapGraylogError surfaces the typed reason from the thrown
+    // GraylogValidationError.reason → "cascade_preflight_failed".
+    assert.match(res.content[0].text, /cascade_preflight_failed/);
+    // No confirmationToken should be visible — build() failed before the hash
+    // computation; the dry-run JSON never rendered.
+});
+
+test_p2("delete_event_notification writable=false short-circuits BEFORE paginated GET (defense-in-depth)", async () => {
+    _setConnectionsForTests_p2({
+        readonly: { baseUrl: "x", apiToken: "x", writable: false },
+    });
+    // Poisoned seam — any HTTP call means the writable gate is broken.
+    _setCaptureRequest_p2(() => {
+        throw new Error("HTTP call fired despite writable=false; gate is broken");
+    });
+    const { handleDeleteEventNotification } = await import(
+        "../src/tools/events/delete-event-notification.js"
+    );
+    const res = await handleDeleteEventNotification({
+        params: {
+            arguments: {
+                connectionName: "readonly",
+                notificationId: "target-notif",
+            },
+        },
+    });
+    assert.equal(res.isError, true);
+    assert.equal(res.reason, "connection_read_only");
+    _clearConnectionsForTests_p2();
+});
+
+// ---------- dispatch + tool count ----------
+
+test_p2("dispatch resolves delete_event_notification after Plan 05-04 Task 3 registration", async () => {
+    const { dispatch } = await import("../src/dispatch.js");
+    await import("../src/tools/_register.js");
+    _setCaptureRequest_p2((req) => {
+        if (req.method === "GET" && req.path.startsWith("/api/events/definitions/paginated")) {
+            return { elements: [], total: 0 };
+        }
+        throw new Error(`Unexpected ${req.method} ${req.path}`);
+    });
+    const res = await dispatch({
+        params: {
+            name: "delete_event_notification",
+            arguments: {
+                _testConnection: "fake",
+                notificationId: "target-notif",
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.tool, "delete_event_notification");
+    assert.equal(payload.dryRun, true);
+    assert.match(payload.confirmationToken, /^[0-9a-f]{64}$/);
+});

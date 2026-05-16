@@ -33,6 +33,9 @@ import { handleCreateEventNotification } from "./create-event-notification.js";
 // Plan 05-04 Task 2 — EVENT-09 part A (update_event_notification).
 //   STRICT_NO_ECHO + C3-class encrypted-field handling on http-notification-v2.
 import { handleUpdateEventNotification } from "./update-event-notification.js";
+// Plan 05-04 Task 3 — EVENT-09 part B (delete_event_notification).
+//   D-09 cascade-hash + apply-time drift refusal (Phase 3 delete_stream analog).
+import { handleDeleteEventNotification } from "./delete-event-notification.js";
 
 register("list_event_definitions", handleListEventDefinitions);
 register("get_event_definition", handleGetEventDefinition);
@@ -44,3 +47,4 @@ register("delete_event_definition", handleDeleteEventDefinition);
 register("list_event_notifications", handleListEventNotifications);
 register("create_event_notification", handleCreateEventNotification);
 register("update_event_notification", handleUpdateEventNotification);
+register("delete_event_notification", handleDeleteEventNotification);
