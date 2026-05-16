@@ -3,14 +3,15 @@
 // barrel stays the single source of truth for tool→handler wiring.
 //
 // Plan 06-02 ships 6 dashboard CRUD tools — registered incrementally
-// across Tasks 1-4 of this plan:
+// across Tasks 1-4 of that plan:
 //   - Task 1: DASH-01 list_dashboards, DASH-02 get_dashboard
 //   - Task 2: DASH-03 create_dashboard (C7 ACCEPTANCE GATE)
 //   - Task 3: DASH-04 update_dashboard, DASH-05 delete_dashboard
 //   - Task 4: DASH-07 remove_widget (symmetric 2-step PUT chain)
 //
-// Plan 06-03 will extend this barrel with DASH-06 add_widget_from_template
-// alongside the widget-template library.
+// Plan 06-03 Task 2 extends this barrel with DASH-06 add_widget_from_template
+// alongside the widget-template library shipped in Task 1 → 7 dashboard tools
+// total, full DASH coverage minus blueprint composition (Plans 06-04/05).
 
 import { register } from "../../dispatch.js";
 
@@ -24,6 +25,8 @@ import { handleUpdateDashboard } from "./update-dashboard.js";
 import { handleDeleteDashboard } from "./delete-dashboard.js";
 // Plan 06-02 Task 4 — DASH-07 remove_widget (symmetric 2-step PUT chain).
 import { handleRemoveWidget } from "./remove-widget.js";
+// Plan 06-03 Task 2 — DASH-06 add_widget_from_template (M7 ACCEPTANCE GATE).
+import { handleAddWidgetFromTemplate } from "./add-widget-from-template.js";
 
 register("list_dashboards", handleListDashboards);
 register("get_dashboard", handleGetDashboard);
@@ -31,3 +34,4 @@ register("create_dashboard", handleCreateDashboard);
 register("update_dashboard", handleUpdateDashboard);
 register("delete_dashboard", handleDeleteDashboard);
 register("remove_widget", handleRemoveWidget);
+register("add_widget_from_template", handleAddWidgetFromTemplate);

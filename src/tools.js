@@ -1712,4 +1712,37 @@ export const toolDefinitions = [
             required: ["dashboardId", "widgetId"],
         },
     },
+    {
+        name: "add_widget_from_template",
+        description: "Add a widget from the curated 8-template library to a dashboard. Atomic two-step PUT chain (PUT /api/views/search + PUT /api/views); 1-step for top_error_clusters text-widget placeholder. Closed-set templateName enum (M7) rejects unknown names at parse before any HTTP. Use remove_widget (DASH-07) to remove widgets.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                connectionName: { type: "string" },
+                dryRun: { type: "boolean", description: "Default true." },
+                idempotencyKey: { type: "string" },
+                dashboardId: { type: "string", description: "The dashboard's ViewDTO id." },
+                templateName: {
+                    type: "string",
+                    enum: [
+                        "error_rate_over_time",
+                        "top_sources_by_volume",
+                        "level_distribution",
+                        "top_error_clusters",
+                        "request_rate_over_time",
+                        "field_value_distribution",
+                        "recent_events_table",
+                        "stream_activity_overview",
+                    ],
+                    description: "Curated template (M7 closed set). top_error_clusters ships as a text-widget placeholder (no SearchType); field_value_distribution requires options.field.",
+                },
+                options: {
+                    type: "object",
+                    description: "Per-template options: streamIds[], queryString, timerangeOverride, position, widgetId, searchTypeId. field_value_distribution REQUIRES `field`; templates with limits accept `limit`; clusterCount for top_error_clusters; intervalUnit/intervalValue for stream_activity_overview.",
+                    additionalProperties: true,
+                },
+            },
+            required: ["dashboardId", "templateName"],
+        },
+    },
 ];

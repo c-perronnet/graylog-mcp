@@ -34,6 +34,7 @@
 
 import { z } from "zod";
 import { mutatingBase, listBase } from "../_shared/schemas.js";
+import { TEMPLATE_NAMES } from "../../widget-templates/index.js";
 
 // =====================================================================
 // Widget triplet — agent-facing input shape
@@ -190,4 +191,36 @@ export const DeleteDashboardSchema = mutatingBase.extend({
 export const RemoveWidgetSchema = mutatingBase.extend({
     dashboardId: z.string().min(1, "dashboardId required"),
     widgetId: z.string().min(1, "widgetId required"),
+});
+
+// =====================================================================
+// DASH-06 — add_widget_from_template (Plan 06-03 — M7 ACCEPTANCE GATE)
+// =====================================================================
+//
+// Drops a widget from the curated WIDGET_TEMPLATES library onto an existing
+// dashboard. Symmetric to remove_widget — orchestrates a Search+View 2-step
+// PUT chain (or 1-step for the text-widget placeholder where searchType:null).
+//
+// M7 ACCEPTANCE GATE: `templateName` is `z.enum(TEMPLATE_NAMES)` so invalid
+// names reject at zod.parse BEFORE any HTTP fires. This is THE structural
+// rejection point — no agent input flows past this check without matching
+// the closed set defined in src/widget-templates/index.js. Mirror of the
+// .strict() searchId rejection on create/update_dashboard (D-02), but for
+// a different attack vector (M7 — template enumeration / typo amplification).
+//
+// `options` is open-shape `z.object({}).passthrough().default({})` because
+// each template has a different option contract (streamIds for all,
+// queryString for some, field for field_value_distribution, limit/intervalUnit
+// for the time-bucket templates, etc.). Per-template option validation lives
+// in the builder itself — `buildFieldValueDistribution` throws when `field`
+// is absent, etc. The error propagates through defineMutatingHandler.build()
+// → catch → wrapGraylogError so the agent sees a structured isError envelope.
+export const AddWidgetFromTemplateSchema = mutatingBase.extend({
+    dashboardId: z.string().min(1, "dashboardId required"),
+    // M7 ACCEPTANCE GATE: closed-set rejection at parse. The runtime
+    // WIDGET_TEMPLATES map is also Object.freeze'd (T-06-03-08) so even if
+    // a future codepath bypassed this schema, the lookup would fail.
+    templateName: z.enum(TEMPLATE_NAMES),
+    // Open shape — per-template option contracts vary; builders own validation.
+    options: z.object({}).passthrough().default({}),
 });
