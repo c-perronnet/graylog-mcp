@@ -73,8 +73,14 @@ export function extractJobId(args) {
 export async function resolveJobIdFromInfo(client, info_substring) {
     const list = await client.request("GET", "/api/system/jobs", null);
     const jobs = Array.isArray(list) ? list : (list?.jobs ?? []);
+    // F-21 (Phase 2 IN-04): Graylog job-description casing drifts across
+    // versions (e.g. "Building index ranges" vs "BUILDING INDEX RANGES"), so
+    // normalize both operands to lowercase before substring-matching. A
+    // case-sensitive match would silently return job_not_found on a version
+    // whose `info` casing differs from what the agent supplied.
+    const needle = info_substring.toLowerCase();
     const matches = jobs.filter(
-        (j) => typeof j?.info === "string" && j.info.includes(info_substring),
+        (j) => typeof j?.info === "string" && j.info.toLowerCase().includes(needle),
     );
     if (matches.length === 0) {
         return {
