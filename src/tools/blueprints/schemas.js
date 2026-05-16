@@ -28,6 +28,20 @@ export const SetupLongTermArchivalIndexSchema = mutatingBase.extend({
     replicas: z.number().int().nonnegative().optional(),
 });
 
-// BLUE-04 (setup_pipeline_for_stream) + BLUE-06 (setup_debug_log_dropping)
-// schemas land in Plan 06-04 Tasks 2-3 amendments to this file. Plan 06-05
-// adds the remaining 3 schemas (BLUE-01/02/03).
+// =====================================================================
+// BLUE-06 — setup_debug_log_dropping (Plan 06-04 Task 2)
+// 3-step chain: createRule (drop on level > minLevel) + createPipeline
+// (single-stage referencing the rule by title) + connectToStream.
+// Syslog level inversion: HIGHER number = LESS severe; the predicate
+// `level > minLevel` drops sub-threshold (less severe) messages.
+// =====================================================================
+
+export const SetupDebugLogDroppingSchema = mutatingBase.extend({
+    streamId: z.string().min(1),
+    minLevel: z.number().int().min(0).max(7),  // syslog 0..7; drops messages with level > minLevel
+    pipelineTitle: z.string().optional(),       // default: "Drop sub-${minLevel} for stream ${streamId}"
+    ruleTitle: z.string().optional(),           // default: "drop_sub_${minLevel}"
+});
+
+// BLUE-04 (setup_pipeline_for_stream) schema lands in Plan 06-04 Task 3.
+// Plan 06-05 adds the remaining 3 schemas (BLUE-01/02/03).

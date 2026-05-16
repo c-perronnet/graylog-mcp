@@ -1776,6 +1776,22 @@ export const toolDefinitions = [
             required: ["name", "retentionDays"],
         },
     },
-    // Plan 06-04 Task 2 — setup_debug_log_dropping appends here.
+    {
+        name: "setup_debug_log_dropping",
+        description: "Blueprint (BLUE-06): drop messages with `level > minLevel` on a specific stream. 3-step chain: createRule (DSL via emitRule with `when level > minLevel then drop_message()`) → createPipeline (single-stage referencing the rule by title) → connectToStream. Syslog level inversion: HIGHER number = LESS severe (0=emerg, 7=debug); the predicate drops STRICTLY MORE VERBOSE messages than minLevel (e.g. minLevel:6 keeps emerg..info, drops debug-only). Apply walks executeChain — pipeline_ids substituted from step 2's pipeline id at apply-time. Schema: { streamId, minLevel:0..7, pipelineTitle?, ruleTitle? }.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                connectionName: { type: "string", description: "Optional per-call connection override" },
+                dryRun: { type: "boolean", description: "Default true. Set to false to apply." },
+                idempotencyKey: { type: "string", description: "Optional agent-supplied idempotency key" },
+                streamId: { type: "string", description: "Target stream ID (from list_streams) to attach the dropping pipeline to." },
+                minLevel: { type: "number", description: "Syslog severity threshold (0..7). Messages with level > minLevel are dropped. Higher number = less severe (0=emerg, 7=debug)." },
+                pipelineTitle: { type: "string", description: "Optional pipeline title (default: 'Drop sub-<minLevel> for stream <streamId>')." },
+                ruleTitle: { type: "string", description: "Optional pipeline-rule title (default: 'drop_sub_<minLevel>'). The pipeline source references the rule by this title." },
+            },
+            required: ["streamId", "minLevel"],
+        },
+    },
     // Plan 06-04 Task 3 — setup_pipeline_for_stream appends here.
 ];
