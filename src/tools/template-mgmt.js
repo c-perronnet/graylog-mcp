@@ -106,8 +106,13 @@ export async function handleImportTemplates(request) {
     const store = loadTemplateStore(r.name);
     if (mode === "replace") store.templates = {};
     let added = 0;
-    for (const [id, tpl] of Object.entries(args.templates)) {
-        store.templates[id] = { ...tpl, id };
+    for (const [key, tpl] of Object.entries(args.templates)) {
+        // Preserve the imported template's id if present and well-formed;
+        // only fall back to the map key when the embedded id is missing.
+        // This keeps cross-connection traceability across export/import round-trips
+        // and prevents the map key from clobbering an explicit id field.
+        const preservedId = (typeof tpl?.id === "string" && tpl.id.length > 0) ? tpl.id : key;
+        store.templates[preservedId] = { ...tpl, id: preservedId };
         added++;
     }
     saveTemplateStore(r.name, store);
