@@ -50,9 +50,12 @@ export async function preflightParsePipeline(client, source) {
                 ok: false,
                 error: errs.map((e) => ({
                     line: e?.line,
-                    position_in_line: e?.positionInLine,    // Pitfall 6 — camelCase IN, snake_case OUT
+                    // Wire shape verified live on Graylog 7.0.6 (verify-work 02..06,
+                    // 2026-05-16): snake_case `position_in_line` + `reason` field.
+                    // Original Pitfall 6 research surmise of camelCase wire was wrong.
+                    position_in_line: e?.position_in_line ?? e?.positionInLine,
                     type: e?.type,
-                    message: e?.message ?? `${e?.type} at L${e?.line}:${e?.positionInLine}`,
+                    message: e?.reason ?? e?.message ?? `${e?.type} at L${e?.line}:${e?.position_in_line ?? e?.positionInLine}`,
                 })),
             };
             const wrapped = new GraylogValidationError(
