@@ -1,0 +1,578 @@
+exports[`snapshot: create_event_definition (v6 input) — C5 ACCEPTANCE GATE: migrated_from_v6_shape + v7 rewrite on wire (EVENT-03 + C5) 1`] = `
+{
+  "dryRun": true,
+  "tool": "create_event_definition",
+  "connection": "fixture_conn",
+  "idempotencyKey": "263f622ccd267e2c111dd153d112e7df",
+  "summary": "Create event definition \\"V6 Style Spike\\" with schedule:false (call enable_event_definition to activate)",
+  "preview": {
+    "method": "POST",
+    "path": "/api/events/definitions?schedule=false",
+    "body": {
+      "entity": {
+        "title": "V6 Style Spike",
+        "priority": 2,
+        "alert": true,
+        "config": {
+          "type": "aggregation-v1",
+          "query": "level:>=4",
+          "streams": [
+            "66e8stream"
+          ],
+          "group_by": [
+            "source"
+          ],
+          "series": [
+            {
+              "type": "count",
+              "id": "count_source",
+              "field": "source"
+            }
+          ],
+          "conditions": {
+            "expression": {
+              "type": "number-ref",
+              "ref": "count_source"
+            }
+          },
+          "search_within_ms": 60000,
+          "execute_every_ms": 60000,
+          "use_cron_scheduling": false,
+          "event_limit": 100
+        },
+        "field_spec": {},
+        "key_spec": [],
+        "notification_settings": {
+          "grace_period_ms": 0,
+          "backlog_size": 0
+        },
+        "notifications": [],
+        "storage": [
+          {
+            "type": "persist-to-streams-v1",
+            "streams": [
+              "000000000000000000000002"
+            ]
+          }
+        ],
+        "state": "DISABLED"
+      },
+      "share_request": null
+    }
+  },
+  "postApplyEstimate": {
+    "id": "__SERVER_ASSIGNED__",
+    "state": "DISABLED",
+    "wouldStartScheduling": false
+  },
+  "existingMatches": [],
+  "migration": {
+    "migrated": true,
+    "dto": {
+      "title": "V6 Style Spike",
+      "priority": 2,
+      "alert": true,
+      "config": {
+        "type": "aggregation-v1",
+        "query": "level:>=4",
+        "streams": [
+          "66e8stream"
+        ],
+        "group_by": [
+          "source"
+        ],
+        "series": [
+          {
+            "type": "count",
+            "id": "count_source",
+            "field": "source"
+          }
+        ],
+        "conditions": {
+          "expression": {
+            "type": "number-ref",
+            "ref": "count_source"
+          }
+        },
+        "search_within_ms": 60000,
+        "execute_every_ms": 60000,
+        "use_cron_scheduling": false,
+        "event_limit": 100
+      },
+      "field_spec": {},
+      "key_spec": [],
+      "notification_settings": {
+        "grace_period_ms": 0,
+        "backlog_size": 0
+      },
+      "notifications": [],
+      "storage": [
+        {
+          "type": "persist-to-streams-v1",
+          "streams": [
+            "000000000000000000000002"
+          ]
+        }
+      ],
+      "state": "DISABLED"
+    },
+    "warnings": [
+      {
+        "migrated_from_v6_shape": true,
+        "original": {
+          "type": "function",
+          "function": "count",
+          "parameter": "source"
+        },
+        "emitted": "count_source"
+      }
+    ]
+  },
+  "applyHint": "Re-call with dryRun: false to apply"
+}
+`;
+
+exports[`snapshot: create_event_definition (v7 input) — M1 ACCEPTANCE GATE: ?schedule=false + wouldStartScheduling:false (EVENT-03 + D-01) 1`] = `
+{
+  "dryRun": true,
+  "tool": "create_event_definition",
+  "connection": "fixture_conn",
+  "idempotencyKey": "8dd14b4fdde712ede8fb5a7ee9fc9004",
+  "summary": "Create event definition \\"App Error Spike\\" with schedule:false (call enable_event_definition to activate)",
+  "preview": {
+    "method": "POST",
+    "path": "/api/events/definitions?schedule=false",
+    "body": {
+      "entity": {
+        "title": "App Error Spike",
+        "priority": 2,
+        "alert": true,
+        "config": {
+          "type": "aggregation-v1",
+          "query": "level:>=4",
+          "streams": [
+            "66e8stream"
+          ],
+          "group_by": [
+            "source"
+          ],
+          "series": [
+            {
+              "type": "count",
+              "id": "count_source",
+              "field": "source"
+            }
+          ],
+          "conditions": {
+            "expression": {
+              "expr": ">",
+              "left": {
+                "expr": "number-ref",
+                "ref": "count_source"
+              },
+              "right": {
+                "expr": "number",
+                "value": 100
+              }
+            }
+          },
+          "search_within_ms": 60000,
+          "execute_every_ms": 60000,
+          "use_cron_scheduling": false,
+          "event_limit": 100
+        },
+        "field_spec": {},
+        "key_spec": [],
+        "notification_settings": {
+          "grace_period_ms": 0,
+          "backlog_size": 0
+        },
+        "notifications": [],
+        "storage": [
+          {
+            "type": "persist-to-streams-v1",
+            "streams": [
+              "000000000000000000000002"
+            ]
+          }
+        ],
+        "state": "DISABLED"
+      },
+      "share_request": null
+    }
+  },
+  "postApplyEstimate": {
+    "id": "__SERVER_ASSIGNED__",
+    "state": "DISABLED",
+    "wouldStartScheduling": false
+  },
+  "existingMatches": [],
+  "applyHint": "Re-call with dryRun: false to apply"
+}
+`;
+
+exports[`snapshot: create_event_notification REJECTS script-notification-v1 at zod.parse — closed-set discriminator (EVENT-08 + D-05 corrected) 1`] = `
+{
+  "isError": true,
+  "content": [
+    {
+      "type": "text",
+      "text": "config.type: Invalid discriminator value. Expected 'email-notification-v1' | 'http-notification-v1' | 'http-notification-v2' | 'slack-notification-v1' | 'pagerduty-notification-v2' | 'teams-notification-v2'"
+    }
+  ]
+}
+`;
+
+exports[`snapshot: create_event_notification http-v2 — C3 ACCEPTANCE GATE: basic_auth + api_secret <redacted> in preview (EVENT-08 + C3) 1`] = `
+{
+  "dryRun": true,
+  "tool": "create_event_notification",
+  "connection": "fixture_conn",
+  "idempotencyKey": "743959f45d4d4fa0863216fc732e7045",
+  "summary": "Create event notification \\"HTTP v2\\" (type: http-notification-v2)",
+  "preview": {
+    "method": "POST",
+    "path": "/api/events/notifications",
+    "body": {
+      "entity": {
+        "title": "HTTP v2",
+        "description": "",
+        "config": {
+          "type": "http-notification-v2",
+          "url": "https://hook.example/",
+          "method": "POST",
+          "time_zone": "UTC",
+          "skip_tls_verification": false,
+          "basic_auth": "<redacted>",
+          "api_key_as_header": false,
+          "api_secret": "<redacted>"
+        }
+      },
+      "share_request": null
+    }
+  },
+  "postApplyEstimate": {
+    "id": "__SERVER_ASSIGNED__"
+  },
+  "existingMatches": [],
+  "applyHint": "Re-call with dryRun: false to apply"
+}
+`;
+
+exports[`snapshot: create_event_notification slack — D-05 discriminator + CreateEntityRequest envelope (EVENT-08 + D-05) 1`] = `
+{
+  "dryRun": true,
+  "tool": "create_event_notification",
+  "connection": "fixture_conn",
+  "idempotencyKey": "ef59ba8b79647ea2fb6132cc31c481dc",
+  "summary": "Create event notification \\"Slack alerts\\" (type: slack-notification-v1)",
+  "preview": {
+    "method": "POST",
+    "path": "/api/events/notifications",
+    "body": {
+      "entity": {
+        "title": "Slack alerts",
+        "description": "",
+        "config": {
+          "type": "slack-notification-v1",
+          "color": "#ff0500",
+          "webhook_url": "https://hooks.slack.com/services/X/Y/Z",
+          "channel": "#general",
+          "notify_channel": false,
+          "notify_here": false,
+          "link_names": false,
+          "backlog_size": 0,
+          "time_zone": "UTC",
+          "include_title": true,
+          "include_event_procedure": false
+        }
+      },
+      "share_request": null
+    }
+  },
+  "postApplyEstimate": {
+    "id": "__SERVER_ASSIGNED__"
+  },
+  "existingMatches": [],
+  "applyHint": "Re-call with dryRun: false to apply"
+}
+`;
+
+exports[`snapshot: delete_event_definition D-08 INFORMATIONAL cascade (2 referenced notifications) — NO confirmationToken (EVENT-05 + D-08) 1`] = `
+{
+  "dryRun": true,
+  "tool": "delete_event_definition",
+  "connection": "fixture_conn",
+  "idempotencyKey": "275a14340d16da229cccbf50a4bce86c",
+  "summary": "Delete event definition abc (any notifications referenced lose this def's wiring; notifications themselves survive)",
+  "preview": {
+    "method": "DELETE",
+    "path": "/api/events/definitions/abc"
+  },
+  "postApplyEstimate": {
+    "id": "abc",
+    "deleted": true
+  },
+  "existingMatches": [],
+  "cascades": {
+    "notifications": [
+      {
+        "notification_id": "notif-A",
+        "notification_parameters": null
+      },
+      {
+        "notification_id": "notif-B",
+        "notification_parameters": {
+          "threshold": 10
+        }
+      }
+    ]
+  },
+  "applyHint": "Re-call with dryRun: false to apply"
+}
+`;
+
+exports[`snapshot: delete_event_notification — D-09 ACCEPTANCE GATE: cascade + frozen confirmationToken (EVENT-09b + D-09) 1`] = `
+{
+  "dryRun": true,
+  "tool": "delete_event_notification",
+  "connection": "fixture_conn",
+  "idempotencyKey": "62439ee7e394c422551a5f5bc58539f8",
+  "summary": "Delete event notification target",
+  "preview": {
+    "method": "DELETE",
+    "path": "/api/events/notifications/target"
+  },
+  "postApplyEstimate": {
+    "id": "target",
+    "deleted": true
+  },
+  "existingMatches": [],
+  "confirmationToken": "9b8092ee7a5aec3b921bec4094d8a786fe6a3226140b0cd28bdf1a182662ba35",
+  "cascades": {
+    "event_definitions": [
+      {
+        "id": "def-1",
+        "title": "Spike"
+      },
+      {
+        "id": "def-2",
+        "title": "Quota"
+      }
+    ]
+  },
+  "applyHint": "Re-call with dryRun: false to apply"
+}
+`;
+
+exports[`snapshot: disable_event_definition empty-body WILDCARD (EVENT-06 + D-07 mirror) 1`] = `
+{
+  "dryRun": true,
+  "tool": "disable_event_definition",
+  "connection": "fixture_conn",
+  "idempotencyKey": "01f0bfa357c1701013cca5be0b61e83d",
+  "summary": "Disable scheduling for event definition abc (eventually consistent — poll get_event_definition for state:\\"DISABLED\\")",
+  "preview": {
+    "method": "PUT",
+    "path": "/api/events/definitions/abc/unschedule"
+  },
+  "postApplyEstimate": {
+    "id": "abc",
+    "state": "DISABLED"
+  },
+  "existingMatches": [],
+  "applyHint": "Re-call with dryRun: false to apply"
+}
+`;
+
+exports[`snapshot: enable_event_definition empty-body WILDCARD (EVENT-06 + D-07 + Pitfall 4) 1`] = `
+{
+  "dryRun": true,
+  "tool": "enable_event_definition",
+  "connection": "fixture_conn",
+  "idempotencyKey": "768c22d1e75ecbe4b51995aa0aaa5311",
+  "summary": "Enable scheduling for event definition abc (eventually consistent — poll get_event_definition for state:\\"ENABLED\\")",
+  "preview": {
+    "method": "PUT",
+    "path": "/api/events/definitions/abc/schedule"
+  },
+  "postApplyEstimate": {
+    "id": "abc",
+    "state": "ENABLED"
+  },
+  "existingMatches": [],
+  "applyHint": "Re-call with dryRun: false to apply"
+}
+`;
+
+exports[`snapshot: get_event_definition full EventDefinitionDto pass-through (EVENT-02) 1`] = `
+{
+  "tool": "get_event_definition",
+  "connection": "fixture_conn",
+  "definition": {
+    "id": "66e8a4bce8f3a4001b88c123",
+    "title": "Spike Alert",
+    "description": "spike alert def",
+    "priority": 2,
+    "alert": true,
+    "config": {
+      "type": "aggregation-v1",
+      "query": "level:>=4",
+      "streams": [
+        "66e8stream"
+      ],
+      "group_by": [
+        "source"
+      ],
+      "series": [
+        {
+          "type": "count",
+          "id": "count_source",
+          "field": "source"
+        }
+      ],
+      "conditions": {
+        "expression": {
+          "expr": ">",
+          "left": {
+            "expr": "number-ref",
+            "ref": "count_source"
+          },
+          "right": {
+            "expr": "number",
+            "value": 100
+          }
+        }
+      },
+      "search_within_ms": 60000,
+      "execute_every_ms": 60000,
+      "use_cron_scheduling": false,
+      "event_limit": 100
+    },
+    "field_spec": {},
+    "key_spec": [],
+    "notification_settings": {
+      "grace_period_ms": 0,
+      "backlog_size": 0
+    },
+    "notifications": [
+      {
+        "notification_id": "n1"
+      }
+    ],
+    "storage": [
+      {
+        "type": "persist-to-streams-v1",
+        "streams": [
+          "000000000000000000000002"
+        ]
+      }
+    ],
+    "state": "ENABLED",
+    "scheduler": {
+      "is_scheduled": true,
+      "next_time": "2026-01-01T00:00:00Z"
+    }
+  }
+}
+`;
+
+exports[`snapshot: list_event_definitions narrow projection of 2-def cluster (EVENT-01) 1`] = `
+{
+  "tool": "list_event_definitions",
+  "connection": "fixture_conn",
+  "count": 2,
+  "limit": 25,
+  "fields": [
+    "id",
+    "title",
+    "description",
+    "priority",
+    "state",
+    "alert"
+  ],
+  "items": [
+    {
+      "id": "def-1",
+      "title": "Spike",
+      "description": "alpha",
+      "priority": 2,
+      "state": "ENABLED",
+      "alert": true
+    },
+    {
+      "id": "def-2",
+      "title": "Quota",
+      "description": "beta",
+      "priority": 3,
+      "state": "DISABLED",
+      "alert": false
+    }
+  ]
+}
+`;
+
+exports[`snapshot: list_event_notifications narrow projection (mixed-type 2-notif cluster) (EVENT-07) 1`] = `
+{
+  "tool": "list_event_notifications",
+  "connection": "fixture_conn",
+  "count": 2,
+  "limit": 25,
+  "fields": [
+    "id",
+    "title",
+    "description",
+    "config"
+  ],
+  "items": [
+    {
+      "id": "notif-1",
+      "title": "Slack Ops",
+      "description": "ops slack channel",
+      "config": {
+        "type": "slack-notification-v1",
+        "webhook_url": "https://hooks.slack.com/services/A/B/C",
+        "channel": "#ops",
+        "color": "#ff0500",
+        "include_title": true
+      }
+    },
+    {
+      "id": "notif-2",
+      "title": "Email Ops",
+      "description": "ops mailing list",
+      "config": {
+        "type": "email-notification-v1",
+        "subject": "Alert",
+        "body_template": "An event happened",
+        "email_recipients": [
+          "ops@example.org"
+        ]
+      }
+    }
+  ]
+}
+`;
+
+exports[`snapshot: update_event_definition STRICT_NO_ECHO — title-only emits exactly [id, title] (EVENT-04 + D-02 + D-10) 1`] = `
+{
+  "dryRun": true,
+  "tool": "update_event_definition",
+  "connection": "fixture_conn",
+  "idempotencyKey": "06325155fc8cde99f7bd4d45f4dba09c",
+  "summary": "Update event definition 66e8a4bce8f3a4001b88c123 (1 change(s); schedule:false preserved)",
+  "preview": {
+    "method": "PUT",
+    "path": "/api/events/definitions/66e8a4bce8f3a4001b88c123?schedule=false",
+    "body": {
+      "id": "66e8a4bce8f3a4001b88c123",
+      "title": "Renamed Spike"
+    }
+  },
+  "postApplyEstimate": {
+    "id": "66e8a4bce8f3a4001b88c123"
+  },
+  "existingMatches": [],
+  "applyHint": "Re-call with dryRun: false to apply"
+}
+`;
