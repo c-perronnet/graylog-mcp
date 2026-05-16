@@ -1,0 +1,56 @@
+{
+  "page": 1,
+  "per_page": 25,
+  "total": 1,
+  "count": 1,
+  "context": {
+    "scheduler_ctx": {}
+  },
+  "event_definitions": [
+    {
+      "id": "65a0000000000000000000aa",
+      "title": "High error rate",
+      "description": "Fires when error count exceeds threshold over 5 minutes",
+      "priority": 2,
+      "alert": true,
+      "config": {
+        "type": "aggregation-v1",
+        "query": "level:>=4",
+        "query_parameters": [],
+        "streams": ["000000000000000000000002"],
+        "filter": {},
+        "group_by": [],
+        "series": [
+          { "id": "count-1", "type": "count", "field": null }
+        ],
+        "conditions": {
+          "expression": {
+            "expr": ">",
+            "left": { "expr": "number-ref", "ref": "count-1" },
+            "right": { "expr": "number", "value": 10 }
+          }
+        },
+        "search_within_ms": 300000,
+        "execute_every_ms": 60000,
+        "use_cron_scheduling": false
+      },
+      "field_spec": {},
+      "key_spec": [],
+      "notification_settings": {
+        "grace_period_ms": 0,
+        "backlog_size": 50
+      },
+      "notifications": [],
+      "storage": [
+        { "type": "persist-to-streams", "streams": ["000000000000000000000004"] }
+      ],
+      "scheduler": {
+        "is_scheduled": true,
+        "next_time": null,
+        "triggered_at": null,
+        "queued_notifications": 0
+      },
+      "matched_at": null
+    }
+  ]
+}

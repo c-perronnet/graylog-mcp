@@ -1,5 +1,18 @@
 import axios from "axios";
 
+// Test-only HTTP seam (Phase 7 Plan 03 HARD-03 smoke). Mirrors the
+// `_setSearchOverride` pattern in src/clustering/_test_hooks.js. When set,
+// every fetchStreams() / searchGraylog() call dispatches through the
+// override instead of axios. Production code MUST NOT call _setHttpOverride
+// — the `_` prefix marks it as test-only per CONVENTIONS.md.
+//
+// Callback signature: ({ method, path, body }) => Promise<responseData> | responseData
+// Throwing from the callback simulates a transport failure (used to exercise
+// the histogram fallback chain in test/v7-read-tool-smoke.test.js).
+let _httpOverride = null;
+export function _setHttpOverride(fn) { _httpOverride = fn; }
+export function _clearHttpOverride() { _httpOverride = null; }
+
 export function buildQueryString(query, filters, exactMatch = true) {
     let qs;
     if (!query || query === "*") {
@@ -83,6 +96,9 @@ export async function fetchMessageById(baseUrl, apiToken, messageId) {
 }
 
 export async function fetchStreams(baseUrl, apiToken) {
+    if (_httpOverride) {
+        return _httpOverride({ method: "GET", path: "/api/streams", baseUrl, apiToken });
+    }
     const response = await axios.get(`${baseUrl}/api/streams`, {
         headers: {
             'Accept': 'application/json',
@@ -97,6 +113,9 @@ export async function fetchStreams(baseUrl, apiToken) {
 }
 
 export async function searchGraylog(baseUrl, apiToken, payload) {
+    if (_httpOverride) {
+        return _httpOverride({ method: "POST", path: "/api/views/search/sync", body: payload, baseUrl, apiToken });
+    }
     try {
         const response = await axios.post(`${baseUrl}/api/views/search/sync`, payload, {
             headers: {

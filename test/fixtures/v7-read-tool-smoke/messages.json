@@ -1,0 +1,65 @@
+{
+  "execution": {
+    "done": true,
+    "cancelled": false,
+    "completed_exceptionally": false
+  },
+  "results": {
+    "q1": {
+      "id": "q1",
+      "execution_stats": {
+        "duration": 12,
+        "timestamp": "2026-05-16T04:00:00.000Z",
+        "effective_timerange": {
+          "type": "absolute",
+          "from": "2026-05-16T03:45:00.000Z",
+          "to": "2026-05-16T04:00:00.000Z"
+        }
+      },
+      "search_types": {
+        "st1": {
+          "id": "st1",
+          "type": "messages",
+          "total_results": 2,
+          "duration": 8,
+          "messages": [
+            {
+              "message": {
+                "_id": "msg-aaaa-1111",
+                "gl2_message_id": "msg-aaaa-1111",
+                "source": "app1",
+                "level": 6,
+                "timestamp": "2026-05-16T03:59:00.000Z",
+                "message": "request handled in 12ms"
+              },
+              "decoration_stats": null,
+              "index": "graylog_0"
+            },
+            {
+              "message": {
+                "_id": "msg-bbbb-2222",
+                "gl2_message_id": "msg-bbbb-2222",
+                "source": "app1",
+                "level": 4,
+                "timestamp": "2026-05-16T03:58:30.000Z",
+                "message": "connection refused"
+              },
+              "decoration_stats": null,
+              "index": "graylog_0"
+            }
+          ],
+          "used_indices": ["graylog_0"],
+          "decoration_stats": null,
+          "effective_timerange": {
+            "type": "absolute",
+            "from": "2026-05-16T03:45:00.000Z",
+            "to": "2026-05-16T04:00:00.000Z"
+          }
+        }
+      },
+      "state": "COMPLETED",
+      "errors": []
+    }
+  },
+  "errors": []
+}

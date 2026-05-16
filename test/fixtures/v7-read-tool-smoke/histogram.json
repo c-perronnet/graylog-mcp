@@ -1,0 +1,60 @@
+{
+  "execution": {
+    "done": true,
+    "cancelled": false,
+    "completed_exceptionally": false
+  },
+  "results": {
+    "q1": {
+      "id": "q1",
+      "execution_stats": {
+        "duration": 18,
+        "timestamp": "2026-05-16T04:00:00.000Z",
+        "effective_timerange": {
+          "type": "absolute",
+          "from": "2026-05-16T03:45:00.000Z",
+          "to": "2026-05-16T04:00:00.000Z"
+        }
+      },
+      "search_types": {
+        "st1": {
+          "id": "st1",
+          "type": "pivot",
+          "rows": [
+            {
+              "key": ["2026-05-16T03:45:00.000Z"],
+              "values": [
+                { "key": ["count()"], "value": 12, "rollup": false, "source": "row-leaf" }
+              ],
+              "source": "leaf"
+            },
+            {
+              "key": ["2026-05-16T03:50:00.000Z"],
+              "values": [
+                { "key": ["count()"], "value": 17, "rollup": false, "source": "row-leaf" }
+              ],
+              "source": "leaf"
+            },
+            {
+              "key": ["2026-05-16T03:55:00.000Z"],
+              "values": [
+                { "key": ["count()"], "value": 21, "rollup": false, "source": "row-leaf" }
+              ],
+              "source": "leaf"
+            }
+          ],
+          "columns": [],
+          "total": 50,
+          "effective_timerange": {
+            "type": "absolute",
+            "from": "2026-05-16T03:45:00.000Z",
+            "to": "2026-05-16T04:00:00.000Z"
+          }
+        }
+      },
+      "state": "COMPLETED",
+      "errors": []
+    }
+  },
+  "errors": []
+}
