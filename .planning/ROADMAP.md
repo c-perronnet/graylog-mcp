@@ -135,7 +135,7 @@
   - [x] 06-03-PLAN.md — Widget templates (DASH-08, 8 frozen triplet builders) + add_widget_from_template (DASH-06 — M7 closed-set rejection); top_error_clusters ships as text-widget placeholder per Q3 default
   - [x] 06-04-PLAN.md — Blueprints A: setup_long_term_archival_index (BLUE-05), setup_debug_log_dropping (BLUE-06), setup_pipeline_for_stream (BLUE-04 — reuses pipeline-dsl/emit)
   - [x] 06-05-PLAN.md — Blueprints B: setup_app_monitoring_stack (BLUE-01 — 6-step headline mega-chain), setup_error_alerting (BLUE-02), create_app_health_dashboard (BLUE-03)
-  - [ ] 06-06-PLAN.md — Snapshot freeze (18 fixtures incl. C7 + D-03 + M7 + BLUE-01 mega-chain + BLUE-01 partial-failure) + schema-parity for 14 tools + auth-redaction lint + 06-VALIDATION.md flip + human-verify checkpoint
+  - [x] 06-06-PLAN.md — Snapshot freeze (18 fixtures incl. C7 + D-03 + M7 + BLUE-01 mega-chain + BLUE-01 partial-failure) + schema-parity for 14 tools + auth-redaction lint + 06-VALIDATION.md flip + human-verify checkpoint
 **UI hint**: yes
 
 ### Phase 7: Final Hardening
