@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v2.3
 milestone_name: milestone
-status: Phase complete — ready for verification
-last_updated: "2026-05-16T00:47:22.474Z"
+status: Executing Phase 06
+last_updated: "2026-05-16T01:36:45.614Z"
 progress:
   total_phases: 8
   completed_phases: 6
-  total_plans: 32
+  total_plans: 38
   completed_plans: 32
-  percent: 100
+  percent: 84
 ---
 
 # Project Memory: Graylog MCP — Full Admin Surface
@@ -27,8 +27,8 @@ progress:
 
 ## Current Position
 
-Phase: 05 (events-notifications) — EXECUTING
-Plan: 5 of 5
+Phase: 06 (dashboards-widgets-blueprints) — EXECUTING
+Plan: 1 of 6
 
 - **Phase**: 5 — Events & notifications (event-definition CRUD + lifecycle + event-notification CRUD complete; only Plan 05-05 snapshot freeze remaining)
 - **Plan**: 4 of 5 complete (Plan 05-04 ships the 4-tool event-notification CRUD — list/create/update/delete_event_notification — closing EVENT-07/08/09. EVENT-07 (S5 displacement): list_event_notifications reclaims the v2.3 dispatch name with a narrow-projection `/api/events/notifications/paginated`-backed reader unwrapping `response.elements` (4-key default [id, title, description, config]; `defineListHandler.projectItem` is dot-notation-unaware, so `config.type` reaches the agent via items[i].config.type without a helper-layer change). EVENT-08 (D-05/D-06 + Pitfall 3 + C3 create): create_event_notification routes through the 6-variant `NotificationConfigSchema` discriminator (Plan 05-01) — 6 valid types accept; the 3 invalid-by-name variants (script-notification-v1, pagerduty-notification-v1, teams-notification-v1) reject at zod.parse BEFORE any HTTP call; wire body wraps in CreateEntityRequest envelope `{entity:{title, description, config}, share_request:null}` (Pitfall 3); FOUND-11 existingMatches probe fires against /api/events/notifications/paginated; for http-notification-v2, basic_auth + api_secret wrap as `{set_value:<plaintext>}` on the wire and surface as `<redacted>` in the dry-run preview via the `_applyBody` sibling pattern (mirror create_input D-04). EVENT-09 part A (D-10 STRICT_NO_ECHO + C3 ACCEPTANCE GATE on http-v2): update_event_notification PUT body emits ONLY agent-touched fields; encrypted basic_auth + api_secret are NEVER on the wire when the agent did not pass them (mirror Phase 1 update_input D-12; the load-bearing C3 protection against current-state round-trip wipe/leak); variant change cleanly replaces the variant (old fields ABSENT); body.id matches URL (Pitfall 8). EVENT-09 part B (D-09 cascade-hash + drift refusal load-bearing): delete_event_notification paginates /api/events/definitions/paginated and client-side filters on `def.notifications[].notification_id` (no server-side filter on 7.2 — mirror Pitfall S6); freezes referencing event_defs into a 64-hex sha-256 confirmationToken via `computeNotificationCascadeHash` (Plan 05-01 thin wrapper; canonical JSON byte-identical to computeCascadeHash with streamId=notificationId); apply re-fetches + recomputes + refuses with `isError reason:cascade_changed_since_preview` on drift; requireConfirm gate refuses apply with `confirmation_mismatch` when args.confirm is absent/stale (DELETE NEVER fires); safety cap 1000 pages × 50/page (T-05-04-07); cascade_preflight_failed hard-blocks the dry-run on per-page GET error; sync envelope `{deleted:true, notificationId}` on apply. Single source of truth for the encrypted-field inventory: `src/tools/events/encrypted-fields.js` — `Object.freeze`d map (only http-notification-v2 has encrypted fields on 7.2); future Graylog versions add encrypted fields by editing one file. Frozen empty-cascade literal `de6f0611eedf13b44f3267dbc02b07edbd822ef803d6af4702facf1bc88e538c` pinned at test/events.test.js for Plan 05-05 snapshot drift detection.
