@@ -787,6 +787,40 @@ export const toolDefinitions = [
             required: ["definitionId", "changes"],
         },
     },
+    // Plan 05-03 Task 1 — EVENT-06 enable + disable (count 70 → 72).
+    // D-07 / Pitfall 4 WILDCARD empty-body quirk. Both wire paths take an
+    // empty body (chosen_default per 05-U1-SMOKE.md UNREACHABLE → body:undefined).
+    // Both compose through defineMutatingHandler — dryRun:true default +
+    // writable-gate + idempotency-key dedupe inherited (lifecycle-as-mutation
+    // contract, mirror of Phase 1 INPUT-07 start_input / stop_input).
+    {
+        name: "enable_event_definition",
+        description: "Enable scheduling for an event definition (transitions state DISABLED→ENABLED). Sends an empty body to PUT /api/events/definitions/{id}/schedule per Graylog's @Consumes(WILDCARD) quirk — the agent does NOT construct a fake body (Pitfall 4 / D-07). Eventually consistent: poll get_event_definition for the post-apply scheduler.is_scheduled === true. Composes through defineMutatingHandler so dryRun:true default + writable-flag gate + idempotency-key dedupe inherit uniformly (lifecycle-as-mutation contract, mirror of start_input).",
+        inputSchema: {
+            type: "object",
+            properties: {
+                connectionName: { type: "string", description: "Optional connection name; defaults to active" },
+                dryRun: { type: "boolean", description: "Preview without applying. Default: true" },
+                idempotencyKey: { type: "string", description: "Optional retry-window dedupe key" },
+                definitionId: { type: "string", description: "Event definition id from list_event_definitions" },
+            },
+            required: ["definitionId"],
+        },
+    },
+    {
+        name: "disable_event_definition",
+        description: "Disable scheduling for an event definition (transitions state ENABLED→DISABLED). Sends an empty body to PUT /api/events/definitions/{id}/unschedule per Graylog's @Consumes(WILDCARD) quirk (Pitfall 4 / D-07). Eventually consistent: poll get_event_definition for scheduler.is_scheduled === false. Same defineMutatingHandler composition as enable_event_definition; symmetric except for the trailing path segment and postApplyEstimate.state.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                connectionName: { type: "string", description: "Optional connection name; defaults to active" },
+                dryRun: { type: "boolean", description: "Preview without applying. Default: true" },
+                idempotencyKey: { type: "string", description: "Optional retry-window dedupe key" },
+                definitionId: { type: "string", description: "Event definition id from list_event_definitions" },
+            },
+            required: ["definitionId"],
+        },
+    },
     {
         name: "cluster_log_messages",
         description: "Cluster similar log messages into Drain3-style templates. Fetches messages with the same args as search_messages_graylog, then groups them by structural similarity. Templates are persisted per connection and reused across calls.",

@@ -393,7 +393,7 @@ test("dispatch resolves list_pipelines/get_pipeline/delete_pipeline via the new 
     assert.ok(Array.isArray(payload.items));
 });
 
-test("assertAllToolsRegistered passes after Plan 05-02 phase-end (count = 70; event-definition CRUD complete)", async () => {
+test("assertAllToolsRegistered passes after Plan 05-03 Task 1 (count = 72; enable + disable_event_definition shipped)", async () => {
     const { dispatch, assertAllToolsRegistered } = await import("../src/dispatch.js");
     await import("../src/tools/_register.js");
     const { toolDefinitions } = await import("../src/tools.js");
@@ -408,10 +408,11 @@ test("assertAllToolsRegistered passes after Plan 05-02 phase-end (count = 70; ev
     // entries from tools.js (their handlers stay exported in handlers.js
     // for HARD-03 audit but are no longer wired in dispatch); count drops
     // to 66 temporarily. Plan 05-02 ships the 4-tool event-definition CRUD
-    // (list/get/create/update) → 70. Plan 05-03 adds delete/enable/disable
-    // → 73. Plan 05-04 adds list_event_notifications + 3 more → 77 (Phase 5
-    // end). Plans 06/07 are out of scope for this milestone.
-    assert.equal(toolDefinitions.length, 70, `Expected 70 tools after Plan 05-02 (event-definition CRUD complete); got ${toolDefinitions.length}`);
+    // (list/get/create/update) → 70. Plan 05-03 Task 1 adds enable + disable
+    // → 72; Task 2 adds delete_event_definition → 73. Plan 05-04 adds
+    // list_event_notifications + 3 more → 77 (Phase 5 end). Plans 06/07
+    // are out of scope for this milestone.
+    assert.equal(toolDefinitions.length, 72, `Expected 72 tools after Plan 05-03 Task 1 (enable + disable_event_definition shipped); got ${toolDefinitions.length}`);
 });
 
 // =====================================================================

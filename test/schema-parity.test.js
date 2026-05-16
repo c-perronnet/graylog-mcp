@@ -432,3 +432,19 @@ test("schema-parity: update_event_definition", async () => {
     const { UpdateEventDefinitionSchema } = await import("../src/tools/events/schemas.js");
     await assertSchemaParityForTool("update_event_definition", UpdateEventDefinitionSchema);
 });
+
+// ---------------------------------------------------------------------------
+// Plan 05-03 — enable/disable/delete_event_definition (3 net-new tools).
+// All three extend mutatingBase (3 keys) with {definitionId} → 4 keys total.
+// Plain .extend() without superRefine wrapping, so getShape returns .shape.
+// ---------------------------------------------------------------------------
+
+test("schema-parity: enable_event_definition", async () => {
+    const { EnableEventDefinitionSchema } = await import("../src/tools/events/schemas.js");
+    await assertSchemaParityForTool("enable_event_definition", EnableEventDefinitionSchema);
+});
+
+test("schema-parity: disable_event_definition", async () => {
+    const { DisableEventDefinitionSchema } = await import("../src/tools/events/schemas.js");
+    await assertSchemaParityForTool("disable_event_definition", DisableEventDefinitionSchema);
+});

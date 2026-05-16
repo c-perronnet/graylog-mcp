@@ -21,8 +21,13 @@ import { handleGetEventDefinition } from "./get-event-definition.js";
 import { handleCreateEventDefinition } from "./create-event-definition.js";
 // Plan 05-02 Task 3 — EVENT-04 update (D-02 mirror of D-01 + STRICT_NO_ECHO + C5 on changes.config).
 import { handleUpdateEventDefinition } from "./update-event-definition.js";
+// Plan 05-03 Task 1 — EVENT-06 enable + disable (D-07 / Pitfall 4 WILDCARD empty body).
+import { handleEnableEventDefinition } from "./enable-event-definition.js";
+import { handleDisableEventDefinition } from "./disable-event-definition.js";
 
 register("list_event_definitions", handleListEventDefinitions);
 register("get_event_definition", handleGetEventDefinition);
 register("create_event_definition", handleCreateEventDefinition);
 register("update_event_definition", handleUpdateEventDefinition);
+register("enable_event_definition", handleEnableEventDefinition);
+register("disable_event_definition", handleDisableEventDefinition);
