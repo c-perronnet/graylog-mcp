@@ -2,8 +2,8 @@
 //
 // Covers:
 //   - DASH-01 list_dashboards: narrow projection, wrapper-side type filter
-//     (Q1 default), envelope unwrap on response.views, ?query=type:DASHBOARD
-//     wire path
+//     (Q1 default), envelope unwrap on response.views, no query= wire
+//     segment (Graylog 7.x query is free-text — BUG #9)
 //   - DASH-02 get_dashboard: full ViewDTO passthrough, 404 propagation via
 //     wrapGraylogError, zod rejection of missing dashboardId
 //   - DASH-03 create_dashboard (C7 ACCEPTANCE GATE): 2-step internal chain
@@ -239,10 +239,10 @@ test("list_dashboards filters wrapper-side on view.type === 'DASHBOARD' (Q1 defa
 });
 
 // =====================================================================
-// Test 3 — list_dashboards URL carries ?query=type:DASHBOARD
+// Test 3 — list_dashboards URL has no query= segment
 // =====================================================================
 
-test("list_dashboards URL carries ?query=type:DASHBOARD (URL-encoded)", async () => {
+test("list_dashboards URL has no query= segment (BUG #9 — Graylog 7.x query is free-text)", async () => {
     let captured = null;
     _setCaptureRequest((req) => {
         captured = req;
@@ -252,9 +252,10 @@ test("list_dashboards URL carries ?query=type:DASHBOARD (URL-encoded)", async ()
         params: { arguments: { _testConnection: "fake" } },
     });
     assert.equal(captured.method, "GET");
-    // encodeURIComponent("type:DASHBOARD") === "type%3ADASHBOARD"
-    assert.match(captured.path, /\/api\/views\?query=type%3ADASHBOARD/);
-    assert.match(captured.path, /page=1/);
+    // Graylog 7.x treats `query` as free-text over title/summary —
+    // `query=type:DASHBOARD` would match literal text and return 0.
+    assert.doesNotMatch(captured.path, /query=/);
+    assert.match(captured.path, /\/api\/views\?page=1&per_page=/);
     assert.match(captured.path, /per_page=25/);
 });
 

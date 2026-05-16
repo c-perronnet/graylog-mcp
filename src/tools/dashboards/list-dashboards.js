@@ -1,12 +1,12 @@
 // DASH-01 — list_dashboards. Phase 6 narrow-projection read tool.
 //
-// Returns ONLY DASHBOARD-typed views. Saved searches (view.type === "SEARCH")
-// are filtered out wrapper-side regardless of whether `?query=type:DASHBOARD`
-// is honored upstream — Q1 default `WRAPPER_SIDE_TYPE_FILTER` per
-// 06-U1-SMOKE.md. The defensive client-side filter is idempotent: if
-// Graylog 7.2 ever tightens the unmapped-field handling so that
-// `?query=type:DASHBOARD` truly filters server-side, this wrapper's
-// behavior is unchanged.
+// Returns ONLY DASHBOARD-typed views. Graylog 7.x treats `/api/views`'s
+// `query` parameter as FREE-TEXT over a view's title/summary — passing
+// `query=type:DASHBOARD` matches the literal text and returns total:0, so
+// no `query` segment is sent. Saved searches (view.type === "SEARCH") are
+// filtered out wrapper-side via `items.filter(v => v?.type === "DASHBOARD")`
+// — that wrapper-side filter is the REAL type filter (Q1 default
+// `WRAPPER_SIDE_TYPE_FILTER` per 06-U1-SMOKE.md).
 //
 // Envelope unwrap (Pitfall 1): /api/views returns PaginatedResponse with
 // the array under `response.views`. Plan 06-01 amended
@@ -19,8 +19,8 @@
 // widget_positions, widget_mapping, etc.), the agent must either pass
 // `fields: "all"` or call get_dashboard.
 //
-// Path shape: /api/views?query=type:DASHBOARD&page=1&per_page=<limit>
-//   &sort=title&order=asc — byte-stable URL (Plan 06-06 snapshots can pin).
+// Path shape: /api/views?page=1&per_page=<limit>&sort=title&order=asc
+//   — byte-stable URL (Plan 06-06 snapshots can pin).
 
 import { defineListHandler } from "../_shared/list.js";
 import { ListDashboardsSchema } from "./schemas.js";
@@ -33,12 +33,11 @@ export const handleListDashboards = defineListHandler({
     defaultFields: DASHBOARD_DEFAULT_FIELDS,
     fetch: async (client, args) => {
         const limit = args.limit ?? 25;
-        // Wrapper-fixed `?query=type:DASHBOARD` — NOT agent-controllable.
-        // Encoded for URL safety even though `:` is technically permitted in
-        // a query string; matches the snapshot-stable convention used by
-        // list_event_definitions.
-        const path = `/api/views?query=${encodeURIComponent("type:DASHBOARD")}`
-            + `&page=1&per_page=${limit}&sort=title&order=asc`;
+        // No `query=` segment: Graylog 7.x treats `/api/views`'s `query`
+        // parameter as free-text over the view title/summary, so
+        // `query=type:DASHBOARD` would match literal text and return 0.
+        // Structured DASHBOARD-type filtering happens wrapper-side below.
+        const path = `/api/views?page=1&per_page=${limit}&sort=title&order=asc`;
         const response = await client.request("GET", path, null);
         // Pitfall 1 envelope unwrap: response.views | items | array.
         const items = Array.isArray(response)
