@@ -29,6 +29,7 @@ export const handleDeleteInput = defineMutatingHandler({
         // NOT prevent the dry-run from rendering; the DELETE itself surfaces
         // any real error on apply.
         let extractors = [];
+        let preflightError = null;
         try {
             const extractorList = await client.request(
                 "GET",
@@ -42,8 +43,26 @@ export const handleDeleteInput = defineMutatingHandler({
                     extractor_type: e.extractor_type,
                 }))
                 : [];
-        } catch (_err) {
-            extractors = [];
+        } catch (err) {
+            if (err?.status === 404 || err?.status === 403) {
+                // Best-effort tolerated cases: GET 404 (no extractors endpoint
+                // exposed / input absent) or 403 (token lacks read scope).
+                // Treat as empty cascade — the DELETE itself surfaces the
+                // real error on apply.
+                extractors = [];
+            } else {
+                // Unexpected pre-flight failure (5xx, TLS, JSON parse,
+                // programmer bug, network error). Per CLAUDE.md soft-fallback
+                // convention, log to stderr AND surface a structural signal
+                // on cascades so the dry-run is honest about the unknown
+                // blast radius — the agent must not assume "no extractors"
+                // when we never got a clean answer.
+                console.error(
+                    `[delete_input] extractor pre-flight failed for input ${args.inputId}: ${err?.message ?? err}`
+                );
+                extractors = [];
+                preflightError = err?.message ?? String(err);
+            }
         }
 
         return {
@@ -51,7 +70,12 @@ export const handleDeleteInput = defineMutatingHandler({
             path: `/api/system/inputs/${args.inputId}`,
             body: undefined,
             postApplyEstimate: { id: args.inputId },
-            cascades: { extractors },
+            cascades: {
+                extractors,
+                ...(preflightError !== null
+                    ? { extractors_preflight_error: preflightError }
+                    : {}),
+            },
         };
     },
     apply: (client, req) => client.request(req.method, req.path, req.body),
