@@ -85,7 +85,7 @@ export const handleUpdateDashboard = defineMutatingHandler({
 
         return {
             method: "PUT",
-            path: `/api/views/${args.dashboardId}`,
+            path: `/api/views/${encodeURIComponent(args.dashboardId)}`,
             body: { entity: merged, share_request: null },
             postApplyEstimate: { id: args.dashboardId },
             normalize: (raw) => toIdBody(raw, { idFields: ["id"] }),

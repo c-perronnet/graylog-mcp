@@ -59,7 +59,7 @@ export const handleDeleteDashboard = defineMutatingHandler({
 
         return {
             method: "DELETE",
-            path: `/api/views/${args.dashboardId}`,
+            path: `/api/views/${encodeURIComponent(args.dashboardId)}`,
             body: null,
             // INFORMATIONAL cascade — handler.js spreads this onto dry-run
             // preview JSON. NO confirmationToken, NO drift refusal at apply.

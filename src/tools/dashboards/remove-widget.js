@@ -182,7 +182,7 @@ export const handleRemoveWidget = defineMutatingHandler({
                 tool: "update_search",
                 request: {
                     method: "PUT",
-                    path: `/api/views/search/${searchId}`,
+                    path: `/api/views/search/${encodeURIComponent(searchId)}`,
                     body: newSearch,
                 },
             },
@@ -191,7 +191,7 @@ export const handleRemoveWidget = defineMutatingHandler({
                 tool: "update_view",
                 request: {
                     method: "PUT",
-                    path: `/api/views/${args.dashboardId}`,
+                    path: `/api/views/${encodeURIComponent(args.dashboardId)}`,
                     body: { entity: newView, share_request: null },
                 },
             },
@@ -202,7 +202,7 @@ export const handleRemoveWidget = defineMutatingHandler({
         return {
             chain,
             method: "PUT",
-            path: `/api/views/${args.dashboardId}`,
+            path: `/api/views/${encodeURIComponent(args.dashboardId)}`,
             body: { entity: newView, share_request: null },
             postApplyEstimate: { id: args.dashboardId },
         };

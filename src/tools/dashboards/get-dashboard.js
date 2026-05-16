@@ -56,7 +56,7 @@ export async function handleGetDashboard(request) {
         const client = makeClient(conn);
         const dashboard = await client.request(
             "GET",
-            `/api/views/${args.dashboardId}`,
+            `/api/views/${encodeURIComponent(args.dashboardId)}`,
             null,
         );
         return {

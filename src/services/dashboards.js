@@ -50,7 +50,11 @@ export function createDashboard(client, viewDTO) {
  * @returns {Promise<unknown>}
  */
 export function updateSearch(client, searchId, searchDTO) {
-    return client.request("PUT", `/api/views/search/${searchId}`, searchDTO);
+    return client.request(
+        "PUT",
+        `/api/views/search/${encodeURIComponent(searchId)}`,
+        searchDTO,
+    );
 }
 
 /**
@@ -63,7 +67,7 @@ export function updateSearch(client, searchId, searchDTO) {
  * @returns {Promise<unknown>}
  */
 export function updateDashboard(client, dashboardId, viewDTO) {
-    return client.request("PUT", `/api/views/${dashboardId}`, {
+    return client.request("PUT", `/api/views/${encodeURIComponent(dashboardId)}`, {
         entity: viewDTO,
         share_request: null,
     });
@@ -76,7 +80,11 @@ export function updateDashboard(client, dashboardId, viewDTO) {
  * @returns {Promise<unknown>}
  */
 export function getDashboard(client, dashboardId) {
-    return client.request("GET", `/api/views/${dashboardId}`, null);
+    return client.request(
+        "GET",
+        `/api/views/${encodeURIComponent(dashboardId)}`,
+        null,
+    );
 }
 
 /**
@@ -86,7 +94,11 @@ export function getDashboard(client, dashboardId) {
  * @returns {Promise<unknown>}
  */
 export function getSearch(client, searchId) {
-    return client.request("GET", `/api/views/search/${searchId}`, null);
+    return client.request(
+        "GET",
+        `/api/views/search/${encodeURIComponent(searchId)}`,
+        null,
+    );
 }
 
 /**
@@ -99,7 +111,11 @@ export function getSearch(client, searchId) {
  * @returns {Promise<unknown>}
  */
 export function deleteDashboard(client, dashboardId) {
-    return client.request("DELETE", `/api/views/${dashboardId}`, null);
+    return client.request(
+        "DELETE",
+        `/api/views/${encodeURIComponent(dashboardId)}`,
+        null,
+    );
 }
 
 // =====================================================================
