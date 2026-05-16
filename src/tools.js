@@ -1,7 +1,7 @@
 export const toolDefinitions = [
     {
         name: "list_connections",
-        description: "List all available Graylog connections configured in ~/.graylog-mcp/config.json",
+        description: "List Graylog connections configured in ~/.graylog-mcp/config.json. Use this rather than set_active_connection when you want to discover available names before selecting one.",
         inputSchema: {
             type: "object",
             properties: {},
@@ -123,7 +123,7 @@ export const toolDefinitions = [
     },
     {
         name: "list_streams",
-        description: "List Graylog streams in the active connection. Returns narrow projection [id, title, description, mutable, disabled, index_set_id]; pass `fields:[...]` to customize. Filter `mutable:true` for editable candidates.",
+        description: "List Graylog streams (narrow projection [id, title, description, mutable, disabled, index_set_id]). Use this rather than get_stream when scanning many streams; pass fields:[...] to customize.",
         inputSchema: {
             type: "object",
             properties: {
@@ -147,7 +147,7 @@ export const toolDefinitions = [
     },
     {
         name: "list_stream_rules",
-        description: "List the rules attached to one Graylog stream. Narrow projection [id, type, field, value, inverted]; type is the numeric StreamRuleType (1=EXACT, 2=REGEX, 3=GREATER, 4=SMALLER, 5=PRESENCE, 6=CONTAINS, 7=ALWAYS_MATCH, 8=MATCH_INPUT).",
+        description: "List rules attached to one stream (narrow [id, type, field, value, inverted]; type is numeric 1..8). Use this rather than get_stream when you need rules only, not the parent DTO.",
         inputSchema: {
             type: "object",
             properties: {
@@ -162,7 +162,7 @@ export const toolDefinitions = [
     // ----- Phase 3 Plan 02 streams CRUD (STREAM-03, STREAM-04) -----
     {
         name: "create_stream",
-        description: "Create a Graylog stream. Dry-run shows existingMatches when a similar title exists across 3 buckets (exact > case_insensitive > prefix; strictest bucket reported). REQUIRED: index_set_id — call list_index_sets first to discover available index sets (D-10, no defaulting). Inline rules: pass an array of StreamRule objects with one of 8 string discriminators (exact, regex, greater, less, present, contains, always_match, match_input); the wrapper translates each to Graylog's numeric wire format (1..8). postApplyEstimate.id is __SERVER_ASSIGNED__ — DO NOT reuse it; use the real stream_id from the apply response. Use create_stream_rule (Plan 04) to add rules after creation if you prefer.",
+        description: "Create a stream. Dry-run default. Requires index_set_id (list_index_sets). Inline rules use 8 string types. Use this vs. create_stream_rule when bootstrapping a stream with rules in one call.",
         inputSchema: {
             type: "object",
             properties: {
@@ -181,7 +181,7 @@ export const toolDefinitions = [
     },
     {
         name: "update_stream",
-        description: "Partial-update a Graylog stream's mutable fields. STRICT_NO_ECHO wire-build: only the fields you pass in `changes` are sent on the wire — unchanged fields stay server-side (per 03-U1-SMOKE.md). Pre-flights GET /api/streams/{streamId} for the D-09 mutable check; refuses with reason `stream_immutable` if current.is_editable === false BEFORE the PUT fires. Schema: { streamId, changes: { title?, description?, matching_type?, remove_matches_from_default_stream?, index_set_id? } }. To edit rules attached to the stream, use update_stream_rule (Plan 04) instead.",
+        description: "Partial-update one stream's metadata (strict no-echo). Dry-run default; refuses immutable streams. Use this vs. update_stream_rule when editing the stream itself, not its rules.",
         inputSchema: {
             type: "object",
             properties: {
@@ -197,7 +197,7 @@ export const toolDefinitions = [
     // ----- Phase 3 Plan 02 stream lifecycle (STREAM-06) -----
     {
         name: "start_stream",
-        description: "Resume a paused Graylog stream (set desired state to RUNNING). Maps to POST /api/streams/{streamId}/resume — no request body required. Pre-flights GET /api/streams/{streamId}; refuses with reason `stream_immutable` if current.is_editable === false BEFORE the POST fires. NOTE: This sets the DESIRED state; actual `disabled` flag may briefly remain true until Graylog's stream registry converges. Use list_streams to verify state.",
+        description: "Resume a paused stream (desired state RUNNING). Dry-run default; refuses immutable streams. Use this vs. pause_stream when re-enabling a stopped stream.",
         inputSchema: {
             type: "object",
             properties: {
@@ -211,7 +211,7 @@ export const toolDefinitions = [
     },
     {
         name: "pause_stream",
-        description: "Pause a running Graylog stream (set desired state to STOPPED). Maps to POST /api/streams/{streamId}/pause — no request body required. Pre-flights GET /api/streams/{streamId}; refuses with reason `stream_immutable` if current.is_editable === false BEFORE the POST fires. NOTE: This sets the DESIRED state; actual `disabled` flag may briefly remain false until Graylog's stream registry converges. Use list_streams to verify state.",
+        description: "Pause a running stream (desired state STOPPED). Dry-run default; refuses immutable streams. Use this vs. start_stream when temporarily halting ingest without deletion.",
         inputSchema: {
             type: "object",
             properties: {
@@ -226,7 +226,7 @@ export const toolDefinitions = [
     // ----- Phase 3 Plan 03 stream deletion (STREAM-05; C2 mitigation centerpiece) -----
     {
         name: "delete_stream",
-        description: "Delete a Graylog stream with a frozen-cascade safety contract. Dry-run pre-flights 3 cascade endpoints — GET /api/streams/{streamId}/rules (attached stream rules), GET /api/streams/{streamId}/pipelines (pipeline-to-stream connections), and a paginated walk of /api/events/definitions/paginated client-side-filtered by def.config.streams (event definitions referencing this stream) — and emits cascades.{stream_rules, pipeline_connections, event_definitions} + a confirmationToken (keyed-buckets sha-256). Apply requires `confirm:<token>` echoed back; the wrapper re-fetches all 3 cascade endpoints, re-computes the hash, and refuses with reason `cascade_changed_since_preview` on ANY drift (additions OR removals). Refuses with reason `stream_immutable` if current.is_editable === false (built-in/system streams) BEFORE any cascade GET fires (saves 3 round-trips). Refuses with reason `cascade_preflight_failed` if any cascade endpoint errors (no token issued — hard-block). Apply envelope is SYNC `{deleted:true, streamId}` (no async/job_id).",
+        description: "Destructive: delete a stream. Dry-run surfaces rules+pipelines+event_defs cascade + confirmationToken; apply requires `confirm` from dry-run. Use this vs. pause_stream when retiring permanently.",
         inputSchema: {
             type: "object",
             properties: {
@@ -242,7 +242,7 @@ export const toolDefinitions = [
     // ----- Phase 3 Plan 04 stream-rule CRUD (STREAM-08, STREAM-10) -----
     {
         name: "create_stream_rule",
-        description: "Create one rule on a Graylog stream. 8 variants: exact, regex, greater, less, present, contains, always_match, match_input — the wrapper translates each to Graylog's numeric wire format (1..8) via STREAM_RULE_TYPE_TO_NUMERIC. Variant rules: `present` requires `field` only; `always_match` takes no field/value; `match_input` takes a `value` (input id) and no `field`; the other 5 variants require both `field` and `value`. Pre-flights GET /api/streams/{streamId}; refuses with reason `stream_immutable` if the parent stream's current.is_editable === false BEFORE the POST fires. postApplyEstimate.id is __SERVER_ASSIGNED__ — DO NOT reuse it; the real rule id ships in the apply response.",
+        description: "Add one rule to an existing stream (8 variants: exact|regex|greater|less|present|contains|always_match|match_input). Dry-run default. Use this vs. create_stream when the stream already exists.",
         inputSchema: {
             type: "object",
             properties: {
@@ -265,7 +265,7 @@ export const toolDefinitions = [
     },
     {
         name: "delete_stream_rule",
-        description: "Delete one rule from a Graylog stream. LEAF DELETE (Discretion-04) — stream rules have no further dependents, so there is NO cascade enumeration, NO confirmation hash, and NO requireConfirm gate. Pre-flights GET /api/streams/{streamId}; refuses with reason `stream_immutable` if the parent stream's current.is_editable === false BEFORE the DELETE fires. Apply envelope is sync (no system-job).",
+        description: "Delete one rule from a stream (leaf delete — no cascade). Dry-run default; refuses immutable parent. Use this vs. delete_stream when narrowing a stream's matching scope.",
         inputSchema: {
             type: "object",
             properties: {
@@ -280,7 +280,7 @@ export const toolDefinitions = [
     },
     {
         name: "update_stream_rule",
-        description: "Update one rule on a Graylog stream. Partial-update via `changes` envelope (field, value, inverted, description). `type` is IMMUTABLE — to change a rule's type, delete + recreate (Pitfall S8: Graylog's CreateStreamRuleRequest.type is a non-nullable Java int that must be present on every PUT; the wrapper echoes it from the pre-flight GET unconditionally). STRICT_NO_ECHO wire-build (per 03-U1-SMOKE.md): only the fields you set in `changes` are sent on the wire, plus the immutable type echoed from current. Pre-flights GET /api/streams/{streamId} for the D-09 parent-mutable check; refuses with reason `stream_immutable` if current.is_editable === false BEFORE the rule GET fires.",
+        description: "Partial-update one stream rule (`type` is immutable — delete+recreate to change). Dry-run default; refuses immutable parent. Use this vs. create_stream_rule when adjusting an existing rule.",
         inputSchema: {
             type: "object",
             properties: {
@@ -296,7 +296,7 @@ export const toolDefinitions = [
     },
     {
         name: "test_stream_match",
-        description: "Test whether a sample message matches the rules on a Graylog stream. SERVER-SIDE evaluation (D-07) — Graylog's authoritative rule-evaluation pipeline is invoked; no JS re-implementation. The response forwards Graylog's per-rule outcome verbatim: { matches: boolean, rules: { <ruleId>: boolean } }. REQUIRES an existing streamId (D-08) — pre-create config testing is out of scope; for new configs use create_stream(dryRun:true) → create for real → test_stream_match against the real id. The wire body wraps the agent's sample message in `{ \"message\": { ... } }` — the literal outer key `message` is required by Graylog's resource method signature (StreamResource.java:561-564).",
+        description: "Test whether a sample message matches a stream's rules (server-side). Requires an existing streamId. Use this vs. simulate_pipeline_rule when validating stream routing, not pipeline DSL.",
         inputSchema: {
             type: "object",
             properties: {
@@ -609,7 +609,7 @@ export const toolDefinitions = [
     },
     {
         name: "list_saved_searches",
-        description: "List all saved searches.",
+        description: "List saved-search names. Use this rather than get_saved_search when you need to discover available names without executing one.",
         inputSchema: {
             type: "object",
             properties: {},
@@ -651,7 +651,7 @@ export const toolDefinitions = [
     },
     {
         name: "delete_saved_search",
-        description: "Delete a saved search by name.",
+        description: "Delete a saved search by name. Use this rather than create_saved_search when retiring an obsolete query; no Graylog server state is touched (local file only).",
         inputSchema: {
             type: "object",
             properties: {
@@ -727,7 +727,7 @@ export const toolDefinitions = [
     // precedent narrative.
     {
         name: "list_event_definitions",
-        description: "List event definitions on the active Graylog connection. Returns a narrow projection [id, title, description, priority, state, alert] by default; pass fields:\"all\" for the full DTO including scheduler context. Filter via the query param (Graylog filter syntax). Backed by /api/events/definitions/paginated (unwraps PageListResponse.elements per Plan 05-01).",
+        description: "List event/alert definitions (narrow [id,title,description,priority,state,alert]). Use this vs. get_event_definition when scanning many definitions for state or priority.",
         inputSchema: {
             type: "object",
             properties: {
@@ -742,7 +742,7 @@ export const toolDefinitions = [
     },
     {
         name: "get_event_definition",
-        description: "Get the full EventDefinitionDto for one event definition by id. Includes scheduler context (READ-ONLY per Pitfall 5 — never echoed back on update) and notifications[] (consumed by delete_event_definition's D-08 cascade preview). The full DTO is the agent's canonical view; for an operational-state summary across many definitions, call list_event_definitions instead.",
+        description: "Get the full EventDefinitionDto including scheduler (read-only) and bound notifications[]. Use this vs. list_event_definitions when you need one definition's full config.",
         inputSchema: {
             type: "object",
             properties: {
@@ -754,7 +754,7 @@ export const toolDefinitions = [
     },
     {
         name: "create_event_definition",
-        description: "Create an event definition on the active Graylog connection. M1 + C5 mitigation centerpiece: wire path is /api/events/definitions?schedule=false UNCONDITIONALLY (D-01 structural enforcement — the schema does NOT accept a `schedule` argument; agents must call enable_event_definition separately to activate). v6 aggregation shapes {type:\"function\", function:\"count\", parameter:\"source\"} are auto-migrated to v7 {type:\"number-ref\", ref:\"count_source\"} and the migration is VISIBLE in dry-run output via migration:{migrated, warnings:[{original, emitted}]} (C5 acceptance gate). Body wraps in CreateEntityRequest envelope {entity, share_request:null} (Pitfall 3). definition.id is stripped before POST (Pitfall 8 — server assigns). dryRun:true by default; existingMatches probes /api/events/definitions/paginated for exact-title duplicates.",
+        description: "Create an event/alert definition. Dry-run; schedule forced false — call enable_event_definition to activate. v6 aggs auto-migrated. Use this vs. create_event_notification (defs detect).",
         inputSchema: {
             type: "object",
             properties: {
@@ -771,7 +771,7 @@ export const toolDefinitions = [
     },
     {
         name: "update_event_definition",
-        description: "Update an event definition on the active Graylog connection. STRICT_NO_ECHO partial-update: wire body emits ONLY fields present in args.changes (no round-trip from a GET — scheduler READ_ONLY contamination is structurally impossible per Pitfall 5). body.id is always set to args.definitionId so the PUT body agrees with the URL segment (Pitfall 8). Defaults schedule:false (D-02 mirror of D-01 create — wire path UNCONDITIONALLY /api/events/definitions/{id}?schedule=false; partial updates NEVER silently re-enable scheduling). v6→v7 aggregation migration runs over args.changes.config when present and surfaces in dry-run via migration:{migrated, warnings} (C5; omitted otherwise). dryRun:true by default.",
+        description: "Partial-update one event definition (strict no-echo). Dry-run default; schedule forced false (never re-enables silently). Use this vs. enable_event_definition when editing config, not toggling state.",
         inputSchema: {
             type: "object",
             properties: {
@@ -795,7 +795,7 @@ export const toolDefinitions = [
     // contract, mirror of Phase 1 INPUT-07 start_input / stop_input).
     {
         name: "enable_event_definition",
-        description: "Enable scheduling for an event definition (transitions state DISABLED→ENABLED). Sends an empty body to PUT /api/events/definitions/{id}/schedule per Graylog's @Consumes(WILDCARD) quirk — the agent does NOT construct a fake body (Pitfall 4 / D-07). Eventually consistent: poll get_event_definition for the post-apply scheduler.is_scheduled === true. Composes through defineMutatingHandler so dryRun:true default + writable-flag gate + idempotency-key dedupe inherit uniformly (lifecycle-as-mutation contract, mirror of start_input).",
+        description: "Activate an event definition (DISABLED → ENABLED). Dry-run default; eventually consistent. Use this vs. disable_event_definition when turning an alert back on.",
         inputSchema: {
             type: "object",
             properties: {
@@ -809,7 +809,7 @@ export const toolDefinitions = [
     },
     {
         name: "disable_event_definition",
-        description: "Disable scheduling for an event definition (transitions state ENABLED→DISABLED). Sends an empty body to PUT /api/events/definitions/{id}/unschedule per Graylog's @Consumes(WILDCARD) quirk (Pitfall 4 / D-07). Eventually consistent: poll get_event_definition for scheduler.is_scheduled === false. Same defineMutatingHandler composition as enable_event_definition; symmetric except for the trailing path segment and postApplyEstimate.state.",
+        description: "Deactivate an event definition (ENABLED → DISABLED). Dry-run default; eventually consistent. Use this vs. delete_event_definition when temporarily silencing an alert.",
         inputSchema: {
             type: "object",
             properties: {
@@ -829,7 +829,7 @@ export const toolDefinitions = [
     // load-bearing and issues a 64-hex cascade-hash via D-09.
     {
         name: "delete_event_definition",
-        description: "Delete an event definition on the active Graylog connection. Dry-run preview enumerates the notifications this def references via cascades.notifications (informational — the notifications themselves survive the delete; only the def→notification wiring vanishes). No confirmation token issued (D-08 leaf-delete pattern; cf. delete_event_notification which IS a load-bearing delete with cascade-hash gate). Pre-flight GET is best-effort: 404/403 fall through to an empty cascade array; the DELETE itself surfaces the real error on apply via wrapGraylogError. dryRun:true by default.",
+        description: "Delete one event definition (leaf delete — informational notifications cascade, no confirm token). Dry-run default. Use this vs. disable_event_definition when permanently removing the alert.",
         inputSchema: {
             type: "object",
             properties: {
@@ -850,7 +850,7 @@ export const toolDefinitions = [
     //   basic_auth / api_secret.
     {
         name: "list_event_notifications",
-        description: "List event notifications on the active Graylog connection. Returns a narrow projection [id, title, description, config] by default (each item's config carries the discriminator `type` plus per-variant fields); pass fields:\"all\" for the full DTO including notification_settings + plugin-specific extras. Filter via the query param (Graylog filter syntax). Backed by /api/events/notifications/paginated (unwraps PageListResponse.elements per Plan 05-01).",
+        description: "List event notifications (narrow [id,title,description,config]; config carries variant `type`). Use this vs. list_event_definitions when you need recipient channels, not detectors.",
         inputSchema: {
             type: "object",
             properties: {
@@ -865,7 +865,7 @@ export const toolDefinitions = [
     },
     {
         name: "create_event_notification",
-        description: "Create an event notification on the active Graylog connection. config.type is one of 6 STRICT variants (D-05/D-06 corrected closed set): email-notification-v1, http-notification-v1, http-notification-v2, slack-notification-v1, pagerduty-notification-v2, teams-notification-v2. Invalid types (e.g. script-notification-v1, pagerduty-notification-v1, teams-notification-v1) reject at zod.parse BEFORE any HTTP call. Body wraps in CreateEntityRequest envelope {entity:{title, description, config}, share_request:null} (Pitfall 3). http-notification-v2's encrypted basic_auth and api_secret are wrapped as {set_value:<plaintext>} on the wire and shown as <redacted> in the dry-run preview (C3-class — T-05-04-03). existingMatches probes /api/events/notifications/paginated for exact-title duplicates. dryRun:true by default; postApplyEstimate.id is __SERVER_ASSIGNED__ — DO NOT reuse it.",
+        description: "Create an event notification (6 variants: email/http-v1/http-v2/slack/pagerduty-v2/teams-v2). Dry-run; encrypted fields <redacted>. Use this vs. create_event_definition (notifications deliver).",
         inputSchema: {
             type: "object",
             properties: {
@@ -884,7 +884,7 @@ export const toolDefinitions = [
     },
     {
         name: "update_event_notification",
-        description: "Update an event notification on the active Graylog connection. STRICT_NO_ECHO partial-update (D-10): wire body emits ONLY fields the agent passed in args.changes — unchanged fields are NEVER on the wire (Graylog preserves them server-side). For http-notification-v2's encrypted basic_auth and api_secret, omitting them from args.changes.config means they are NEVER round-tripped on the wire — C3-class encrypted-field protection (mirror Phase 1 update_input D-12; T-05-04-02). Encrypted fields the agent DOES pass wrap as {set_value:<new>} on the wire and surface as <redacted> in the dry-run preview. Variant change (changes.config.type ≠ current.config.type) replaces the variant entirely; the new variant's encrypted-field inventory drives the redaction. body.id always matches the URL segment (Pitfall 8). Pre-flight GET fetches current.config.type for the encrypted-field lookup. dryRun:true by default.",
+        description: "Partial-update one notification (strict no-echo). Dry-run default; encrypted fields preserved across updates — never on wire unless explicitly set. Use this vs. create_event_notification when editing.",
         inputSchema: {
             type: "object",
             properties: {
@@ -902,7 +902,7 @@ export const toolDefinitions = [
     },
     {
         name: "delete_event_notification",
-        description: "Delete an event notification on the active Graylog connection. LOAD-BEARING delete (contrast delete_event_definition which is D-08 informational): notifications are referenced by event_defs via notification_id; deleting a notification breaks any alert that fires that def. D-09 cascade-hash + apply-time drift refusal (Phase 3 delete_stream analog): dry-run pre-flights /api/events/definitions/paginated to enumerate referencing event_defs (client-side filter on def.notifications[].notification_id; no server-side filter exists on 7.2 — mirror Pitfall S6); freezes them into a 64-hex sha-256 confirmationToken via computeNotificationCascadeHash. Apply requires args.confirm:<token>; the wrapper re-fetches + recomputes + refuses with isError reason:cascade_changed_since_preview on ANY drift. Refuses with reason:cascade_preflight_failed if the paginated GET errors (DELETE NEVER fires). Apply envelope is SYNC {deleted:true, notificationId}. Safety cap 1000 pages × 50/page (T-05-04-07). dryRun:true by default.",
+        description: "Destructive: delete a notification (load-bearing — breaks alerts using it). Dry-run surfaces referencing event_defs + confirmationToken; apply requires `confirm`. Use this vs. delete_event_definition.",
         inputSchema: {
             type: "object",
             properties: {
@@ -917,7 +917,7 @@ export const toolDefinitions = [
     },
     {
         name: "cluster_log_messages",
-        description: "Cluster similar log messages into Drain3-style templates. Fetches messages with the same args as search_messages_graylog, then groups them by structural similarity. Templates are persisted per connection and reused across calls.",
+        description: "Cluster similar log messages into Drain3 templates. Use this rather than search_messages_graylog when summarizing structural patterns in noisy log volume; templates persist per connection.",
         inputSchema: {
             type: "object",
             properties: {
@@ -941,7 +941,7 @@ export const toolDefinitions = [
     },
     {
         name: "list_log_templates",
-        description: "List learned log templates for the active connection.",
+        description: "List learned log templates for the active connection. Use this rather than cluster_log_messages when you want the existing library without re-clustering.",
         inputSchema: {
             type: "object",
             properties: {
@@ -953,7 +953,7 @@ export const toolDefinitions = [
     },
     {
         name: "delete_log_template",
-        description: "Delete a learned log template by ID.",
+        description: "Delete one learned log template by ID. Use this instead of import_log_templates(mode:'replace') when removing a single bad template; the rest of the library is preserved.",
         inputSchema: {
             type: "object",
             properties: {
@@ -964,7 +964,7 @@ export const toolDefinitions = [
     },
     {
         name: "update_log_template",
-        description: "Set or update a human-readable label for a template.",
+        description: "Set or update a human-readable label for a template. Use this instead of delete_log_template when you want to keep the template but rename it.",
         inputSchema: {
             type: "object",
             properties: {
@@ -976,12 +976,12 @@ export const toolDefinitions = [
     },
     {
         name: "export_log_templates",
-        description: "Export all learned templates for the active connection as JSON.",
+        description: "Export all learned templates for the active connection as JSON. Use this rather than list_log_templates when you want a backup payload suitable for import_log_templates.",
         inputSchema: { type: "object", properties: {} },
     },
     {
         name: "import_log_templates",
-        description: "Import templates into the active connection's library.",
+        description: "Import templates into the active connection's library. Use this rather than cluster_log_messages when restoring from a prior export_log_templates dump.",
         inputSchema: {
             type: "object",
             properties: {
@@ -994,7 +994,7 @@ export const toolDefinitions = [
     // ----- Phase 1 inputs (INPUT-01, INPUT-02, INPUT-03) -----
     {
         name: "list_input_types",
-        description: "List dynamically-discovered Graylog input types (e.g. GELF UDP, Beats2, Syslog TCP) — surfaces the type FQCN, display name, description, and requested_configuration. Cached per connection for the server process lifetime. Use this BEFORE create_input to discover available type FQCNs.",
+        description: "List dynamically-discovered input types (FQCN, display name, requested_configuration). Use this rather than create_input when you need to discover available type FQCNs first; cached per connection.",
         inputSchema: {
             type: "object",
             properties: {
@@ -1006,7 +1006,7 @@ export const toolDefinitions = [
     },
     {
         name: "list_inputs",
-        description: "List configured Graylog inputs on the connected cluster. Default narrow projection [id, title, type, global]; pass fields:\"all\" for full DTOs (configuration map included). Encrypted configuration fields in the full DTO are server-masked (<value hidden>, <password set>) — the MCP NEVER unmasks.",
+        description: "List configured inputs (narrow [id,title,type,global]). Encrypted fields server-masked. Use this vs. list_input_types when you need running inputs, not the type catalogue.",
         inputSchema: {
             type: "object",
             properties: {
@@ -1018,7 +1018,7 @@ export const toolDefinitions = [
     },
     {
         name: "get_input",
-        description: "Fetch the full configuration of one Graylog input by ID. Returns the complete InputSummary (id, title, type, configuration map, global, node, created_at, ...). Encrypted fields surface as server-masked placeholders (<value hidden>, <password set>) — never the actual secret. Use list_inputs to discover IDs.",
+        description: "Fetch the full InputSummary DTO. Encrypted fields are server-masked (never the secret). Use this vs. list_inputs when you need one input's full configuration map.",
         inputSchema: {
             type: "object",
             properties: {
@@ -1031,7 +1031,7 @@ export const toolDefinitions = [
     // ----- Phase 1 inputs CRUD (INPUT-04, INPUT-05, INPUT-06) -----
     {
         name: "create_input",
-        description: "Create a Graylog input. Strict zod schemas ship for the common types: GELF UDP / TCP / HTTP, Beats2, Syslog UDP / TCP, Raw UDP / TCP. All other Graylog input types (AWS, CEF, Kafka, etc.) accept a generic validated configuration object. Encrypted fields in the dry-run preview show as <redacted>; the real secret is sent only on apply. NOTE: postApplyEstimate.id is __SERVER_ASSIGNED__ — DO NOT reuse it; use the real id from the apply response.",
+        description: "Create a Graylog input. Dry-run default; strict schemas for GELF/Beats2/Syslog/Raw, generic config for others. Encrypted fields <redacted>. Use this vs. start_input when registering a new input.",
         inputSchema: {
             type: "object",
             properties: {
@@ -1049,7 +1049,7 @@ export const toolDefinitions = [
     },
     {
         name: "update_input",
-        description: "Partial-update one Graylog input. The wire body's `configuration` object is built STRICTLY from your `changes.configuration` entries — unchanged fields are NEVER echoed (Graylog preserves them server-side). Encrypted fields (TLS cert password, AWS credentials) are NEVER echoed unless you explicitly pass a new value. Schema is { inputId, changes: { title?, global?, node?, configuration? } }. Pass `changes: { configuration: {} }` to no-op the configuration block (emits empty object).",
+        description: "Partial-update one input (strict no-echo). Dry-run; encrypted fields preserved across updates — TLS pw/AWS creds never on wire unless set. Use this vs. create_input when editing.",
         inputSchema: {
             type: "object",
             properties: {
@@ -1064,7 +1064,7 @@ export const toolDefinitions = [
     },
     {
         name: "delete_input",
-        description: "Delete a Graylog input. Graylog cascades extractor removal server-side; the dry-run preview enumerates the affected extractors in cascades.extractors[] BEFORE message-handling impact lands. Use list_extractors first to inspect each cascade target if needed.",
+        description: "Delete an input. Dry-run default surfaces cascades.extractors[] (Graylog cascades extractor removal). Use this vs. stop_input when permanently removing the input rather than pausing ingest.",
         inputSchema: {
             type: "object",
             properties: {
@@ -1079,7 +1079,7 @@ export const toolDefinitions = [
     // ----- Phase 1 input lifecycle (INPUT-07) -----
     {
         name: "start_input",
-        description: "Start a Graylog input (set desired state to RUNNING). Maps to PUT /api/system/inputstates/{inputId} — no request body required. NOTE: This sets the DESIRED state; actual state may briefly remain STARTING until Graylog's input registry converges. Poll get_input if you need to wait for RUNNING.",
+        description: "Start an input (desired state RUNNING). Dry-run default; pass dryRun:false to apply. Eventually consistent — poll get_input for actual state. Use this vs. stop_input when bringing an input online.",
         inputSchema: {
             type: "object",
             properties: {
@@ -1093,7 +1093,7 @@ export const toolDefinitions = [
     },
     {
         name: "stop_input",
-        description: "Stop a Graylog input (set desired state to STOPPED). Maps to DELETE /api/system/inputstates/{inputId} — the verb is DELETE (not PUT) due to Graylog's REST semantics; the input itself is NOT deleted, only its running state. NOTE: This sets the DESIRED state; actual state may briefly remain STOPPING until Graylog's input registry converges. Poll get_input if you need to wait for STOPPED.",
+        description: "Stop an input (desired state STOPPED; config stays). Dry-run default; eventually consistent. Use this vs. delete_input when pausing without removing config.",
         inputSchema: {
             type: "object",
             properties: {
@@ -1108,7 +1108,7 @@ export const toolDefinitions = [
     // ----- Phase 1 extractor CRUD (INPUT-08, INPUT-09, INPUT-10, INPUT-11) -----
     {
         name: "list_extractors",
-        description: "List extractors configured for one Graylog input. Default narrow projection [id, title, description]; pass fields:'all' for full extractor DTOs (extractor_type, source_field, target_field, extractor_config, condition_*, order, ...). Required arg: inputId.",
+        description: "List extractors on one input (narrow [id, title, description]). Pass fields:'all' for the full DTOs. Use this rather than get_input when you need extractor configs without the parent input DTO.",
         inputSchema: {
             type: "object",
             properties: {
@@ -1122,7 +1122,7 @@ export const toolDefinitions = [
     },
     {
         name: "create_extractor",
-        description: "Create an extractor on a Graylog input. Supported extractor_type values (all 8 Graylog 7.0.6 primitives — D-07): grok, regex, regex_replace, split_and_index, substring, copy_input, json, lookup_table. Each type has a strict extractor_config shape (grok: {grok_pattern, named_captures_only?}; regex: {regex_value}; regex_replace: {regex, replacement, replace_all?}; split_and_index: {split_by, index}; substring: {begin_index, end_index}; copy_input: {}; json: {list_separator?, key_separator?, kv_separator?, key_prefix?, key_whitespace_replacement?, replace_key_whitespace?, flatten?}; lookup_table: {lookup_table_name}). IMPORTANT: there is NO 'key_value' extractor primitive in Graylog 7.0.6 — for key-value flattening, use extractor_type='json' with extractor_config={kv_separator: '=', key_separator: ',', flatten: true} (or your chosen separators). postApplyEstimate.id is __SERVER_ASSIGNED__ — DO NOT reuse it; use the real id from the apply response.",
+        description: "Create an extractor (8 types: grok|regex|regex_replace|split_and_index|substring|copy_input|json|lookup_table). Dry-run. Use this vs. create_pipeline_rule when parsing at ingest.",
         inputSchema: {
             type: "object",
             properties: {
@@ -1150,7 +1150,7 @@ export const toolDefinitions = [
     },
     {
         name: "update_extractor",
-        description: "Partial-update an extractor — the wrapper fetches the current extractor state and merges your `changes` onto it. extractor_type is IMMUTABLE on update (delete + recreate to switch types). Schema: { inputId, extractorId, changes: { title?, source_field?, target_field?, extractor_config?, cursor_strategy?, converters?, condition_type?, condition_value?, order? } }. Reuses the partial-update pattern from update_input (D-09); extractors carry no encrypted fields so the strict no-echo wire-build from update_input is not needed here.",
+        description: "Partial-update one extractor (merge-from-current). Dry-run default; extractor_type is immutable (delete+recreate to switch). Use this vs. create_extractor when editing an existing extractor.",
         inputSchema: {
             type: "object",
             properties: {
@@ -1166,7 +1166,7 @@ export const toolDefinitions = [
     },
     {
         name: "delete_extractor",
-        description: "Delete one extractor from one input. Single-target — NO cascade enumeration (extractors carry no child resources, per D-09). To delete every extractor on an input, list them with list_extractors and delete each one. To delete an extractor AND the input that owns it, call delete_input instead — delete_input cascade-removes its extractors automatically.",
+        description: "Delete one extractor (no cascade). Dry-run default. Use this vs. delete_input when retiring one parsing rule, not the parent input.",
         inputSchema: {
             type: "object",
             properties: {
@@ -1184,7 +1184,7 @@ export const toolDefinitions = [
     // ====================================================================
     {
         name: "list_index_sets",
-        description: "List Graylog index sets with narrow projection (id, title, description, default, writable, can_be_default, index_prefix). Use fields:'all' to fetch the full IndexSetResponse DTOs. NOTE: stats (messageCount, sizeBytes) are NOT included — use get_index_set or wait for delete_index_set's dry-run preview if you need per-index-set stats.",
+        description: "List index sets (narrow [id,title,description,default,writable,can_be_default,index_prefix]). Use this vs. get_index_set when scanning many sets; stats not included.",
         inputSchema: {
             type: "object",
             properties: {
@@ -1198,7 +1198,7 @@ export const toolDefinitions = [
     },
     {
         name: "get_index_set",
-        description: "Fetch the full IndexSetResponse DTO for one index set: id, title, description, default, writable, can_be_default, index_prefix, shards, replicas, rotation_strategy_class, rotation_strategy{type,...}, retention_strategy_class, retention_strategy{type,...}, creation_date, field_type_refresh_interval, ...",
+        description: "Fetch the full IndexSetResponse DTO including rotation/retention strategies. Use this rather than list_index_sets when you need one set's full configuration including strategy blocks.",
         inputSchema: {
             type: "object",
             properties: {
@@ -1210,7 +1210,7 @@ export const toolDefinitions = [
     },
     {
         name: "await_system_job",
-        description: "Poll GET /api/system/jobs/{jobId} with exponential backoff (500ms → 1s → 2s → 4s → 5s cap) until the job completes, errors, is cancelled, or timeoutMs elapses (default 60s, max 600s). Accepts EXACTLY ONE of: (a) `jobId: string` — the bare job ID; (b) `jobIdOrEnvelope` — bare string OR object with job_id/jobId/id from an upstream async envelope; (c) `info_substring: string` — discovery path: the wrapper GETs /api/system/jobs, matches the entry whose `info` field contains the substring, then polls that entry's id. Use info_substring when an upstream tool's async envelope deliberately omits job_id (e.g. delete_index_set per UPDATED D-15 — Graylog DELETE returns 204 with no body; the agent passes `info_substring: <indexSetId>` to discover the IndexSetCleanupJob). 0 matches → isError reason:'job_not_found'. 2+ matches → isError reason:'ambiguous_info_substring' with the list of candidate ids so the agent can re-call with a specific jobId. dryRun:true returns the polling plan WITHOUT issuing GETs. 404 from /system/jobs/{id} means the job has finished and been pruned from Graylog's running-jobs map — interpreted as completed:true with a synthetic finalStatus.",
+        description: "Poll /system/jobs/{id} until an async Graylog job completes (default 60s, max 600s). Accepts jobId, envelope, or info_substring. Use this after any async-envelope apply (e.g. delete_index_set).",
         inputSchema: {
             type: "object",
             properties: {
@@ -1230,7 +1230,7 @@ export const toolDefinitions = [
     // ====================================================================
     {
         name: "create_index_set",
-        description: "Create a Graylog index set (storage configuration for messages). Rotation + retention strategies are REQUIRED (D-10 — destruction policies must never be defaulted). Friendly aliases (D-08): rotation_strategy ∈ ['time-based', 'size-based', 'message-count']; retention_strategy ∈ ['delete', 'close']. NOTE: 'archive' retention is reserved for a future milestone (requires Graylog Enterprise plugin) — passing it returns a structured error with reason 'archive_not_supported'. Per-alias config shapes (D-09): time-based → { rotation_period: 'P1D' (ISO-8601), max_rotation_period?, rotate_empty_index_set? }; size-based → { max_size: <bytes> }; message-count → { max_docs_per_index: <int> }; delete/close → { max_number_of_indices: <int> }. postApplyEstimate.id is __SERVER_ASSIGNED__ — DO NOT reuse it; use the real id from the apply response. Pre-flights a list call to surface existingMatches[] when an index set with the same title exists (M5 idempotency).",
+        description: "Create an index set. Dry-run; rotation+retention REQUIRED (never defaulted). rotation: time-based|size-based|message-count; retention: delete|close. Use this vs. set_default_index_set.",
         inputSchema: {
             type: "object",
             properties: {
@@ -1279,7 +1279,7 @@ export const toolDefinitions = [
     },
     {
         name: "update_index_set",
-        description: "Partial-update one Graylog index set. The wrapper pre-flights GET /api/system/indices/index_sets/{id} to source the immutable fields (index_prefix, creation_date) and the strategy blocks the agent didn't touch, then merges your `changes` over the current state and emits the FULL merged DTO on the wire (U1 MERGE_FROM_CURRENT per 02-U1-SMOKE.md — Graylog 7.0.6's PUT deserializer requires the full IndexSetSummary shape; merge-from-current is safe because index-set configs carry no encrypted fields). D-11 atomic strategy-replace: if `changes` includes `rotation_strategy`, it MUST include `rotation_strategy_config` (and vice versa) — strategy class + config are atomic. Same rule for retention. ND2 pre-flight: the wrapper refuses `writable: false` on the default index set BEFORE the PUT fires (Graylog returns 409; the wrapper surfaces a structured `default_index_set_must_be_writable` reason in dry-run). Immutable `index_prefix` and `creation_date` are NEVER on the wire as agent-supplied — the wrapper re-asserts the current values as defense-in-depth.",
+        description: "Partial-update one index set (merge-from-current). Dry-run default; rotation/retention pairs atomic. Refuses writable:false on default. Use this vs. create_index_set when editing an existing set.",
         inputSchema: {
             type: "object",
             properties: {
@@ -1300,7 +1300,7 @@ export const toolDefinitions = [
     // ====================================================================
     {
         name: "cycle_deflector",
-        description: "Cycle the deflector — close the current active write index and open the next one. The cycle is SYNCHRONOUS in Graylog 7.0.6 — when the apply response returns, the rotation is complete. In-flight writes may briefly buffer until the new index is ready (m3). The closed index's message ranges are rebuilt asynchronously as a separate system job observable at /system/jobs; call await_system_job on that job ID if you need to wait for the rebuild before searching the just-closed index by time range. Refuses non-writable index sets (ND3) AND refuses writable: false connections (D-07/D-16). The apply envelope is { rotated: true, message: '...<indexSetId>...', side_effects: { observable_at: '/system/jobs', describes: '...range rebuild...' } } — NOT the D-15 async envelope (cycle itself is synchronous; only the side-effect range rebuild is async).",
+        description: "Cycle the deflector — close current active write index, open the next (synchronous). Dry-run default. Use this vs. delete_index_set when rotating storage, not retiring it.",
         inputSchema: {
             type: "object",
             properties: {
@@ -1317,7 +1317,7 @@ export const toolDefinitions = [
     // ====================================================================
     {
         name: "set_default_index_set",
-        description: "Designate an index set as the default. The wrapper pre-flights the server's `can_be_default` eligibility flag on the target; if false (events-style or system index set, OR any future eligibility rule Graylog adds), the dry-run returns a structured error (reason: default_eligibility_failed) BEFORE any PUT is attempted — the would-be 409 surfaces in dry-run, not apply (UPDATED D-13 / pitfall m2). The wrapper reads `can_be_default` rather than the underlying `regular` boolean because `can_be_default` is the server's derived eligibility answer and naturally absorbs any future rules without a wrapper-side update. On apply, issues PUT /api/system/indices/index_sets/{id}/default with an empty body and returns the full IndexSetResponse DTO with `default: true`.",
+        description: "Designate one index set as the default for new streams. Dry-run default; refuses targets with can_be_default:false. Use this vs. update_index_set when redirecting new-stream storage.",
         inputSchema: {
             type: "object",
             properties: {
@@ -1334,7 +1334,7 @@ export const toolDefinitions = [
     // ====================================================================
     {
         name: "delete_index_set",
-        description: "Delete a Graylog index set. Graylog's server defaults `delete_indices` to TRUE — this wrapper INVERTS it to FALSE (D-04 safety inversion). With `deleteIndices: false` (the default) only the index-set metadata is removed; the Elasticsearch indices and their messages stay. To actually destroy the indices, pass `deleteIndices: true` AND echo back the `confirmationToken` from the dry-run output as `confirm` — the wrapper computes a deterministic sha-256 hash over {indexSetId, deleteIndices:true, sorted indexNames, messageCount} and refuses apply unless the agent echoes it. If anything changed server-side between dry-run and apply (new index opened, messages ingested), the hash mismatches and apply refuses with reason 'confirmation_mismatch'. PRE-FLIGHT REFUSALS: (a) The default index set CANNOT be deleted (Graylog refuses with BadRequestException) — surfaced with reason 'default_index_set_undeletable' BEFORE the DELETE fires, regardless of `deleteIndices` value. (b) When `deleteIndices: true`, stats-endpoint failure HARD-BLOCKS the dry-run with reason 'stats_unreachable' — the wrapper refuses to issue a confirmation token without knowing the destruction blast radius. AFTER APPLY with `deleteIndices: true`, the response is { async: true, job_id_observable_at: '/system/jobs', message: '...<indexSetId>...' } WITH NO job_id field — Graylog DELETE returns 204 with no body, so there is no server-supplied id to forward. To wait for the cleanup job to finish, call `await_system_job` with `info_substring: '<indexSetId>'` — the wrapper will GET /system/jobs, locate the IndexSetCleanupJob whose info field contains the indexSetId, then poll its id to completion.",
+        description: "Destructive: delete an index set. `deleteIndices` defaults false (metadata-only; inverted from Graylog). With true, requires `confirm` from dry-run. Use this vs. cycle_deflector when retiring storage.",
         inputSchema: {
             type: "object",
             properties: {
@@ -1361,7 +1361,7 @@ export const toolDefinitions = [
     // ====================================================================
     {
         name: "list_pipelines",
-        description: "List Graylog pipelines (narrow projection [id, title, description, stages_count, created_at, modified_at]). `stages_count` is a synthetic projection (length of the wire `stages` array) — agents see card-stages-N without the byte cost of the raw `source` DSL. Use get_pipeline for the full DTO including source text and embedded stages.",
+        description: "List pipelines (narrow [id,title,description,stages_count,created_at,modified_at]). stages_count avoids the raw DSL byte cost. Use this vs. get_pipeline when scanning many pipelines.",
         inputSchema: {
             type: "object",
             properties: {
@@ -1373,7 +1373,7 @@ export const toolDefinitions = [
     },
     {
         name: "get_pipeline",
-        description: "Get the full PipelineSource DTO for one Graylog pipeline (id, title, description, source DSL, stages, created_at, modified_at). Use list_pipelines first for narrow listing. Path uses the literal `pipeline` segment (Pitfall 3).",
+        description: "Get one pipeline's full PipelineSource DTO including source DSL and stages. Use this vs. list_pipelines when you need the full source for one pipeline rather than a scan.",
         inputSchema: {
             type: "object",
             properties: {
@@ -1385,7 +1385,7 @@ export const toolDefinitions = [
     },
     {
         name: "create_pipeline",
-        description: "Create a Graylog pipeline. Dry-run pre-flights POST /api/system/pipelines/pipeline/parse with the agent's `source` (D-06 server-authoritative parse gate); on parse error returns isError with reason `pipeline_parse_failed` and `parseResult.error` carrying `[{line, position_in_line, type, message}]` (Pitfall 6: wire `positionInLine` camelCase translates to `position_in_line` snake_case). Apply NEVER fires when parse fails (C4 mitigation). Dry-run also surfaces existingMatches when a pipeline with the same title already exists (informational). postApplyEstimate.id is __SERVER_ASSIGNED__ — DO NOT reuse it; use the real id from the apply response. Pipelines accept raw DSL source only; use the rule-level tools (Plan 04-03) for structured-intent emission.",
+        description: "Create a pipeline (raw DSL source only). Dry-run; parses source first and refuses apply on parse error. Use this vs. create_pipeline_rule when you need a stage container (rules live inside).",
         inputSchema: {
             type: "object",
             properties: {
@@ -1401,7 +1401,7 @@ export const toolDefinitions = [
     },
     {
         name: "update_pipeline",
-        description: "Partial-update a Graylog pipeline's mutable fields. STRICT_NO_ECHO wire-build (per 04-U1-SMOKE.md): only the fields you pass in `changes` are sent on the wire — unchanged fields stay server-side. Parse pre-flight (POST /api/system/pipelines/pipeline/parse) fires ONLY when changes.source is set; refuses apply with reason `pipeline_parse_failed` on parse error (Pitfall 6 camelCase→snake_case). Pre-flights GET on the current pipeline; 404 surfaces a clean MCP error envelope. NO mutable defense (D-15 — pipelines have no is_editable field on the wire). Schema: { pipelineId, changes: { title?, description?, source? } }.",
+        description: "Partial-update one pipeline (strict no-echo). Dry-run default; parses source when changes.source is set and refuses on parse error. Use this vs. create_pipeline when editing an existing pipeline.",
         inputSchema: {
             type: "object",
             properties: {
@@ -1416,7 +1416,7 @@ export const toolDefinitions = [
     },
     {
         name: "delete_pipeline",
-        description: "Delete a Graylog pipeline. LEAF DELETE (D-15) — pipelines have no mutable flag and no cascade pre-flight. NO confirmation token, NO requireConfirm gate. Stream connections referencing this pipeline become ORPHANED but RECOVERABLE — the orphan rows survive in the connection table, and the agent can re-connect any pipeline after recreating it via connect_pipelines_to_stream (Plan 04-05). Apply envelope is sync `{deleted: true, pipelineId}` (no async/job_id). Path uses the literal `pipeline` segment (Pitfall 3).",
+        description: "Delete a pipeline (leaf delete — no cascade, no confirm token). Dry-run. Stream connections orphan but are recoverable via connect_pipelines_to_stream. Use this vs. delete_pipeline_rule.",
         inputSchema: {
             type: "object",
             properties: {
@@ -1436,7 +1436,7 @@ export const toolDefinitions = [
     // ====================================================================
     {
         name: "list_pipeline_rules",
-        description: "List Graylog pipeline rules (narrow projection [id, title, description, created_at, modified_at]). The `source` DSL text is excluded from the default fields — use get_pipeline_rule for the full rule body. Path uses the literal `rule` segment (Pitfall 3 rule variant); bare /api/system/pipelines/{id} returns 404.",
+        description: "List pipeline rules (narrow [id,title,description,created_at,modified_at]; source DSL excluded). Use this vs. get_pipeline_rule when scanning many rules without paying the DSL byte cost.",
         inputSchema: {
             type: "object",
             properties: {
@@ -1448,7 +1448,7 @@ export const toolDefinitions = [
     },
     {
         name: "get_pipeline_rule",
-        description: "Get the full RuleSource DTO for one Graylog pipeline rule (id, title, description, source DSL, rule_builder, simulator_message, created_at, modified_at). Use list_pipeline_rules first for narrow listing. Path uses the literal `rule` segment (Pitfall 3 rule variant).",
+        description: "Get one pipeline rule's full RuleSource DTO including source DSL and rule_builder. Use this vs. list_pipeline_rules when you need the rule body, not just metadata.",
         inputSchema: {
             type: "object",
             properties: {
@@ -1460,7 +1460,7 @@ export const toolDefinitions = [
     },
     {
         name: "create_pipeline_rule",
-        description: "Create a Graylog pipeline rule from typed structured intent OR raw DSL source (mutually exclusive per D-10). Structured intent compiles via emit.js (every literal escape-routed); raw DSL forwards verbatim. Both modes run client-side lint (validate.js over the merged catalogue — Pitfall 5 — live-only function names accepted) THEN the server-authoritative parse pre-flight (POST /api/system/pipelines/rule/parse — C4 acceptance gate). On parse failure refuses apply with reason `rule_parse_failed` and parseResult.error carrying [{line, position_in_line, type, message}] (Pitfall 6 camelCase→snake_case). postApplyEstimate.id is __SERVER_ASSIGNED__. Use simulate_pipeline_rule (Plan 04-04) to verify semantics — this tool's parse pre-flight only validates grammar; side-effect functions (from_input, route_to_stream) cannot be meaningfully simulated.",
+        description: "Create a pipeline rule from structured intent OR raw DSL. Dry-run; lint+parse refuse apply on errors. Use this vs. simulate_pipeline_rule when persisting (simulate only validates).",
         inputSchema: {
             type: "object",
             properties: {
@@ -1476,7 +1476,7 @@ export const toolDefinitions = [
     },
     {
         name: "update_pipeline_rule",
-        description: "Partial-update a Graylog pipeline rule's mutable fields. STRICT_NO_ECHO wire-build (per 04-U1-SMOKE.md): only the fields you pass in `changes` are sent on the wire — unchanged fields stay server-side. Parse pre-flight (POST /api/system/pipelines/rule/parse) fires ONLY when changes.structured OR changes.ruleSource is set; refuses apply with reason `rule_parse_failed` on parse error (Pitfall 6 camelCase→snake_case). Pre-flights GET on the current rule; 404 surfaces a clean MCP error envelope. NO mutable check (rules have no is_editable). simulator_message preserves omit-vs-explicit-null clear-intent (Nullable String). Schema: { ruleId, changes: { structured?, ruleSource?, description?, simulator_message? } } — structured XOR ruleSource within changes.",
+        description: "Partial-update one pipeline rule (strict no-echo; structured XOR ruleSource). Dry-run; parses source when touched. Use this vs. create_pipeline_rule when editing an existing rule.",
         inputSchema: {
             type: "object",
             properties: {
@@ -1502,7 +1502,7 @@ export const toolDefinitions = [
     // ====================================================================
     {
         name: "connect_pipelines_to_stream",
-        description: "Attach pipelines to a stream. The wrapper preserves previously-connected pipelines (Pitfall 2 — Graylog's endpoint POST /api/system/pipelines/connections/to_stream is REPLACE-the-full-set; this wrapper does GET-merge-POST client-side). Pre-flights GET /api/system/pipelines/connections/{streamId} (404 treated as empty set); unions with args.pipelineIds; POSTs the merged set sorted alphabetically. Idempotent attaches surface in existingMatches with similarity_reason: 'already_connected'. Use list_pipelines + list_streams to discover ids. Schema: { streamId, pipelineIds[] } — both required, pipelineIds must contain at least one ID.",
+        description: "Attach pipelines to a stream (wrapper preserves existing connections via GET-merge-POST). Dry-run default. Use this vs. disconnect_pipelines_from_stream when adding pipeline-to-stream wiring.",
         inputSchema: {
             type: "object",
             properties: {
@@ -1517,7 +1517,7 @@ export const toolDefinitions = [
     },
     {
         name: "disconnect_pipelines_from_stream",
-        description: "Detach pipelines from a stream. The wrapper preserves remaining connections (Pitfall 2 mirror — Graylog's endpoint POST /api/system/pipelines/connections/to_stream is REPLACE-the-full-set; this wrapper does GET-subtract-POST client-side). Pre-flights GET /api/system/pipelines/connections/{streamId} (404 treated as empty set); subtracts args.pipelineIds; POSTs the reduced set sorted alphabetically. Not-currently-connected IDs surface in existingMatches with similarity_reason: 'not_currently_connected' (no-op). Schema: { streamId, pipelineIds[] } — both required, pipelineIds must contain at least one ID.",
+        description: "Detach pipelines from a stream (wrapper preserves remaining connections via GET-subtract-POST). Dry-run default. Use this vs. connect_pipelines_to_stream when removing pipeline-to-stream wiring.",
         inputSchema: {
             type: "object",
             properties: {
@@ -1537,7 +1537,7 @@ export const toolDefinitions = [
     // ====================================================================
     {
         name: "delete_pipeline_rule",
-        description: "Delete a pipeline rule. Dry-run paginates /api/system/pipelines/rule/paginated to discover referencing pipelines (Strategy A — server-computed used_in_pipelines join) and emits cascades.{pipelines} + a confirmationToken (64-hex sha-256 via computeRuleCascadeHash). Apply requires `confirm:<token>` echoed back; the wrapper re-fetches + recomputes the hash + refuses with reason `cascade_changed_since_preview` on ANY drift. Refuses with reason `cascade_preflight_failed` if the paginated GET errors. NO mutable check (rules have no is_editable on the wire). Apply envelope is SYNC `{deleted:true, ruleId}` (no async/job_id). Path uses the literal `rule` segment (Pitfall 3 rule variant); safety cap at 200 pages × 50/page (Pitfall 7 — 10000 rules max).",
+        description: "Destructive: delete a pipeline rule. Dry-run surfaces referencing pipelines + confirmationToken; apply requires `confirm`. Use this vs. delete_pipeline when removing one rule, not the parent.",
         inputSchema: {
             type: "object",
             properties: {
@@ -1569,7 +1569,7 @@ export const toolDefinitions = [
     // ====================================================================
     {
         name: "simulate_pipeline_rule",
-        description: "Simulate a pipeline rule against a sample message. Returns the post-rule message DTO so the agent can verify semantic bugs the parser cannot catch (wrong function names, type-coercion errors, set_field reserved-field collisions). Accepts either typed structured intent (compiles via emit.js) OR raw DSL `ruleSource` (mutually exclusive). Pre-flights POST /api/system/pipelines/rule/parse (C4 gate carried forward) — refuses with reason `rule_parse_failed` on parse error before /simulate fires. CRITICAL Pitfall 1: the wire body's `message` field is JSON-STRINGIFIED — agent passes `{message:{source,level,...}}`, wrapper emits `{message:'{\"source\":\"host\",\"level\":6}',rule_source:{source:\"...\"}}`. Pitfall 4: functions depending on Graylog internal `gl2_*` metadata (from_input, route_to_stream, remove_from_stream) cannot be meaningfully simulated — use only for set_field / type-coercion / field-comparison cases. No Graylog state mutation; routes through defineMutatingHandler for uniform dryRun + writable inheritance (D-09).",
+        description: "Simulate a rule against a sample message (returns post-rule DTO). No state mutation. Structured intent OR ruleSource. Use this vs. create_pipeline_rule when verifying semantics first.",
         inputSchema: {
             type: "object",
             properties: {
@@ -1592,7 +1592,7 @@ export const toolDefinitions = [
     // ====================================================================
     {
         name: "list_pipeline_functions",
-        description: "List Graylog pipeline-rule built-in functions (merged static catalogue + live overlay). The static baseline (133 hand-curated entries from RESEARCH §Built-in Function Catalogue) is overlaid with the live response from GET /api/system/pipelines/rule/functions — live wins on name collision (Graylog is authoritative); static fills description gaps; live-only names (newer Graylog versions) surface with source:'live' (Pitfall 5 fix). Cached per-connection per-process (1 GET per connection per server lifetime). Optional filters: `category` (e.g. 'strings', 'dates') and `deprecated_only` (boolean). Narrow projection [name, signature, category, source, deprecated]; use fields:'all' for the full entry including oneLineDescription + sourceRef.",
+        description: "List built-in pipeline functions (static catalogue + live overlay; live wins on collision). Cached per connection. Use this vs. create_pipeline_rule when discovering function signatures.",
         inputSchema: {
             type: "object",
             properties: {
@@ -1618,7 +1618,7 @@ export const toolDefinitions = [
     // ====================================================================
     {
         name: "list_dashboards",
-        description: "List Graylog dashboards (narrow projection: id, title, summary, description). DASHBOARD-typed views only — saved searches filtered out wrapper-side regardless of upstream filter behavior (Q1 default). Use fields:'all' for the full ViewDTO.",
+        description: "List dashboards (narrow [id,title,summary,description]; saved searches filtered out wrapper-side). Use this vs. get_dashboard when scanning many dashboards.",
         inputSchema: {
             type: "object",
             properties: {
@@ -1630,7 +1630,7 @@ export const toolDefinitions = [
     },
     {
         name: "get_dashboard",
-        description: "Get a single Graylog dashboard's full ViewDTO including state.{queryId}.widgets, widget_positions, widget_mapping (widgetId → searchTypeId[]), and search_id. The full DTO is the agent-facing surface — no projection.",
+        description: "Get one dashboard's full ViewDTO including widgets, widget_positions, widget_mapping, and search_id. Use this vs. list_dashboards when you need the full DTO for one dashboard.",
         inputSchema: {
             type: "object",
             properties: {
@@ -1642,7 +1642,7 @@ export const toolDefinitions = [
     },
     {
         name: "create_dashboard",
-        description: "Create a Graylog dashboard via an internal Search+View 2-step chain (POST /api/views/search → POST /api/views). C7 mitigation: agent never sees the intermediate Search ID; widget IDs are wrapper-generated UUIDs. Dry-run surfaces the full chain transcript. Schema rejects agent-supplied `searchId` (D-02 structural). Widget-position integrity validated before any HTTP (D-03 bidirectional).",
+        description: "Create a dashboard via internal Search+View 2-step chain. Dry-run; widget IDs are wrapper-generated UUIDs; searchId is schema-rejected. Use this vs. add_widget_from_template for a new dashboard.",
         inputSchema: {
             type: "object",
             properties: {
@@ -1662,7 +1662,7 @@ export const toolDefinitions = [
     },
     {
         name: "update_dashboard",
-        description: "Update a Graylog dashboard's metadata (title/description/summary only) via STRICT_NO_ECHO partial update. Pre-flight GET fetches the full ViewDTO; agent's changes are overlaid; PUT carries the merged DTO. searchId is schema-rejected (D-02 — immutable post-creation). For widget composition changes use add_widget_from_template (DASH-06) or remove_widget (DASH-07).",
+        description: "Update one dashboard's metadata (title/description/summary only). Dry-run; searchId schema-rejected (immutable). Use this vs. add_widget_from_template when editing metadata not widgets.",
         inputSchema: {
             type: "object",
             properties: {
@@ -1685,7 +1685,7 @@ export const toolDefinitions = [
     },
     {
         name: "delete_dashboard",
-        description: "Delete a Graylog dashboard. Leaf delete (no cascade refusal): widgets vanish with the view; bound Search becomes orphan per Graylog model. Dry-run surfaces an informational cascades.widgets.count (best-effort GET pre-flight). NO confirmationToken; no drift refusal at apply time.",
+        description: "Delete a dashboard (leaf delete — no cascade refusal, no confirm token). Dry-run surfaces informational widget count. Use this vs. remove_widget when retiring the whole dashboard.",
         inputSchema: {
             type: "object",
             properties: {
@@ -1699,7 +1699,7 @@ export const toolDefinitions = [
     },
     {
         name: "remove_widget",
-        description: "Remove a widget from a Graylog dashboard. Symmetric two-step PUT chain (PUT /api/views/search + PUT /api/views) — strips the widget's search_types from the bound Search AND the widget + position + widget_mapping entry from the View. D-03 widget-position integrity validated on prospective post-remove sets before wire emission. Use add_widget_from_template (DASH-06) to add widgets.",
+        description: "Remove one widget from a dashboard via symmetric two-step PUT chain. Dry-run; widget-position integrity validated pre-wire. Use this vs. delete_dashboard when removing one widget, not the view.",
         inputSchema: {
             type: "object",
             properties: {
@@ -1714,7 +1714,7 @@ export const toolDefinitions = [
     },
     {
         name: "add_widget_from_template",
-        description: "Add a widget from the curated 8-template library to a dashboard. Atomic two-step PUT chain (PUT /api/views/search + PUT /api/views); 1-step for top_error_clusters text-widget placeholder. Closed-set templateName enum (M7) rejects unknown names at parse before any HTTP. Use remove_widget (DASH-07) to remove widgets.",
+        description: "Add a widget from the curated 8-template library. Atomic two-step PUT chain. Dry-run default; closed-set template names. Use this vs. create_dashboard when augmenting an existing dashboard.",
         inputSchema: {
             type: "object",
             properties: {
@@ -1759,7 +1759,7 @@ export const toolDefinitions = [
     // ====================================================================
     {
         name: "setup_long_term_archival_index",
-        description: "Blueprint (BLUE-05): create an index set bundled for long-term archival — SizeBasedRotationStrategyConfig (1 GiB/index) + DeletionRetentionStrategyConfig (max_number_of_indices ≈ retentionDays, 1 index/day approximation). 1-step chain wrapping create_index_set. Dry-run preview surfaces `chain: [{step:1, tool:'create_index_set', request:{...}}]`; apply walks the chain via executeChain. Defaults: indexPrefix slugified from name; shards 4, replicas 1, writable true. Schema: { name, retentionDays:1..36500, description?, indexPrefix?, shards?, replicas? }.",
+        description: "Blueprint: index set tuned for archival (size rotation 1GiB + N-day deletion). 1-step chain wrapping create_index_set. Dry-run. Use this vs. create_index_set when you want archival defaults.",
         inputSchema: {
             type: "object",
             properties: {
@@ -1778,7 +1778,7 @@ export const toolDefinitions = [
     },
     {
         name: "setup_debug_log_dropping",
-        description: "Blueprint (BLUE-06): drop messages with `level > minLevel` on a specific stream. 3-step chain: createRule (DSL via emitRule with `when level > minLevel then drop_message()`) → createPipeline (single-stage referencing the rule by title) → connectToStream. Syslog level inversion: HIGHER number = LESS severe (0=emerg, 7=debug); the predicate drops STRICTLY MORE VERBOSE messages than minLevel (e.g. minLevel:6 keeps emerg..info, drops debug-only). Apply walks executeChain — pipeline_ids substituted from step 2's pipeline id at apply-time. Schema: { streamId, minLevel:0..7, pipelineTitle?, ruleTitle? }.",
+        description: "Blueprint: drop messages with level > minLevel on one stream (syslog: 0=emerg, 7=debug). 3-step chain (rule → pipeline → connect). Dry-run. Use this vs. create_pipeline_rule for pre-wired connection.",
         inputSchema: {
             type: "object",
             properties: {
@@ -1795,7 +1795,7 @@ export const toolDefinitions = [
     },
     {
         name: "setup_pipeline_for_stream",
-        description: "Blueprint (BLUE-04): create a pipeline (with N rules from structured-intent transforms) and connect it to a stream. Variable-length N+2-step chain: N createRule steps (one per transform, DSL compiled via Phase 4's pipeline-dsl/emit.js — every literal escape-routed) + 1 createPipeline (single-stage referencing all N rule titles in order) + 1 connectToStream. Apply walks executeChain — pipeline_ids substituted from step N+1's pipeline id at apply-time. transforms is bounded 1..20 (DoS cap); for >20 transforms partition across multiple invocations. Schema: { streamId, pipelineTitle, pipelineDescription?, transforms: RuleSpec[1..20] } where RuleSpec = {name, when:Condition, then:Action[]} (same shape as create_pipeline_rule's `structured`).",
+        description: "Blueprint: pipeline with N structured-intent rules + stream connection. N+2-step chain (1..20 transforms). Dry-run. Use this vs. create_pipeline when wiring rules+pipeline+connection in one call.",
         inputSchema: {
             type: "object",
             properties: {
@@ -1830,7 +1830,7 @@ export const toolDefinitions = [
     // ====================================================================
     {
         name: "setup_app_monitoring_stack",
-        description: "Headline blueprint (BLUE-01): set up full app monitoring (stream + drop-debug pipeline + 4-widget health dashboard + error-rate alert) from one intent. 6-step chain composed from src/services/. Default widgets: error_rate_over_time, top_sources_by_volume, level_distribution, recent_events_table.",
+        description: "Headline blueprint: stream + drop-debug pipeline + 4-widget dashboard + error-rate alert. 6-step chain. Dry-run. Use this vs. individual create_* tools when bootstrapping full monitoring.",
         inputSchema: {
             type: "object",
             properties: {
@@ -1864,7 +1864,7 @@ export const toolDefinitions = [
     },
     {
         name: "setup_error_alerting",
-        description: "Blueprint (BLUE-02): create an error-rate event definition (aggregation-v1 query 'level:>=4') on a stream, wired to an existing notification. 1-step chain. Schedule defaults to false (Phase 5 M1 carry-forward — flip via enable_event_definition). Agent supplies notificationId from list_event_notifications.",
+        description: "Blueprint: error-rate event def (level:>=4) on a stream wired to an existing notification. Schedule false — flip via enable_event_definition. Use this vs. create_event_definition for pre-wired alerts.",
         inputSchema: {
             type: "object",
             properties: {
@@ -1882,7 +1882,7 @@ export const toolDefinitions = [
     },
     {
         name: "create_app_health_dashboard",
-        description: "Blueprint (BLUE-03): create a 4-widget health dashboard pre-wired to a stream. Uses 4 default templates (error_rate_over_time, top_sources_by_volume, level_distribution, recent_events_table). 1 conceptual step (internal Search+View 2-step chain — same C7 mitigation as create_dashboard).",
+        description: "Blueprint: 4-widget health dashboard pre-wired to a stream. 1 conceptual step (internal Search+View). Dry-run. Use this vs. create_dashboard when you want curated health-widget defaults.",
         inputSchema: {
             type: "object",
             properties: {
