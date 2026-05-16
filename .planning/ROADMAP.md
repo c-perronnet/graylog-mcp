@@ -1,169 +1,37 @@
 # Roadmap: Graylog MCP — Full Admin Surface
 
-**Created:** 2026-05-13
-**Granularity:** coarse (8 phases)
-**Strategy:** sequential execution, phase-branching (`gsd/phase-{phase}-{slug}`)
-**Coverage:** 71/71 v1 requirements mapped
+## Milestones
+
+- ✅ **v3.0.0 Full Admin Surface** — Phases 0-7 (shipped 2026-05-16) — [archive](milestones/v3.0.0-ROADMAP.md)
+- 📋 **Next milestone** — planning not yet started (run `/gsd-new-milestone`)
 
 ## Phases
 
-- [x] **Phase 0: Foundation** — Cross-cutting infrastructure (dispatch refactor, HTTP client, mutating-handler factory, dry-run primitive, zod adoption, snapshot test harness) so every subsequent domain phase composes the same safety primitives.
-- [x] **Phase 1: Inputs & Extractors** — CRUD for inputs (GELF/Beats/Syslog/Raw) + extractors, including the partial-update pattern that protects encrypted fields on `update_input`.
-- [x] **Phase 2: Index Sets & Retention** — Index-set CRUD with rotation/retention strategies, the inverted `deleteIndices` default, and the reusable `await_system_job` async-poll primitive.
-- [x] **Phase 3: Streams & Stream Rules** — Stream CRUD + stream-rule CRUD with `test_stream_match` validation and pre-delete cascade preview (rules + pipeline connections + event defs).
-- [x] **Phase 4: Pipelines, Pipeline Rules & Connections** — Pipeline CRUD + the `src/pipeline-dsl/` subsystem (emit/escape/validate/builtins), server-authoritative parse pre-flight, and `simulate_pipeline_rule`.
-- [x] **Phase 5: Events & Notifications** — Full CRUD upgrade for event definitions and notifications, with `schedule: false` default and v6→v7 aggregation-syntax migration helper.
-- [x] **Phase 6: Dashboards, Widget Templates & Blueprints** — Dashboard CRUD via internal Search+View chain, the 8-template curated widget library, and the 6 cross-domain blueprints composed from services.
-- [x] **Phase 7: Final Hardening** — Tool-description audit, `list_admin_tools` meta-tool, v7-vs-v6 read-tool smoke pass, c8 coverage baseline, and `/api/streams` deprecation plan.
+<details>
+<summary>✅ v3.0.0 Full Admin Surface (Phases 0-7) — SHIPPED 2026-05-16</summary>
 
-## Phase Details
+- [x] Phase 0: Foundation (6/6 plans) — completed 2026-05-13
+- [x] Phase 1: Inputs & Extractors (5/5 plans) — completed 2026-05-13
+- [x] Phase 2: Index Sets & Retention (5/5 plans) — completed 2026-05-14
+- [x] Phase 3: Streams & Stream Rules (5/5 plans) — completed 2026-05-14
+- [x] Phase 4: Pipelines, Pipeline Rules & Connections (6/6 plans) — completed 2026-05-15
+- [x] Phase 5: Events & Notifications (5/5 plans) — completed 2026-05-15
+- [x] Phase 6: Dashboards, Widget Templates & Blueprints (6/6 plans) — completed 2026-05-16
+- [x] Phase 7: Final Hardening (3/3 plans) — completed 2026-05-16
 
-### Phase 0: Foundation
-**Goal**: Every cross-cutting primitive that mutating tools need exists, tested, and proves the safety model before any domain handler ships.
-**Depends on**: Nothing (entry phase for this milestone)
-**Requirements**: FOUND-01, FOUND-02, FOUND-03, FOUND-04, FOUND-05, FOUND-06, FOUND-07, FOUND-08, FOUND-09, FOUND-10, FOUND-11, FOUND-12, FOUND-13
-**Success Criteria** (what must be TRUE):
-  1. `src/index.js` no longer routes tools through the `if (name === "...")` chain — a `Map<toolName, handler>` in `src/dispatch.js` handles dispatch, and the server fails to start if any tool in `src/tools.js` lacks a registered handler.
-  2. A developer can wrap any new mutating tool with `defineMutatingHandler({ schema, build, apply, summarize })` and the wrapper automatically enforces `dryRun: true` by default, runs zod validation, resolves `connectionName` (with singleton fallback), generates an idempotency key, and emits a `{ preview, request, confirmationToken }` payload with `__SERVER_ASSIGNED__` ID sentinels.
-  3. `npm test` runs against `node:test`, the engines floor is `>= 20.6.0` (snapshot tests work), and 5–10 fixture snapshot tests pass locally — proving the dry-run-preview safety contract is byte-comparable in CI.
-  4. The existing v2.3 read tools dispatch through the new Map unchanged (no behavior diffs against v7.2), and `list_admin_tools` naming convention `<verb>_<domain>_<noun>` is documented as enforced from this phase forward.
-**Plans**: 6 plans
-  - [x] 00-01-PLAN.md — Project bootstrap + test scaffolding (FOUND-06 partial)
-  - [x] 00-02-PLAN.md — Migrate 4 existing test-*.js scripts to node:test (FOUND-06 closure via D-05)
-  - [x] 00-03-PLAN.md — Graylog HTTP client layer (FOUND-02, FOUND-08 + D-07 client-side)
-  - [x] 00-04-PLAN.md — Handler primitives defineMutatingHandler/defineListHandler (FOUND-03/04/05/09/10/11/12 + D-07 wrapper-side)
-  - [x] 00-05-PLAN.md — Dispatch refactor + tool naming hard rename (FOUND-01, FOUND-13)
-  - [x] 00-06-PLAN.md — Snapshot fixture pass + auth-redaction + schema-parity scaffold (FOUND-07)
+Full phase-by-phase narrative archived to `.planning/milestones/v3.0.0-ROADMAP.md`.
 
-### Phase 1: Inputs & Extractors
-**Goal**: An agent can create, configure, lifecycle, and tear down Graylog inputs and their extractors safely, without ever zeroing an encrypted password through a round-tripped config.
-**Depends on**: Phase 0 (uses `defineMutatingHandler`, zod schemas, idempotency dispatch)
-**Requirements**: INPUT-01, INPUT-02, INPUT-03, INPUT-04, INPUT-05, INPUT-06, INPUT-07, INPUT-08, INPUT-09, INPUT-10, INPUT-11
-**Success Criteria** (what must be TRUE):
-  1. An agent can create a GELF input with `dryRun: true`, inspect the would-be POST body, then re-call with `dryRun: false` to apply and receive the assigned input ID + start/stop the input lifecycle from a single tool surface.
-  2. An agent can call `update_input` to change an input's port and receive a dry-run payload that contains **only** the changed field — encrypted config fields (TLS cert password, AWS credentials) are absent from the emitted payload regardless of what the agent passed in.
-  3. An agent can list inputs filtered by type via `list_input_types` (dynamic discovery against `GET /system/inputs/types/all`) and list extractors per input with the partial-update pattern reused for extractor mutations.
-  4. `delete_input` dry-run output enumerates the affected extractors and warns the operator before message-handling impact is applied.
-**Plans**: 5 plans
-  - [x] 01-01-PLAN.md — Foundation amendments (A4 async build, A2 conflict pre-check, D-06 type-catalogue cache) + INPUT-01/02/03 read tools
-  - [x] 01-02-PLAN.md — Input CRUD: create_input (D-04 redaction), update_input (C3 mitigation centerpiece — INPUT-05), delete_input (D-05 cascade enumeration)
-  - [x] 01-03-PLAN.md — Input lifecycle: start_input (PUT) + stop_input (DELETE) (INPUT-07)
-  - [x] 01-04-PLAN.md — Extractor CRUD: list_extractors + create_extractor (all 8 Graylog types per A1) + update_extractor + delete_extractor (INPUT-08..11)
-  - [x] 01-05-PLAN.md — Snapshot fixtures (incl. C3 acceptance gate) + schema-parity enrichment + 01-VALIDATION.md flip
-
-### Phase 2: Index Sets & Retention
-**Goal**: An agent can configure where Graylog stores messages — including rotation/retention strategies — without ever silently destroying Elasticsearch data through a defaulted query parameter.
-**Depends on**: Phase 0
-**Requirements**: INDEX-01, INDEX-02, INDEX-03, INDEX-04, INDEX-05, INDEX-06, INDEX-07, INDEX-08
-**Success Criteria** (what must be TRUE):
-  1. `delete_index_set` defaults `deleteIndices` to **false** (inverted from Graylog's server default of true); calling it with `deleteIndices: true` on an index set that contains messages requires a confirmation token echoed back from the dry-run output.
-  2. An agent can create a time-based, size-based, or message-count rotated index set bundled with delete/close retention by calling `create_index_set` once, and the dry-run output shows the resolved rotation/retention strategy class + config.
-  3. `set_default_index_set` enforces the `regular: true` invariant — calling it against an events-style index set surfaces a clear 409-style error in the dry-run output before any apply is attempted.
-  4. `await_system_job` (introduced here as a reusable primitive) lets the agent poll `/system/jobs/{id}` to completion after an async operation like `cycle_deflector` or `delete_index_set?deleteIndices=true` — and the same primitive is available for later phases.
-**Plans**: 5 plans
-  - [x] 02-01-PLAN.md — Foundation amendments (handler.js _confirmationToken forward + requireConfirm gate; conflict.js index_sets envelope) + await_system_job (INDEX-08) + list_index_sets (INDEX-01) + get_index_set (INDEX-02) + U1 live-smoke decision artifact
-  - [x] 02-02-PLAN.md — create_index_set (INDEX-03) with D-10 + D-08 friendly aliases + D-09 6 strict configs + M5 idempotency; update_index_set (INDEX-04) with D-11 atomic strategy-replace + U1 MERGE_FROM_CURRENT partial-update + ND2 pre-flight
-  - [x] 02-03-PLAN.md — delete_index_set (INDEX-05) C1 mitigation centerpiece — sha-256 confirmation hash, D-04 inverted default, D-05 stats hard-block, ND1 default refusal, D-15 async envelope
-  - [x] 02-04-PLAN.md — set_default_index_set (INDEX-06) D-13 can_be_default invariant + cycle_deflector (INDEX-07) ND3 writable pre-flight + UPDATED D-14 sync semantics + side_effects.observable_at
-  - [x] 02-05-PLAN.md — Snapshot fixtures (9 per RESEARCH §Snapshot Fixture Design) + schema-parity enrichment (8 tools) + auth-redaction confirmationToken allowlist + VALIDATION.md flip + human-verify checkpoint
-
-### Phase 3: Streams & Stream Rules
-**Goal**: An agent can route messages into streams and manage the rules that scope them, with the cascade impact of every mutation made visible before the world changes.
-**Depends on**: Phase 0, Phase 2 (`create_stream` needs an `index_set_id` to bind to)
-**Requirements**: STREAM-01, STREAM-02, STREAM-03, STREAM-04, STREAM-05, STREAM-06, STREAM-07, STREAM-08, STREAM-09, STREAM-10, STREAM-11
-**Success Criteria** (what must be TRUE):
-  1. An agent can preview a stream-delete and see all cascading rules + pipeline connections + event definitions that reference the stream before applying; if the cascade list grows between dry-run and apply, the apply step refuses with a "world changed since preview" error.
-  2. `list_streams` returns each stream's `mutable: boolean` field, so an agent can filter built-in/protected streams out of any candidate-for-deletion set before composing a mutation.
-  3. `test_stream_match` accepts a stream config + a sample message and returns per-rule match outcomes — letting the agent verify rule intent without round-tripping a real message through Graylog.
-  4. `create_stream` dry-run output includes `existingMatches: [{ id, title, similarity_reason }]` when a stream with a similar title already exists (case-different, prefix match, or exact), eliminating the "list-before-create skipped under context pressure" duplication failure.
-**Plans**: 5 plans
-  - [x] 03-01-PLAN.md — Foundation amendments (promote c1-hash.js to _shared/cascade-hash.js with keyed-buckets signature; verify findExistingMatches `streams` envelope) + read tools list_streams/get_stream/list_stream_rules (STREAM-01/02/07) + v2.3 list_streams displacement + U1-style live-smoke decision artifact for D-14
-  - [x] 03-02-PLAN.md — create_stream (STREAM-03, CreateEntityRequest envelope + 3-bucket existingMatches per D-05/D-06 + numeric rule translation per D-11/S9) + update_stream (STREAM-04, D-14 partial-update + D-09 mutable) + start_stream + pause_stream (STREAM-06, D-12 lifecycle-as-mutation + D-09 mutable)
-  - [x] 03-03-PLAN.md — delete_stream (STREAM-05) C2 mitigation centerpiece — 3-endpoint cascade pre-flight (rules + pipeline-connections + event-definitions paginated client-side-filtered per Pitfall S6) + sha-256 keyed-buckets hash (D-02) + apply-time re-fetch refusal (D-01..D-04) + D-09 mutable pre-flight
-  - [x] 03-04-PLAN.md — create_stream_rule (STREAM-08, 8 variants per D-11 reconfirmed including match_input) + update_stream_rule (STREAM-09, D-14 partial-update + Pitfall S8 type-from-current) + delete_stream_rule (STREAM-10, leaf-delete per Discretion-04 with parent-mutable pre-flight) + test_stream_match (STREAM-11, server-side D-07/D-08)
-  - [x] 03-05-PLAN.md — 11 snapshot fixtures per RESEARCH §Snapshot Fixture Design + schema-parity audit (all 12 net-new tools) + auth-redaction lint inheritance + VALIDATION.md flip + human-verify checkpoint
-
-### Phase 4: Pipelines, Pipeline Rules & Connections
-**Goal**: An agent can author Graylog pipeline rules from structured intent or raw DSL, with both client-side validation and server-authoritative parse + simulate gating every apply.
-**Depends on**: Phase 0, Phase 3 (`connect_pipelines_to_stream` needs stream IDs)
-**Requirements**: PIPE-01, PIPE-02, PIPE-03, PIPE-04, PIPE-05, PIPE-06, PIPE-07, PIPE-08, PIPE-09, PIPE-10, PIPE-11, PIPE-12, PIPE-13, PIPE-14
-**Success Criteria** (what must be TRUE):
-  1. `create_pipeline_rule` accepts either a structured `{when, then}` intent OR a raw DSL source string; in both modes the dry-run output includes the result of a `POST /system/pipelines/rule/parse` server pre-flight, refusing to apply on any ParseException.
-  2. `simulate_pipeline_rule` takes a rule source plus a sample message and returns the post-rule message — catching semantic bugs (wrong function name, type-coercion errors, set_field overwrites) that the parser cannot detect.
-  3. `list_pipeline_functions` exposes Graylog's built-in function catalogue (cached at connection-init, sourced from `GET /system/pipelines/rule/functions`); the same catalogue powers the client-side `src/pipeline-dsl/validate.js` so emit→validate→parse→simulate is a single composable chain.
-  4. `delete_pipeline_rule` dry-run output lists the pipelines that reference the rule, preventing orphaned pipeline-stage references after delete.
-
-**Research notes**: This phase has a **mandatory pre-phase research pass** flagged by `research/SUMMARY.md` — the ~100 Java built-in function classes under `source-code/graylog2-server/.../plugin/pipelineprocessor/functions/` must be enumerated into `src/pipeline-dsl/builtins.js` (name, signature, one-line description) before implementation of PIPE-08 begins. Hand-curated; auto-regeneration is future work.
-
-**Plans**: 6 plans
-  - [x] 04-01-PLAN.md — DSL infrastructure (builtins.js 130-row catalogue, escape.js, emit.js, validate.js, function-catalogue.js — D-02/D-03/D-04/D-12/D-13) + computeRuleCascadeHash thin wrapper (D-14 prep) + 04-U1-SMOKE.md decision artifact (D-16)
-  - [x] 04-02-PLAN.md — Pipeline CRUD: list_pipelines (PIPE-01), get_pipeline (PIPE-02), create_pipeline (PIPE-03 with D-06 pipeline parse pre-flight), update_pipeline (PIPE-04 STRICT_NO_ECHO + parse pre-flight), delete_pipeline (PIPE-05 sync envelope, D-15 no mutable)
-  - [x] 04-03-PLAN.md — Pipeline-rule CRUD: list_pipeline_rules (PIPE-06), get_pipeline_rule (PIPE-07), create_pipeline_rule (PIPE-08 — D-10 mutual exclusion + D-11 full recursive grammar + D-05 server parse pre-flight + D-04 client lint; C4 acceptance gate), update_pipeline_rule (PIPE-09 STRICT_NO_ECHO + conditional parse)
-  - [x] 04-04-PLAN.md — delete_pipeline_rule (PIPE-10, D-14 cascade-hash + drift refusal via computeRuleCascadeHash + Strategy A paginated /rule/paginated walk) + simulate_pipeline_rule (PIPE-12, M3 acceptance gate; Pitfall 1 JSON-string message body) + list_pipeline_functions (PIPE-11 merged static + live overlay)
-  - [x] 04-05-PLAN.md — connect_pipelines_to_stream (PIPE-13, Pitfall 2 GET-merge-PUT) + disconnect_pipelines_from_stream (PIPE-14, GET-subtract-PUT)
-  - [x] 04-06-PLAN.md — 14 snapshot fixtures (one per Phase 4 tool incl. C4/M3/Pitfall-2/D-14 acceptance gates) + 14 schema-parity assertions + auth-redaction inheritance + 04-VALIDATION.md flip + human-verify checkpoint
-
-### Phase 5: Events & Notifications
-**Goal**: An agent can upgrade Graylog's read-only event surface to full CRUD — defining alerts and notifications without accidentally firing them at create-time or saving v6-syntax aggregations that never trigger on v7.
-**Depends on**: Phase 0, Phase 3 (event definitions filter on `stream_ids: [...]`)
-**Requirements**: EVENT-01, EVENT-02, EVENT-03, EVENT-04, EVENT-05, EVENT-06, EVENT-07, EVENT-08, EVENT-09
-**Success Criteria** (what must be TRUE):
-  1. `create_event_definition` defaults the `?schedule` query parameter to **false** (inverted from Graylog's server default of true); the dry-run output states `wouldStartScheduling: false` explicitly, and the agent must call `enable_event_definition` separately to activate the alert.
-  2. If an agent passes a v6-shape aggregation expression like `count(source)`, the wrapper migrates it to v7's `count_source` and surfaces `{ migrated_from_v6_shape: true, original, emitted }` in the dry-run output — translation is visible, never silent.
-  3. `create_event_notification` validates the discriminator string (`email-notification-v1`, `http-notification-v2`, etc.) against a zod discriminated union — invalid notification types fail validation before any HTTP call.
-  4. `enable_event_definition` / `disable_event_definition` send an empty body to `PUT /events/definitions/{id}/schedule|unschedule` — handling the `@Consumes(WILDCARD)` quirk so the agent can't waste context constructing a fake body.
-**Plans**: 5 plans
-  - [x] 05-01-PLAN.md — Foundation amendments (conflict.js `elements` envelope for /paginated + computeNotificationCascadeHash thin wrapper + 6-variant discriminator + v6→v7 migration + S5 displacement of v2.3 list_event_* + 05-U1-SMOKE.md decision artifact)
-  - [x] 05-02-PLAN.md — Event-definition list/get/create/update (EVENT-01..04): M1 ACCEPTANCE GATE (?schedule=false structural) + C5 ACCEPTANCE GATE (visible v6→v7 migration) + CreateEntityRequest envelope + STRICT_NO_ECHO on update
-  - [x] 05-03-PLAN.md — Enable/disable (EVENT-06) WILDCARD empty-body + delete_event_definition (EVENT-05) D-08 informational cascade (no token; mirrors Phase 1 delete_input)
-  - [x] 05-04-PLAN.md — Notification list/create/update/delete (EVENT-07..09): D-05 6-variant discriminator + http-notification-v2 C3 STRICT_NO_ECHO encrypted fields + D-09 cascade-hash + apply-time drift refusal (mirrors Phase 3 delete_stream)
-  - [x] 05-05-PLAN.md — 12-13 snapshot fixtures + 11 schema-parity assertions + auth-redaction inheritance + 05-VALIDATION.md flip + human-verify checkpoint
-**UI hint**: yes
-
-### Phase 6: Dashboards, Widget Templates & Blueprints
-**Goal**: An agent can produce a working monitoring environment — input + stream + pipeline + dashboard + alert — from a single natural-language intent, with every cross-domain composition flowing through the services layer it built up in Phases 1–5.
-**Depends on**: Phase 1 (inputs), Phase 2 (index sets), Phase 3 (streams), Phase 4 (pipelines), Phase 5 (events)
-**Requirements**: DASH-01, DASH-02, DASH-03, DASH-04, DASH-05, DASH-06, DASH-07, DASH-08, BLUE-01, BLUE-02, BLUE-03, BLUE-04, BLUE-05, BLUE-06
-**Success Criteria** (what must be TRUE):
-  1. `create_dashboard` internally chains `POST /views/search` then `POST /views` — the agent never sees the intermediate Search ID, and widget/position/searchType triplets are generated by `add_widget_from_template` so mismatched sets are structurally impossible.
-  2. The blueprint `setup_app_monitoring_stack(app_name, source_pattern)` produces a working stream + pipeline (with starter rules) + dashboard (with 4 starter widgets from the curated library) + error-rate event definition, all reachable in the Graylog UI on apply, with the dry-run output showing the full ordered chain of would-be requests annotated with `dependsOn` references.
-  3. The curated widget-template library (DASH-08) ships 8 templates — `error_rate_over_time`, `top_sources_by_volume`, `level_distribution`, `top_error_clusters`, `request_rate_over_time`, `field_value_distribution`, `recent_events_table`, `stream_activity_overview` — and `add_widget_from_template` drops any of them onto an existing dashboard from a single tool call.
-  4. All 6 blueprints (BLUE-01 through BLUE-06) compose from `src/services/*` (never from other tool handlers), and their dry-run output is a list of planned requests with explicit `dependsOn` annotations so the agent can reason about each step independently.
-**Plans**: 6 plans
-  - [x] 06-01-PLAN.md — Foundation (6 services modules + widget-templates skeleton + blueprint-chain helper + widget-position-integrity validator + conflict.js views envelope + 06-U1-SMOKE.md probing the 4 open questions)
-  - [x] 06-02-PLAN.md — Dashboard CRUD: list/get/create/update/delete_dashboard + remove_widget (DASH-01..05, DASH-07) — C7 ACCEPTANCE GATE via internal Search+View chain; D-02 structural enforcement; D-03 widget-position integrity validator
-  - [x] 06-03-PLAN.md — Widget templates (DASH-08, 8 frozen triplet builders) + add_widget_from_template (DASH-06 — M7 closed-set rejection); top_error_clusters ships as text-widget placeholder per Q3 default
-  - [x] 06-04-PLAN.md — Blueprints A: setup_long_term_archival_index (BLUE-05), setup_debug_log_dropping (BLUE-06), setup_pipeline_for_stream (BLUE-04 — reuses pipeline-dsl/emit)
-  - [x] 06-05-PLAN.md — Blueprints B: setup_app_monitoring_stack (BLUE-01 — 6-step headline mega-chain), setup_error_alerting (BLUE-02), create_app_health_dashboard (BLUE-03)
-  - [x] 06-06-PLAN.md — Snapshot freeze (18 fixtures incl. C7 + D-03 + M7 + BLUE-01 mega-chain + BLUE-01 partial-failure) + schema-parity for 14 tools + auth-redaction lint + 06-VALIDATION.md flip + human-verify checkpoint
-**UI hint**: yes
-
-### Phase 7: Final Hardening
-**Goal**: The full ~91-tool admin surface is discoverable, the descriptions don't collapse the agent's tool-selection accuracy, the existing v2.3 read tools still work on Graylog 7.2, and the codebase has a documented coverage baseline.
-**Depends on**: Phase 6 (full tool catalogue must exist to audit)
-**Requirements**: HARD-01, HARD-02, HARD-03, HARD-04, HARD-05
-**Success Criteria** (what must be TRUE):
-  1. Every tool in `src/tools.js` has a description ≤200 chars containing a discrimination sentence ("use this vs. the obvious alternative"), and an automated merge-gate check fails any PR that adds a tool description over budget or without a discrimination sentence.
-  2. An agent can call `list_admin_tools(domain?)` to receive a brief inventory grouped by domain, avoiding the cost of fitting all ~91 tool descriptions in every system prompt.
-  3. All v2.3 read tools (`fetch_graylog_messages`, `get_log_histogram` with each of its 4 fallback strategies individually, `get_event_definitions`, etc.) pass a smoke-test pass against Graylog 7.2 — any v7 breakage encountered is a documented targeted fix, not a refactor.
-  4. `c8 node --test` produces a coverage report; the baseline coverage percentage is documented in the milestone-complete artifact, and a follow-up migration plan exists for the deprecated `GET /api/streams` → `GET /api/streams/paginated` path.
-**Plans**: 3 plans
-  - [x] 07-01-PLAN.md — HARD-01 tool-description audit script + wholesale-fix pass over 96 over-budget descriptions in src/tools.js + node:test regression gate + package.json audit:tool-descriptions runner
-  - [x] 07-02-PLAN.md — HARD-02 list_admin_tools meta-tool (+1 net-new tool; 90→91) + HARD-04 c8 coverage integration (only new npm devDep this milestone) + baseline % capture
-  - [x] 07-03-PLAN.md — HARD-03 v7-vs-v6 read-tool smoke (5 fixtures, 9 tests covering critical drift surfaces from PITFALLS.md) + HARD-05 /api/streams deprecation migration doc + 07-VALIDATION.md flip + MILESTONE-SUMMARY.md
+</details>
 
 ## Progress
 
-| Phase | Plans Complete | Status | Completed |
-|-------|----------------|--------|-----------|
-| 0. Foundation | 6/6 | Complete | 2026-05-15 |
-| 1. Inputs & Extractors | 5/5 | Complete | 2026-05-15 |
-| 2. Index Sets & Retention | 5/5 | Complete | 2026-05-15 |
-| 3. Streams & Stream Rules | 5/5 | Complete | 2026-05-15 |
-| 4. Pipelines, Pipeline Rules & Connections | 6/6 | Complete | 2026-05-15 |
-| 5. Events & Notifications | 5/5 | Complete | 2026-05-16 |
-| 6. Dashboards, Widget Templates & Blueprints | 6/6 | Complete | 2026-05-16 |
-| 7. Final Hardening | 1/3 | In Progress | - |
-
----
-*Roadmap created: 2026-05-13*
+| Phase | Milestone | Plans Complete | Status   | Completed  |
+| ----- | --------- | -------------- | -------- | ---------- |
+| 0     | v3.0.0    | 6/6            | Complete | 2026-05-13 |
+| 1     | v3.0.0    | 5/5            | Complete | 2026-05-13 |
+| 2     | v3.0.0    | 5/5            | Complete | 2026-05-14 |
+| 3     | v3.0.0    | 5/5            | Complete | 2026-05-14 |
+| 4     | v3.0.0    | 6/6            | Complete | 2026-05-15 |
+| 5     | v3.0.0    | 5/5            | Complete | 2026-05-15 |
+| 6     | v3.0.0    | 6/6            | Complete | 2026-05-16 |
+| 7     | v3.0.0    | 3/3            | Complete | 2026-05-16 |

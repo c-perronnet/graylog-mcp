@@ -2,13 +2,21 @@
 
 ## What This Is
 
-A Model Context Protocol server that gives an AI agent end-to-end control of a Graylog deployment — not just searching and analyzing logs, but **bootstrapping the deployment itself**: streams, pipelines, dashboards, inputs, indices, event definitions. The agent should be able to take a natural-language instruction like *"set up an app monitoring environment for service X"* and produce a working Graylog configuration without a human clicking through the web UI.
-
-The existing v2.3 codebase covers read/analyze (search, aggregations, histograms, log clustering); this milestone is the write/configure half that turns the MCP into a full admin surface.
+A Model Context Protocol server that gives an AI agent end-to-end control of a Graylog 7.0.6 deployment — read/analyze and configure. The server now exposes **91 tools across 9 admin domains** (inputs, extractors, index-sets, streams, stream-rules, pipelines, pipeline-rules, events/notifications, dashboards/widgets/blueprints) plus 6 cross-domain blueprints that compose a complete monitoring environment from a single natural-language intent. Every mutating tool defaults to `dryRun: true` and returns a cryptographic confirmation token over the dry-run state; applying without an explicit `dryRun: false` is structurally impossible.
 
 ## Core Value
 
-**An AI agent can configure Graylog from intent alone, safely, without touching the web UI.** Everything else (parity with Graylog's UI, breadth of API coverage, blueprint quality) flows from that.
+**An AI agent can configure Graylog from intent alone, safely, without touching the web UI.** Shipped end-to-end in v3.0.0 — proven via 1076/1076 tests, 71/71 requirements covered, and the `setup_app_monitoring_stack` blueprint producing a working stream + pipeline + dashboard + alert chain from one call.
+
+## Current State
+
+**Shipped:** v3.0.0 Full Admin Surface (2026-05-16) — see [`MILESTONES.md`](MILESTONES.md) for the headline accomplishments and [`milestones/v3.0.0-ROADMAP.md`](milestones/v3.0.0-ROADMAP.md) for the phase-by-phase narrative.
+
+**Codebase:** 17,903 src LOC + 24,881 test LOC across 353 files; `src/tools/<domain>/` per-domain extraction, `src/services/` for blueprint composition, `src/pipeline-dsl/` for rule emission. c8 coverage baseline 93.58% statements / 79.13% branches.
+
+**Tech stack:** Node ≥22 ESM, `@modelcontextprotocol/sdk`, `axios`, `zod`. Only new runtime dep this milestone: none. Only new dev dep: `c8`.
+
+**Known deferred items:** 11 (see `MILESTONES.md → Technical debt / deferred`) — all live-cluster-mutation or visual-UAT; none code-blocking.
 
 ## Requirements
 
@@ -27,35 +35,39 @@ The existing v2.3 codebase covers read/analyze (search, aggregations, histograms
 - ✓ Pluggable clustering strategy registry — existing (v2.3)
 - ✓ Configurable connection config via `~/.graylog-mcp/config.json` or `GRAYLOG_CONFIG_PATH` — existing
 
-### Active
+### Validated (v3.0.0)
 
-<!-- Hypotheses for this milestone. Validated when shipped. -->
+<!-- Shipped 2026-05-16. Every item below has a tool registered in src/dispatch.js, snapshot fixtures, and passes test/ assertions. -->
 
 **Admin domains — raw CRUD primitives:**
 
-- [ ] Stream CRUD + stream-rule CRUD (create/list/get/update/delete, attach/detach rules)
-- [ ] Pipeline CRUD + pipeline-rule CRUD (with agent-generated rule DSL, see below)
-- [ ] Pipeline-to-stream connection management
-- [ ] Dashboard CRUD (create/list/get/update/delete dashboards as containers)
-- [ ] Widget templates: curated library of pre-built widgets agent can drop into a dashboard
-- [ ] Input CRUD (create, configure, start/stop)
-- [ ] Extractor CRUD (per-input)
-- [ ] Index-set CRUD + retention/rotation strategy configuration
-- [ ] Event-definition CRUD (upgrade from existing read-only)
-- [ ] Event-notification CRUD (upgrade from existing read-only)
+- ✓ Input CRUD with C3 mitigation on `update_input` (encrypted-field STRICT_NO_ECHO) — v3.0.0
+- ✓ Extractor CRUD across all 8 Graylog 7.0.6 primitive types — v3.0.0
+- ✓ Index-set CRUD + rotation/retention strategy bundles + C1 mitigation on `delete_index_set` (inverted default + sha-256 confirmation) — v3.0.0
+- ✓ Stream CRUD + stream-rule CRUD + C2 mitigation on `delete_stream` (3-endpoint cascade hash + drift refusal) + `test_stream_match` — v3.0.0
+- ✓ Pipeline CRUD + pipeline-rule CRUD + pipeline↔stream connection management (GET-merge-POST + GET-subtract-POST) — v3.0.0
+- ✓ Event-definition CRUD with M1 `schedule:false` default + C5 v6→v7 aggregation migration — v3.0.0
+- ✓ Event-notification CRUD with D-09 cascade-hash drift refusal — v3.0.0
+- ✓ Dashboard CRUD via internal Search+View 2-step chain (C7 mitigation) + 8-template widget library + `add_widget_from_template` / `remove_widget` symmetric chains — v3.0.0
 
 **Higher-level blueprint tools:**
 
-- [ ] Curated blueprint set that bundles multi-call setups into single tool invocations (e.g. `setup_error_stream_for_app` = stream + rule + pipeline connection; `create_app_health_dashboard` = dashboard + widget templates)
-- [ ] Blueprint library is extensible (lives in source; not user-editable this milestone)
+- ✓ 6 cross-domain blueprints (BLUE-01 through BLUE-06) composed from `src/services/*` per D-09 boundary — v3.0.0
+- ✓ Headline blueprint `setup_app_monitoring_stack` ships a 6-step chain (stream + 2 rules + pipeline + 3 stages + dashboard + 4 widgets + alert) from one intent — v3.0.0
 
 **Cross-cutting capabilities:**
 
-- [ ] Pipeline-rule DSL: the agent emits Graylog `when … then …` rule source; tools provide rule-DSL generation helpers / validators (not just pass-through strings)
-- [ ] **Dry-run safety:** every mutating tool takes `dryRun: boolean` defaulting to `true`. Dry-run returns the would-be HTTP request payload and a confirmation token; agent passes `dryRun: false` to apply.
-- [ ] All mutating tools reuse the existing connection registry + API-token auth; insufficient permissions surface as Graylog's 403 response
-- [ ] Verify existing v2.3 read tools still work against Graylog 7.0.6; fix any v7 breakage encountered, no new features on read side
-- [ ] Target **Graylog 7.0.6** (live test instance at `<graylog-host>`); the local source at `source-code/graylog2-server/` is 7.2.0-SNAPSHOT and is kept as a forward-compatibility reference, but every endpoint shape this milestone ships MUST be verified against 7.0.6 before claiming "done". Single-version target.
+- ✓ Pipeline-rule DSL subsystem (`src/pipeline-dsl/`) — frozen 133-entry function catalogue + live-overlay merge + structured-intent emitter + server-authoritative parse pre-flight (C4) — v3.0.0
+- ✓ Dry-run safety — every mutating tool defaults to `dryRun: true`, returns sha-256 confirmation token, refuses apply on drift — v3.0.0
+- ✓ Connection registry + API-token auth reused unchanged; insufficient permissions surface as `GraylogPermissionError` (403) or `GraylogUnauthorizedError` (401) — v3.0.0
+- ✓ v2.3 read tools verified against Graylog 7.0.6 + 5 v7.2 response fixtures + 11 smoke tests (HARD-03) — v3.0.0
+- ✓ Target Graylog 7.0.6 verified against live instance at `<graylog-host>` — v3.0.0
+
+### Active
+
+<!-- Empty until /gsd-new-milestone populates the next milestone's hypotheses. -->
+
+_(none — next milestone planning not yet started)_
 
 ### Out of Scope
 
@@ -105,16 +117,16 @@ The existing v2.3 codebase covers read/analyze (search, aggregations, histograms
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| Target Graylog 7.0.6 only (no multi-version) | User runs 7.0.6 on the test instance (`<graylog-host>`); local 7.2-source clone is forward-compat reference but live behaviour wins on divergence. Retargeted from 7.2 on 2026-05-13 after live env was provisioned. | — Pending |
-| Reuse existing connection registry + API token for admin auth | Existing UX is good; Graylog already returns 403 on insufficient role; introducing a "writable" flag is a per-call dryRun flag's job, not a connection concept | — Pending |
-| Per-call `dryRun: true` default (not connection-level) | Lets the agent reason about each mutation independently; same connection can preview some calls and apply others; aligns with how agents iterate | — Pending |
-| Two tool layers: CRUD primitives AND blueprints | CRUD is necessary for any unanticipated workflow; blueprints make common setups one-shot. Both needed for the "agent bootstraps from prompt" goal. | — Pending |
-| Agent writes pipeline-rule DSL (not pass-through strings) | Higher leverage — the agent can compose rule logic without the user authoring DSL. Requires client-side DSL helpers/validators to be reliable. | — Pending |
-| Dashboard widgets via curated templates (not arbitrary construction) | Full widget construction is its own subsystem (query composition + display config); curated templates cover ~80% of agent workflows | — Pending |
-| Adopt the existing `zod` dependency for admin-tool input validation | `zod` already in package.json but unused; admin endpoints take complex nested payloads that need real validation; avoids a new dep | — Pending |
-| Per-domain extraction under `src/tools/<domain>/` | Existing `src/index.js` is already strained at 903 lines + long dispatch chain. Adding ~50 admin tools requires extraction precedent already set by clustering and template-mgmt. | — Pending |
-| Read Graylog REST resources from local source (not Swagger docs) | `api-specs/` is incomplete in the source tree; Java REST classes are the authoritative shape; reduces drift between docs and behavior | — Pending |
-| Existing read tools: verify-against-v7 only, no changes | Keeps milestone purely additive; v7 breakage on read side becomes targeted fix work, not a refactor | — Pending |
+| Target Graylog 7.0.6 only (no multi-version) | User runs 7.0.6 on the test instance (`<graylog-host>`); local 7.2-source clone is forward-compat reference but live behaviour wins on divergence. Retargeted from 7.2 on 2026-05-13 after live env was provisioned. | ✓ Validated (v3.0.0) |
+| Reuse existing connection registry + API token for admin auth | Existing UX is good; Graylog already returns 403 on insufficient role; introducing a "writable" flag is a per-call dryRun flag's job, not a connection concept | ✓ Validated (v3.0.0) |
+| Per-call `dryRun: true` default (not connection-level) | Lets the agent reason about each mutation independently; same connection can preview some calls and apply others; aligns with how agents iterate | ✓ Validated (v3.0.0) |
+| Two tool layers: CRUD primitives AND blueprints | CRUD is necessary for any unanticipated workflow; blueprints make common setups one-shot. Both needed for the "agent bootstraps from prompt" goal. | ✓ Validated (v3.0.0) |
+| Agent writes pipeline-rule DSL (not pass-through strings) | Higher leverage — the agent can compose rule logic without the user authoring DSL. Requires client-side DSL helpers/validators to be reliable. | ✓ Validated (v3.0.0) |
+| Dashboard widgets via curated templates (not arbitrary construction) | Full widget construction is its own subsystem (query composition + display config); curated templates cover ~80% of agent workflows | ✓ Validated (v3.0.0) |
+| Adopt the existing `zod` dependency for admin-tool input validation | `zod` already in package.json but unused; admin endpoints take complex nested payloads that need real validation; avoids a new dep | ✓ Validated (v3.0.0) |
+| Per-domain extraction under `src/tools/<domain>/` | Existing `src/index.js` is already strained at 903 lines + long dispatch chain. Adding ~50 admin tools requires extraction precedent already set by clustering and template-mgmt. | ✓ Validated (v3.0.0) |
+| Read Graylog REST resources from local source (not Swagger docs) | `api-specs/` is incomplete in the source tree; Java REST classes are the authoritative shape; reduces drift between docs and behavior | ✓ Validated (v3.0.0) |
+| Existing read tools: verify-against-v7 only, no changes | Keeps milestone purely additive; v7 breakage on read side becomes targeted fix work, not a refactor | ✓ Validated (v3.0.0) |
 
 ## Evolution
 
