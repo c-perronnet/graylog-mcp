@@ -133,10 +133,29 @@ export const handleAddWidgetFromTemplate = defineMutatingHandler({
         const currentPositions = state.positions ?? {};
         const currentWidgetMapping = state.widget_mapping ?? {};
 
+        // 5a. BUG #8b — auto-placement. When the caller did NOT supply
+        //     options.position, the builder defaults position to col:1,row:1,
+        //     which overlaps every existing widget. Compute the next free row
+        //     as max(row + height) across all existing positions (defaulting
+        //     to 1 on an empty dashboard) and anchor the new widget at col 1,
+        //     preserving the builder's height/width. triplet is Object.freeze'd,
+        //     so we never mutate triplet.position — placedPosition is used
+        //     downstream instead. When options.position IS supplied the builder
+        //     already honored it, so placedPosition === triplet.position.
+        let placedPosition = triplet.position;
+        if (!args.options?.position) {
+            const nextRow = Object.values(currentPositions).reduce((max, pos) => {
+                const row = Number(pos?.row) || 0;
+                const height = Number(pos?.height) || 0;
+                return Math.max(max, row + height);
+            }, 1);
+            placedPosition = { ...triplet.position, col: 1, row: nextRow };
+        }
+
         const newWidgets = [...currentWidgets, triplet.widget];
         const newPositions = {
             ...currentPositions,
-            [triplet.widget.id]: triplet.position,
+            [triplet.widget.id]: placedPosition,
         };
         const newWidgetMapping = {
             ...currentWidgetMapping,
