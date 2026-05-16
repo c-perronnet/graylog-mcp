@@ -1644,6 +1644,78 @@ test("add_widget_from_template surfaces builder error when field_value_distribut
     assert.equal(putFired, false, "builder-error refusal must happen BEFORE any PUT");
 });
 
+// Test 12 — BUG #8b: auto-place new widget below existing widgets
+test("add_widget_from_template auto-places new widget below existing widgets when options.position absent (BUG #8b)", async () => {
+    _setCaptureRequest(addWidgetCapture());
+    const res = await handleAddWidgetFromTemplate({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                dashboardId: "v-add",
+                templateName: "error_rate_over_time",
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    const state = payload.chain[1].request.body.entity.state["q-1"];
+    const newWidget = state.widgets[1];
+    const newPos = state.positions[newWidget.id];
+    // Existing w-existing is at {col:1,row:1,height:2} → next free row = 3.
+    assert.equal(newPos.row, 3, "new widget must land below existing widget (row 1 + height 2)");
+    assert.equal(newPos.col, 1, "new widget anchors at col 1");
+});
+
+// Test 13 — BUG #8b: options.position supplied → used verbatim, auto-placement skipped
+test("add_widget_from_template honors options.position verbatim when supplied (auto-placement skipped)", async () => {
+    _setCaptureRequest(addWidgetCapture());
+    const supplied = { col: 2, row: 9, height: 5, width: 3 };
+    const res = await handleAddWidgetFromTemplate({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                dashboardId: "v-add",
+                templateName: "error_rate_over_time",
+                options: { position: supplied },
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    const state = payload.chain[1].request.body.entity.state["q-1"];
+    const newWidget = state.widgets[1];
+    assert.deepEqual(state.positions[newWidget.id], supplied);
+});
+
+// Test 14 — BUG #8b: empty positions map → new widget lands at row 1
+test("add_widget_from_template places widget at row 1 when positions map is empty (BUG #8b)", async () => {
+    const emptyPosView = {
+        ...VIEW_FOR_ADD,
+        state: {
+            "q-1": {
+                ...VIEW_FOR_ADD.state["q-1"],
+                widgets: [],
+                widget_mapping: {},
+                positions: {},
+            },
+        },
+    };
+    _setCaptureRequest(addWidgetCapture(emptyPosView));
+    const res = await handleAddWidgetFromTemplate({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                dashboardId: "v-add",
+                templateName: "error_rate_over_time",
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    const state = payload.chain[1].request.body.entity.state["q-1"];
+    const newWidget = state.widgets[0];
+    const newPos = state.positions[newWidget.id];
+    assert.equal(newPos.row, 1, "first widget on an empty dashboard lands at row 1");
+    assert.equal(newPos.col, 1);
+});
+
 // =====================================================================
 // Final tool-count + dispatch wiring assertion (Plan 06-03 close)
 // =====================================================================
