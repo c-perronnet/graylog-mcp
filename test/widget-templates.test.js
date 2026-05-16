@@ -53,6 +53,25 @@ test("error_rate_over_time emits aggregation widget with level:>=4 query + count
     assert.equal(Object.isFrozen(result), true);
 });
 
+// Test 1a — error_rate_over_time honors options.queryString (BUG #8a)
+test("error_rate_over_time keeps base level:>=4 when no queryString supplied", () => {
+    const result = buildErrorRateOverTime({});
+    assert.equal(result.widget.query.query_string, "level:>=4");
+    assert.equal(result.searchType.query.query_string, "level:>=4");
+});
+
+test("error_rate_over_time AND-combines base filter with options.queryString (BUG #8a)", () => {
+    const result = buildErrorRateOverTime({ queryString: "service:api" });
+    assert.equal(result.widget.query.query_string, "(level:>=4) AND (service:api)");
+    assert.equal(result.searchType.query.query_string, "(level:>=4) AND (service:api)");
+});
+
+test("error_rate_over_time treats empty queryString as absent (no () AND () wrap)", () => {
+    const result = buildErrorRateOverTime({ queryString: "" });
+    assert.equal(result.widget.query.query_string, "level:>=4");
+    assert.equal(result.searchType.query.query_string, "level:>=4");
+});
+
 // Test 2 — top_sources_by_volume
 test("top_sources_by_volume emits values-bucket pivot on 'source' field + table visualization + sort desc", () => {
     const result = buildTopSourcesByVolume({ limit: 20 });
