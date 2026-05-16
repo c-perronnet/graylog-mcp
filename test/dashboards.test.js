@@ -1659,11 +1659,11 @@ test("add_widget_from_template surfaces builder error when field_value_distribut
 // The pipelines.test.js count assertion pins the cumulative count; this
 // test mirrors it.
 
-test("assertAllToolsRegistered passes after Plan 06-05 Task 2 (count = 89; +BLUE-02 setup_error_alerting)", async () => {
+test("assertAllToolsRegistered passes after Plan 06-05 end (count = 90; +BLUE-01/02/03 blueprints B)", async () => {
     const { dispatch, assertAllToolsRegistered } = await import("../src/dispatch.js");
     await import("../src/tools/_register.js");
     const { toolDefinitions } = await import("../src/tools.js");
     assertAllToolsRegistered(toolDefinitions);
     assert.equal(typeof dispatch, "function");
-    assert.equal(toolDefinitions.length, 89, `Expected 89 tools after Plan 06-05 Task 2 (BLUE-02 setup_error_alerting shipped); got ${toolDefinitions.length}`);
+    assert.equal(toolDefinitions.length, 90, `Expected 90 tools after Plan 06-05 end (BLUE-01/02/03 blueprints B shipped); got ${toolDefinitions.length}`);
 });

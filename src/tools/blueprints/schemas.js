@@ -111,4 +111,18 @@ export const SetupErrorAlertingSchema = mutatingBase.extend({
     searchWithinMinutes: z.number().int().positive().default(5),
 });
 
-// Plan 06-05 Task 3 — BLUE-03 schema lands next.
+// =====================================================================
+// BLUE-03 — create_app_health_dashboard (1-conceptual-step blueprint;
+// internally a 2-step Search+View chain like create_dashboard but with
+// 4 default widgets pre-wired to the agent-supplied stream).
+// =====================================================================
+export const CreateAppHealthDashboardSchema = mutatingBase.extend({
+    streamId: z.string().min(1),
+    title: z.string().optional(),
+    defaultWidgets: z.array(z.enum(TEMPLATE_NAME_TUPLE)).default([
+        "error_rate_over_time",
+        "top_sources_by_volume",
+        "level_distribution",
+        "recent_events_table",
+    ]),
+});

@@ -1880,4 +1880,36 @@ export const toolDefinitions = [
             required: ["streamId", "notificationId"],
         },
     },
+    {
+        name: "create_app_health_dashboard",
+        description: "Blueprint (BLUE-03): create a 4-widget health dashboard pre-wired to a stream. Uses 4 default templates (error_rate_over_time, top_sources_by_volume, level_distribution, recent_events_table). 1 conceptual step (internal Search+View 2-step chain — same C7 mitigation as create_dashboard).",
+        inputSchema: {
+            type: "object",
+            properties: {
+                connectionName: { type: "string", description: "Optional per-call connection override" },
+                dryRun: { type: "boolean", description: "Default true. Set false to apply the 2-step chain." },
+                idempotencyKey: { type: "string", description: "Optional agent-supplied idempotency key" },
+                streamId: { type: "string", description: "Stream id to bind all widgets to." },
+                title: { type: "string", description: "Optional dashboard title (default: 'Health dashboard (stream {streamId})')." },
+                defaultWidgets: {
+                    type: "array",
+                    description: "Optional override of the 4 default widget templates. Closed-set enum from the curated 8-template library.",
+                    items: {
+                        type: "string",
+                        enum: [
+                            "error_rate_over_time",
+                            "top_sources_by_volume",
+                            "level_distribution",
+                            "top_error_clusters",
+                            "request_rate_over_time",
+                            "field_value_distribution",
+                            "recent_events_table",
+                            "stream_activity_overview",
+                        ],
+                    },
+                },
+            },
+            required: ["streamId"],
+        },
+    },
 ];

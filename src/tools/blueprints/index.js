@@ -25,6 +25,8 @@ import { handleSetupPipelineForStream } from "./setup-pipeline-for-stream.js";
 import { handleSetupAppMonitoringStack } from "./setup-app-monitoring-stack.js";
 // Plan 06-05 Task 2 — BLUE-02 (1-step error-alert).
 import { handleSetupErrorAlerting } from "./setup-error-alerting.js";
+// Plan 06-05 Task 3 — BLUE-03 (1-conceptual-step app-health dashboard).
+import { handleCreateAppHealthDashboard } from "./create-app-health-dashboard.js";
 
 register("setup_long_term_archival_index", handleSetupLongTermArchivalIndex);
 register("setup_debug_log_dropping", handleSetupDebugLogDropping);
@@ -32,5 +34,4 @@ register("setup_pipeline_for_stream", handleSetupPipelineForStream);
 
 register("setup_app_monitoring_stack", handleSetupAppMonitoringStack);
 register("setup_error_alerting", handleSetupErrorAlerting);
-
-// Plan 06-05 Task 3 — BLUE-03 register below.
+register("create_app_health_dashboard", handleCreateAppHealthDashboard);

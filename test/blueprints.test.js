@@ -31,6 +31,7 @@ import { handleSetupDebugLogDropping } from "../src/tools/blueprints/setup-debug
 import { handleSetupPipelineForStream } from "../src/tools/blueprints/setup-pipeline-for-stream.js";
 import { handleSetupAppMonitoringStack } from "../src/tools/blueprints/setup-app-monitoring-stack.js";
 import { handleSetupErrorAlerting } from "../src/tools/blueprints/setup-error-alerting.js";
+import { handleCreateAppHealthDashboard } from "../src/tools/blueprints/create-app-health-dashboard.js";
 
 import {
     SetupLongTermArchivalIndexSchema,
@@ -38,6 +39,7 @@ import {
     SetupPipelineForStreamSchema,
     SetupAppMonitoringStackSchema,
     SetupErrorAlertingSchema,
+    CreateAppHealthDashboardSchema,
 } from "../src/tools/blueprints/schemas.js";
 
 import {
@@ -986,13 +988,102 @@ test("setup_error_alerting zod rejects missing notificationId (BLUE-02)", async 
 });
 
 // =====================================================================
-// D-09 services-layer compose contract — BLUE-01 + BLUE-02.
+// Plan 06-05 Task 3 — BLUE-03 create_app_health_dashboard
 // =====================================================================
 
-test("BLUE-01/02 source files import ONLY from src/services/* (D-09 contract, Plan 06-05)", () => {
+test("create_app_health_dashboard dry-run emits 2-step chain (Search+View internal) (BLUE-03)", async () => {
+    const res = await handleCreateAppHealthDashboard({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                streamId: "stream-1",
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.tool, "create_app_health_dashboard");
+    assert.ok(Array.isArray(payload.chain));
+    assert.equal(payload.chain.length, 2);
+    assert.equal(payload.chain[0].tool, "create_search");
+    assert.equal(payload.chain[0].request.path, "/api/views/search");
+    assert.equal(payload.chain[1].tool, "create_view");
+    assert.equal(payload.chain[1].request.path, "/api/views");
+    // Step 2 dependsOn step 1.
+    assert.equal(payload.chain[1].dependsOn.from, "step1.response.id");
+    assert.equal(payload.chain[1].dependsOn.as, "searchId");
+});
+
+test("create_app_health_dashboard step 1 SearchDTO has 4 search_types (BLUE-03)", async () => {
+    const res = await handleCreateAppHealthDashboard({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                streamId: "stream-1",
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    const searchDTO = payload.chain[0].request.body;
+    assert.equal(searchDTO.queries.length, 1);
+    assert.equal(searchDTO.queries[0].search_types.length, 4);
+});
+
+test("create_app_health_dashboard step 2 ViewDTO.state['q-1'].widgets has 4 entries (BLUE-03)", async () => {
+    const res = await handleCreateAppHealthDashboard({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                streamId: "stream-1",
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    const viewWrap = payload.chain[1].request.body;
+    const queryState = viewWrap.entity.state["q-1"];
+    assert.equal(queryState.widgets.length, 4);
+});
+
+test("create_app_health_dashboard widgets bound to args.streamId (BLUE-03)", async () => {
+    const res = await handleCreateAppHealthDashboard({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                streamId: "stream-XYZ",
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    const viewWrap = payload.chain[1].request.body;
+    for (const w of viewWrap.entity.state["q-1"].widgets) {
+        assert.deepEqual(w.streams, ["stream-XYZ"]);
+    }
+});
+
+test("create_app_health_dashboard accepts custom defaultWidgets list (BLUE-03)", async () => {
+    const res = await handleCreateAppHealthDashboard({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                streamId: "stream-1",
+                defaultWidgets: ["request_rate_over_time"],
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    const viewWrap = payload.chain[1].request.body;
+    const queryState = viewWrap.entity.state["q-1"];
+    assert.equal(queryState.widgets.length, 1);
+});
+
+// =====================================================================
+// D-09 services-layer compose contract — BLUE-01 + BLUE-02 + BLUE-03.
+// =====================================================================
+
+test("BLUE-01/02/03 source files import ONLY from src/services/* (D-09 contract, Plan 06-05)", () => {
     const files = [
         "src/tools/blueprints/setup-app-monitoring-stack.js",
         "src/tools/blueprints/setup-error-alerting.js",
+        "src/tools/blueprints/create-app-health-dashboard.js",
     ];
     for (const file of files) {
         const src = readFileSync(file, "utf8");
@@ -1043,6 +1134,16 @@ test("SetupErrorAlertingSchema rejects empty notificationId (BLUE-02)", () => {
         () => SetupErrorAlertingSchema.parse({
             streamId: "s-1",
             notificationId: "",
+        }),
+        (err) => err?.name === "ZodError",
+    );
+});
+
+test("CreateAppHealthDashboardSchema rejects invalid defaultWidgets entries (BLUE-03)", () => {
+    assert.throws(
+        () => CreateAppHealthDashboardSchema.parse({
+            streamId: "s-1",
+            defaultWidgets: ["definitely_not_a_real_template"],
         }),
         (err) => err?.name === "ZodError",
     );
