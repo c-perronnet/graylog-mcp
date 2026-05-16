@@ -419,6 +419,49 @@ test("update_extractor partial-update fetches current and merges (extractor_type
     assert.equal(payload.postApplyEstimate.id, "ex1");
 });
 
+test("update_extractor sources extractor_type from read DTO `type` field (Bug #10 regression)", async () => {
+    // Real Graylog extractor READ DTO names the type field `type`, NOT
+    // `extractor_type`. If the merge reads only current.extractor_type, the key
+    // drops out of the PUT body and Graylog returns 400 Null extractorType.
+    const READ_DTO_EXTRACTOR = {
+        id: "ex1",
+        title: "old",
+        type: "grok",
+        extractor_config: { grok_pattern: "%{IP:ip}" },
+        source_field: "message",
+        target_field: "ip",
+        cursor_strategy: "copy",
+        condition_type: "none",
+        condition_value: "",
+        order: 0,
+    };
+    _setCaptureRequest(multiCapture([
+        {
+            method: "GET",
+            pathPattern: "/api/system/inputs/in1/extractors/ex1",
+            response: READ_DTO_EXTRACTOR,
+        },
+    ]));
+    const res = await handleUpdateExtractor({
+        params: {
+            arguments: {
+                inputId: "in1",
+                extractorId: "ex1",
+                changes: { title: "new" },
+                _testConnection: "fake",
+            },
+        },
+    });
+    assert.notEqual(res.isError, true, `expected success, got error: ${res.content?.[0]?.text}`);
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.preview.method, "PUT");
+    assert.equal(
+        payload.preview.body.extractor_type,
+        "grok",
+        "extractor_type must be sourced from read DTO `type` field (Bug #10)",
+    );
+});
+
 test("update_extractor zod rejects empty changes", async () => {
     const res = await handleUpdateExtractor({
         params: {
