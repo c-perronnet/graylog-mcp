@@ -26,6 +26,10 @@ import { handleEnableEventDefinition } from "./enable-event-definition.js";
 import { handleDisableEventDefinition } from "./disable-event-definition.js";
 // Plan 05-03 Task 2 — EVENT-05 delete_event_definition (D-08 informational cascade).
 import { handleDeleteEventDefinition } from "./delete-event-definition.js";
+// Plan 05-04 Task 1 — EVENT-07 + EVENT-08 (list + create event-notification).
+//   Reclaims the v2.3 list_event_notifications dispatch name (S5 displacement).
+import { handleListEventNotifications } from "./list-event-notifications.js";
+import { handleCreateEventNotification } from "./create-event-notification.js";
 
 register("list_event_definitions", handleListEventDefinitions);
 register("get_event_definition", handleGetEventDefinition);
@@ -34,3 +38,5 @@ register("update_event_definition", handleUpdateEventDefinition);
 register("enable_event_definition", handleEnableEventDefinition);
 register("disable_event_definition", handleDisableEventDefinition);
 register("delete_event_definition", handleDeleteEventDefinition);
+register("list_event_notifications", handleListEventNotifications);
+register("create_event_notification", handleCreateEventNotification);

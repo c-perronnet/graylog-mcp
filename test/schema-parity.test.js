@@ -453,3 +453,17 @@ test("schema-parity: delete_event_definition", async () => {
     const { DeleteEventDefinitionSchema } = await import("../src/tools/events/schemas.js");
     await assertSchemaParityForTool("delete_event_definition", DeleteEventDefinitionSchema);
 });
+
+// Plan 05-04 — event-notification CRUD (4 net-new tools).
+// list_event_notifications extends listBase with {query, sort, order}.
+// create_event_notification extends mutatingBase with {title, description, config}.
+
+test("schema-parity: list_event_notifications", async () => {
+    const { ListEventNotificationsSchema } = await import("../src/tools/events/schemas.js");
+    await assertSchemaParityForTool("list_event_notifications", ListEventNotificationsSchema);
+});
+
+test("schema-parity: create_event_notification", async () => {
+    const { CreateEventNotificationSchema } = await import("../src/tools/events/schemas.js");
+    await assertSchemaParityForTool("create_event_notification", CreateEventNotificationSchema);
+});

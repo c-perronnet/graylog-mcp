@@ -1571,3 +1571,480 @@ test_p2("dispatch resolves delete_event_definition after Plan 05-03 Task 2 regis
     assert.equal(payload.tool, "delete_event_definition");
     assert.equal(payload.dryRun, true);
 });
+
+// =====================================================================
+// Plan 05-04 Task 1 — list_event_notifications + create_event_notification
+// =====================================================================
+//
+// EVENT-07 (list_event_notifications):
+//   - GET /api/events/notifications/paginated → unwrap response.elements.
+//   - Narrow projection [id, title, description, config] (defineListHandler
+//     projectItem helper is dot-notation-unaware; config carried verbatim).
+//   - URL byte-stable: page=1 + per_page=<limit>; query/sort/order appended
+//     only when set.
+//
+// EVENT-08 (create_event_notification):
+//   - D-05 / D-06 closed-set discriminator: 6 valid types + zod.parse-time
+//     rejection of script-notification-v1 / pagerduty-notification-v1 /
+//     teams-notification-v1 (Pitfall 6 corrected).
+//   - Pitfall 3 CreateEntityRequest envelope.
+//   - FOUND-11 existingMatches probe via /api/events/notifications/paginated.
+//   - C3 (T-05-04-03) for http-notification-v2: encrypted basic_auth +
+//     api_secret wrapped as {set_value} on the wire body; <redacted> in
+//     the dry-run preview body. _applyBody sibling pattern keeps the
+//     redacted preview away from Graylog.
+
+// ---------- list_event_notifications tests ----------
+
+test_p2("list_event_notifications HAPPY — narrow projection [id, title, description, config] from paginated elements", async () => {
+    const { handleListEventNotifications } = await import(
+        "../src/tools/events/list-event-notifications.js"
+    );
+    _setCaptureRequest_p2(() => ({
+        elements: [
+            {
+                id: "n1",
+                title: "Email Alerts",
+                description: "ops email",
+                config: { type: "email-notification-v1", subject: "Spike" },
+                notification_settings: { grace_period_ms: 0 },
+            },
+            {
+                id: "n2",
+                title: "Slack Alerts",
+                description: "ops slack",
+                config: { type: "slack-notification-v1", channel: "#general" },
+                notification_settings: { grace_period_ms: 0 },
+            },
+        ],
+        total: 2,
+    }));
+    const res = await handleListEventNotifications({
+        params: { arguments: { _testConnection: "fake" } },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.tool, "list_event_notifications");
+    assert.equal(payload.count, 2);
+    assert.deepEqual(payload.fields, ["id", "title", "description", "config"]);
+    // Narrow projection drops notification_settings; config travels verbatim.
+    assert.deepEqual(
+        Object.keys(payload.items[0]).sort(),
+        ["config", "description", "id", "title"],
+    );
+    assert.equal(payload.items[0].config.type, "email-notification-v1");
+    assert.equal(payload.items[0].notification_settings, undefined);
+});
+
+test_p2("list_event_notifications URL — bare paginated path with default page/per_page (no extra query params)", async () => {
+    const { handleListEventNotifications } = await import(
+        "../src/tools/events/list-event-notifications.js"
+    );
+    let captured = null;
+    _setCaptureRequest_p2((req) => {
+        captured = req;
+        return { elements: [], total: 0 };
+    });
+    await handleListEventNotifications({
+        params: { arguments: { _testConnection: "fake" } },
+    });
+    assert.equal(captured.method, "GET");
+    assert.equal(captured.path, "/api/events/notifications/paginated?page=1&per_page=25");
+});
+
+test_p2("list_event_notifications URL — appends query/sort/order when set", async () => {
+    const { handleListEventNotifications } = await import(
+        "../src/tools/events/list-event-notifications.js"
+    );
+    let captured = null;
+    _setCaptureRequest_p2((req) => {
+        captured = req;
+        return { elements: [], total: 0 };
+    });
+    await handleListEventNotifications({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                query: "title:Email",
+                sort: "type",
+                order: "desc",
+            },
+        },
+    });
+    assert.equal(
+        captured.path,
+        "/api/events/notifications/paginated?page=1&per_page=25&query=title%3AEmail&sort=type&order=desc",
+    );
+});
+
+test_p2("list_event_notifications fields:'all' bypasses the narrow projection", async () => {
+    const { handleListEventNotifications } = await import(
+        "../src/tools/events/list-event-notifications.js"
+    );
+    _setCaptureRequest_p2(() => ({
+        elements: [{
+            id: "n1",
+            title: "X",
+            description: "y",
+            config: { type: "email-notification-v1" },
+            notification_settings: { grace_period_ms: 0, backlog_size: 0 },
+        }],
+        total: 1,
+    }));
+    const res = await handleListEventNotifications({
+        params: { arguments: { _testConnection: "fake", fields: "all" } },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    // fields:"all" → full item shape including notification_settings.
+    assert.equal(payload.items[0].notification_settings.grace_period_ms, 0);
+});
+
+// ---------- create_event_notification tests ----------
+
+test_p2("create_event_notification slack-notification-v1 accepted; body wraps in CreateEntityRequest envelope", async () => {
+    const { handleCreateEventNotification } = await import(
+        "../src/tools/events/create-event-notification.js"
+    );
+    _setCaptureRequest_p2(eventsMultiCapture_p2([
+        { method: "GET", pathPattern: "/api/events/notifications/paginated", response: { elements: [], total: 0 } },
+    ]));
+    const res = await handleCreateEventNotification({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                title: "Slack alerts",
+                config: {
+                    type: "slack-notification-v1",
+                    webhook_url: "https://hooks.slack.com/services/X/Y/Z",
+                    channel: "#general",
+                    color: "#ff0500",
+                    include_title: true,
+                },
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.dryRun, true);
+    assert.equal(payload.preview.method, "POST");
+    assert.equal(payload.preview.path, "/api/events/notifications");
+    // Pitfall 3: CreateEntityRequest envelope.
+    assert.equal(payload.preview.body.entity.title, "Slack alerts");
+    assert.equal(payload.preview.body.entity.config.type, "slack-notification-v1");
+    assert.equal(payload.preview.body.share_request, null);
+});
+
+test_p2("create_event_notification email-notification-v1 accepted (CreateEntityRequest envelope)", async () => {
+    const { handleCreateEventNotification } = await import(
+        "../src/tools/events/create-event-notification.js"
+    );
+    _setCaptureRequest_p2(eventsMultiCapture_p2([
+        { method: "GET", pathPattern: "/api/events/notifications/paginated", response: { elements: [], total: 0 } },
+    ]));
+    const res = await handleCreateEventNotification({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                title: "Email alerts",
+                config: {
+                    type: "email-notification-v1",
+                    subject: "Spike",
+                    email_recipients: ["ops@example.com"],
+                    body_template: "Alert",
+                },
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.preview.body.entity.title, "Email alerts");
+    assert.equal(payload.preview.body.entity.config.type, "email-notification-v1");
+    assert.deepEqual(payload.preview.body.entity.config.email_recipients, ["ops@example.com"]);
+});
+
+test_p2("create_event_notification http-notification-v2 accepted; encrypted basic_auth + api_secret <redacted> in preview", async () => {
+    const { handleCreateEventNotification } = await import(
+        "../src/tools/events/create-event-notification.js"
+    );
+    _setCaptureRequest_p2(eventsMultiCapture_p2([
+        { method: "GET", pathPattern: "/api/events/notifications/paginated", response: { elements: [], total: 0 } },
+    ]));
+    const res = await handleCreateEventNotification({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                title: "HTTP v2",
+                config: {
+                    type: "http-notification-v2",
+                    url: "https://hook.example/",
+                    method: "POST",
+                    basic_auth: "secret123",
+                    api_secret: "key456",
+                },
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    // C3 / T-05-04-03: dry-run preview hides the encrypted values.
+    assert.equal(payload.preview.body.entity.config.basic_auth, "<redacted>");
+    assert.equal(payload.preview.body.entity.config.api_secret, "<redacted>");
+    assert.equal(payload.preview.body.entity.config.url, "https://hook.example/");
+});
+
+test_p2("create_event_notification pagerduty-notification-v2 accepted (32-char routing_key)", async () => {
+    const { handleCreateEventNotification } = await import(
+        "../src/tools/events/create-event-notification.js"
+    );
+    _setCaptureRequest_p2(eventsMultiCapture_p2([
+        { method: "GET", pathPattern: "/api/events/notifications/paginated", response: { elements: [], total: 0 } },
+    ]));
+    const res = await handleCreateEventNotification({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                title: "PD",
+                config: {
+                    type: "pagerduty-notification-v2",
+                    routing_key: "a".repeat(32),
+                    custom_incident: false,
+                    client_name: "Graylog",
+                    client_url: "https://graylog.example/",
+                },
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.preview.body.entity.config.type, "pagerduty-notification-v2");
+    assert.equal(payload.preview.body.entity.config.routing_key.length, 32);
+});
+
+test_p2("create_event_notification teams-notification-v2 accepted (valid JSON adaptive_card)", async () => {
+    const { handleCreateEventNotification } = await import(
+        "../src/tools/events/create-event-notification.js"
+    );
+    _setCaptureRequest_p2(eventsMultiCapture_p2([
+        { method: "GET", pathPattern: "/api/events/notifications/paginated", response: { elements: [], total: 0 } },
+    ]));
+    const res = await handleCreateEventNotification({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                title: "Teams",
+                config: {
+                    type: "teams-notification-v2",
+                    webhook_url: "https://outlook.office.com/webhook/X",
+                    adaptive_card: "{}",
+                },
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.preview.body.entity.config.type, "teams-notification-v2");
+    assert.equal(payload.preview.body.entity.config.adaptive_card, "{}");
+});
+
+test_p2("create_event_notification http-notification-v1 accepted (single-field variant)", async () => {
+    const { handleCreateEventNotification } = await import(
+        "../src/tools/events/create-event-notification.js"
+    );
+    _setCaptureRequest_p2(eventsMultiCapture_p2([
+        { method: "GET", pathPattern: "/api/events/notifications/paginated", response: { elements: [], total: 0 } },
+    ]));
+    const res = await handleCreateEventNotification({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                title: "Webhook",
+                config: {
+                    type: "http-notification-v1",
+                    url: "https://hook.example/",
+                },
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.preview.body.entity.config.type, "http-notification-v1");
+    assert.equal(payload.preview.body.entity.config.url, "https://hook.example/");
+});
+
+test_p2("create_event_notification REJECTS script-notification-v1 at zod.parse (D-05 corrected; type does not exist)", async () => {
+    const { handleCreateEventNotification } = await import(
+        "../src/tools/events/create-event-notification.js"
+    );
+    // Poison the capture seam — any HTTP call means the schema let through.
+    _setCaptureRequest_p2(() => {
+        throw new Error("HTTP call fired despite invalid discriminator value");
+    });
+    const res = await handleCreateEventNotification({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                title: "Script",
+                config: { type: "script-notification-v1", command: "echo" },
+            },
+        },
+    });
+    assert.equal(res.isError, true);
+    // zod's discriminated-union error names the closed set.
+    assert.match(res.content[0].text, /script-notification-v1|Invalid discriminator/);
+});
+
+test_p2("create_event_notification REJECTS pagerduty-notification-v1 at zod.parse (D-05 corrected; correct is -v2)", async () => {
+    const { handleCreateEventNotification } = await import(
+        "../src/tools/events/create-event-notification.js"
+    );
+    _setCaptureRequest_p2(() => {
+        throw new Error("HTTP call fired despite invalid discriminator value");
+    });
+    const res = await handleCreateEventNotification({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                title: "PD v1",
+                config: { type: "pagerduty-notification-v1", routing_key: "x" },
+            },
+        },
+    });
+    assert.equal(res.isError, true);
+});
+
+test_p2("create_event_notification REJECTS teams-notification-v1 at zod.parse (D-05; deprecated, only -v2 supported)", async () => {
+    const { handleCreateEventNotification } = await import(
+        "../src/tools/events/create-event-notification.js"
+    );
+    _setCaptureRequest_p2(() => {
+        throw new Error("HTTP call fired despite invalid discriminator value");
+    });
+    const res = await handleCreateEventNotification({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                title: "Teams v1",
+                config: { type: "teams-notification-v1", webhook_url: "x" },
+            },
+        },
+    });
+    assert.equal(res.isError, true);
+});
+
+test_p2("create_event_notification FOUND-11 existingMatches probe fires against /api/events/notifications/paginated", async () => {
+    const { handleCreateEventNotification } = await import(
+        "../src/tools/events/create-event-notification.js"
+    );
+    _setCaptureRequest_p2(eventsMultiCapture_p2([
+        {
+            method: "GET",
+            pathPattern: "/api/events/notifications/paginated",
+            response: {
+                elements: [
+                    { id: "existing-1", title: "Slack alerts", config: { type: "slack-notification-v1" } },
+                    { id: "other-2", title: "Email alerts", config: { type: "email-notification-v1" } },
+                ],
+                total: 2,
+            },
+        },
+    ]));
+    const res = await handleCreateEventNotification({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                title: "Slack alerts",
+                config: {
+                    type: "slack-notification-v1",
+                    webhook_url: "https://hooks.slack.com/services/X/Y/Z",
+                    channel: "#general",
+                    color: "#ff0500",
+                    include_title: true,
+                },
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.existingMatches.length, 1);
+    assert.equal(payload.existingMatches[0].id, "existing-1");
+    assert.equal(payload.existingMatches[0].title, "Slack alerts");
+    assert.equal(payload.existingMatches[0].similarity_reason, "exact");
+});
+
+test_p2("create_event_notification C3 wire/preview asymmetry — http-v2 apply body wraps via {set_value}; preview shows <redacted>", async () => {
+    const { handleCreateEventNotification } = await import(
+        "../src/tools/events/create-event-notification.js"
+    );
+    // Capture the apply POST so we can inspect the wire body separately from
+    // the dry-run preview body.
+    const captured = [];
+    _setCaptureRequest_p2((req) => {
+        captured.push({ method: req.method, path: req.path, body: req.body });
+        if (req.method === "GET" && req.path.startsWith("/api/events/notifications/paginated")) {
+            return { elements: [], total: 0 };
+        }
+        if (req.method === "POST" && req.path === "/api/events/notifications") {
+            return { id: "new-notif", title: req.body?.entity?.title ?? "?" };
+        }
+        throw new Error(`Unexpected ${req.method} ${req.path}`);
+    });
+    const res = await handleCreateEventNotification({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                title: "HTTP v2 wire",
+                dryRun: false,
+                config: {
+                    type: "http-notification-v2",
+                    url: "https://hook.example/",
+                    method: "POST",
+                    basic_auth: "secret123",
+                    api_secret: "key456",
+                },
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.applied, true);
+    // Wire body sent to Graylog: encrypted fields wrap as {set_value}.
+    const postCall = captured.find((c) => c.method === "POST");
+    assert.ok(postCall, "POST /api/events/notifications must fire on apply");
+    assert.deepEqual(postCall.body.entity.config.basic_auth, { set_value: "secret123" });
+    assert.deepEqual(postCall.body.entity.config.api_secret, { set_value: "key456" });
+    // Non-encrypted url passes through verbatim.
+    assert.equal(postCall.body.entity.config.url, "https://hook.example/");
+});
+
+// ---------- dispatch + tool-count ----------
+
+test_p2("dispatch resolves list_event_notifications + create_event_notification after Plan 05-04 Task 1 registration", async () => {
+    const { dispatch } = await import("../src/dispatch.js");
+    await import("../src/tools/_register.js");
+    // Route both the list handler's paginated GET (with ?page=1&per_page=25
+    // query string) and the create handler's bare-path probe with one
+    // permissive seam — multiCapture's strict-equality path matcher doesn't
+    // accept the list handler's query-string-suffixed URL.
+    _setCaptureRequest_p2((req) => {
+        if (req.method === "GET" && req.path.startsWith("/api/events/notifications/paginated")) {
+            return { elements: [], total: 0 };
+        }
+        throw new Error(`Unexpected ${req.method} ${req.path}`);
+    });
+    const resList = await dispatch({
+        params: {
+            name: "list_event_notifications",
+            arguments: { _testConnection: "fake" },
+        },
+    });
+    const payloadList = JSON.parse(resList.content[0].text);
+    assert.equal(payloadList.tool, "list_event_notifications");
+
+    const resCreate = await dispatch({
+        params: {
+            name: "create_event_notification",
+            arguments: {
+                _testConnection: "fake",
+                title: "DispTest",
+                config: {
+                    type: "http-notification-v1",
+                    url: "https://hook.example/",
+                },
+            },
+        },
+    });
+    const payloadCreate = JSON.parse(resCreate.content[0].text);
+    assert.equal(payloadCreate.tool, "create_event_notification");
+    assert.equal(payloadCreate.dryRun, true);
+});

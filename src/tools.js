@@ -841,6 +841,47 @@ export const toolDefinitions = [
             required: ["definitionId"],
         },
     },
+    // Plan 05-04 — event-notification CRUD (EVENT-07/08/09; count 73 → 77).
+    // EVENT-07: list_event_notifications reclaims the v2.3 dispatch name
+    //   (Pitfall S5 displacement) with a narrow-projection paginated reader.
+    // EVENT-08: create_event_notification carries the D-05/D-06 6-variant
+    //   discriminator (closed-set rejection at zod.parse) + CreateEntityRequest
+    //   envelope (Pitfall 3) + http-notification-v2 C3 redaction on encrypted
+    //   basic_auth / api_secret.
+    {
+        name: "list_event_notifications",
+        description: "List event notifications on the active Graylog connection. Returns a narrow projection [id, title, description, config] by default (each item's config carries the discriminator `type` plus per-variant fields); pass fields:\"all\" for the full DTO including notification_settings + plugin-specific extras. Filter via the query param (Graylog filter syntax). Backed by /api/events/notifications/paginated (unwraps PageListResponse.elements per Plan 05-01).",
+        inputSchema: {
+            type: "object",
+            properties: {
+                connectionName: { type: "string", description: "Optional connection name; defaults to active" },
+                fields: { type: "string", description: "\"all\" for the full DTO, or an array of field names to project. Default narrow projection: id,title,description,config" },
+                limit: { type: "number", description: "Max results per page (maps to upstream per_page). Default: 25; ceiling: 200" },
+                query: { type: "string", description: "Filter expression (Graylog query syntax)" },
+                sort: { type: "string", enum: ["title", "type"], description: "Sort field. Default: title" },
+                order: { type: "string", enum: ["asc", "desc"], description: "Sort direction. Default: asc" },
+            },
+        },
+    },
+    {
+        name: "create_event_notification",
+        description: "Create an event notification on the active Graylog connection. config.type is one of 6 STRICT variants (D-05/D-06 corrected closed set): email-notification-v1, http-notification-v1, http-notification-v2, slack-notification-v1, pagerduty-notification-v2, teams-notification-v2. Invalid types (e.g. script-notification-v1, pagerduty-notification-v1, teams-notification-v1) reject at zod.parse BEFORE any HTTP call. Body wraps in CreateEntityRequest envelope {entity:{title, description, config}, share_request:null} (Pitfall 3). http-notification-v2's encrypted basic_auth and api_secret are wrapped as {set_value:<plaintext>} on the wire and shown as <redacted> in the dry-run preview (C3-class — T-05-04-03). existingMatches probes /api/events/notifications/paginated for exact-title duplicates. dryRun:true by default; postApplyEstimate.id is __SERVER_ASSIGNED__ — DO NOT reuse it.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                connectionName: { type: "string", description: "Optional connection name; defaults to active" },
+                dryRun: { type: "boolean", description: "Preview without applying. Default: true" },
+                idempotencyKey: { type: "string", description: "Optional retry-window dedupe key" },
+                title: { type: "string", description: "Notification title (required, non-empty)" },
+                description: { type: "string", description: "Optional free-form description" },
+                config: {
+                    type: "object",
+                    description: "Discriminated by `type`; one of the 6 STRICT variants. Per-variant field shapes documented per RESEARCH.md §Per-Type Config Shapes. http-notification-v2 carries encrypted basic_auth + api_secret (handled with C3-class redaction).",
+                },
+            },
+            required: ["title", "config"],
+        },
+    },
     {
         name: "cluster_log_messages",
         description: "Cluster similar log messages into Drain3-style templates. Fetches messages with the same args as search_messages_graylog, then groups them by structural similarity. Templates are persisted per connection and reused across calls.",
