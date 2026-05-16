@@ -17,9 +17,11 @@
 //   4. Encrypted fields the agent DID pass are wrapped as { set_value: <new> }
 //      on the wire (encodeEncryptedForWire) and redacted to REDACTION_PLACEHOLDER
 //      in the dry-run preview (redactForPreview).
-//   5. Top-level envelope fields (type, title, global, node) are merged from
+//   5. Top-level envelope fields `type`, `title`, `global` are merged from
 //      current state when the agent did not pass them — Graylog's PUT
-//      requires `type` + `title` + `global` on every call.
+//      requires `type` + `title` + `global` on every call. `node` is
+//      strict no-echo (D-03): emitted ONLY when the agent passes
+//      `changes.node` explicitly, never sourced from current state.
 //
 // Why this matters: the prior plan iteration of 01-02 copied non-encrypted
 // current.configuration entries into the wire body to "preserve them". That
@@ -74,15 +76,17 @@ export const handleUpdateInput = defineMutatingHandler({
         const agentConfig = args.changes.configuration ?? null;
 
         // 4. Envelope: type + title + global + node. Type is immutable on
-        //    update and always comes from current state. Title/global/node
-        //    come from changes when present, else from current.
+        //    update and always comes from current state. Title/global come
+        //    from changes when present, else from current. `node` is strict
+        //    no-echo (D-03): emitted ONLY when the agent explicitly passes
+        //    `changes.node`, mirroring the `configuration` pattern below.
+        //    Never sourced from `current.node` — that would echo
+        //    GET-response state back to the wire, the very bug D-03 forbids.
         const wireBody = {
             type: current.type,
             title: args.changes.title ?? current.title,
             global: args.changes.global ?? current.global,
-            ...(args.changes.node !== undefined || current.node !== undefined
-                ? { node: args.changes.node ?? current.node }
-                : {}),
+            ...(args.changes.node !== undefined ? { node: args.changes.node } : {}),
             // Configuration block: only included when the agent passed
             // changes.configuration (even as `{}`). When the agent did not
             // touch configuration at all (`null` sentinel), the key is
