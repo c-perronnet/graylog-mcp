@@ -1604,4 +1604,40 @@ export const toolDefinitions = [
             },
         },
     },
+    // ====================================================================
+    // Phase 6 Plan 02 — Dashboard CRUD (DASH-01..05 + DASH-07).
+    //
+    // create_dashboard ships the C7 mitigation centerpiece (internal
+    // Search+View 2-step chain; agent never sees the intermediate Search
+    // ID). update_dashboard applies STRICT_NO_ECHO partial-update with
+    // searchId schema-rejected (D-02). delete_dashboard is a leaf delete
+    // (informational widget-count cascade only). remove_widget orchestrates
+    // the symmetric two-step PUT chain (PUT /api/views/search + PUT
+    // /api/views). DASH-06 add_widget_from_template ships in Plan 06-03
+    // alongside the widget-template library.
+    // ====================================================================
+    {
+        name: "list_dashboards",
+        description: "List Graylog dashboards (narrow projection: id, title, summary, description). DASHBOARD-typed views only — saved searches filtered out wrapper-side regardless of upstream filter behavior (Q1 default). Use fields:'all' for the full ViewDTO.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                connectionName: { type: "string" },
+                fields: { type: ["array", "string"], description: "Projection: array of field names, or the literal string 'all' for the full ViewDTO." },
+                limit: { type: "number", description: "Page size. Default 25." },
+            },
+        },
+    },
+    {
+        name: "get_dashboard",
+        description: "Get a single Graylog dashboard's full ViewDTO including state.{queryId}.widgets, widget_positions, widget_mapping (widgetId → searchTypeId[]), and search_id. The full DTO is the agent-facing surface — no projection.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                connectionName: { type: "string" },
+                dashboardId: { type: "string", description: "The dashboard's ViewDTO id." },
+            },
+            required: ["dashboardId"],
+        },
+    },
 ];

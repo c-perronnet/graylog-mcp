@@ -393,7 +393,7 @@ test("dispatch resolves list_pipelines/get_pipeline/delete_pipeline via the new 
     assert.ok(Array.isArray(payload.items));
 });
 
-test("assertAllToolsRegistered passes after Plan 05-04 phase-end (count = 77; event-notification CRUD complete; Phase 5 done)", async () => {
+test("assertAllToolsRegistered passes after Plan 06-02 Task 1 partial (count = 79; +list_dashboards + get_dashboard)", async () => {
     const { dispatch, assertAllToolsRegistered } = await import("../src/dispatch.js");
     await import("../src/tools/_register.js");
     const { toolDefinitions } = await import("../src/tools.js");
@@ -410,9 +410,14 @@ test("assertAllToolsRegistered passes after Plan 05-04 phase-end (count = 77; ev
     // to 66 temporarily. Plan 05-02 ships the 4-tool event-definition CRUD
     // (list/get/create/update) → 70. Plan 05-03 Task 1 adds enable + disable
     // → 72; Task 2 adds delete_event_definition → 73. Plan 05-04 adds
-    // list_event_notifications + 3 more → 77 (Phase 5 end). Plans 06/07
-    // are out of scope for this milestone.
-    assert.equal(toolDefinitions.length, 77, `Expected 77 tools after Plan 05-04 phase-end (Phase 5 complete: 4 event-notification tools + 7 event-definition tools shipped); got ${toolDefinitions.length}`);
+    // list_event_notifications + 3 more → 77 (Phase 5 end).
+    // Plan 06-02 Task 1 ships DASH-01 list_dashboards + DASH-02 get_dashboard
+    // → 79. Task 2 adds create_dashboard → 80. Task 3 adds update_dashboard +
+    // delete_dashboard → 82. Task 4 adds remove_widget → 83 (Plan 06-02 end).
+    // Phase 6 Plan 06-03 will add DASH-06 add_widget_from_template → 84
+    // (the 8th dashboard tool ships in Plan 03 alongside the widget-template
+    // library — out of scope for THIS plan's count).
+    assert.equal(toolDefinitions.length, 79, `Expected 79 tools after Plan 06-02 Task 1 (added list_dashboards + get_dashboard); got ${toolDefinitions.length}`);
 });
 
 // =====================================================================

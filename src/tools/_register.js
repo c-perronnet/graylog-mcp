@@ -75,6 +75,12 @@ import "./pipelines/index.js";
 // list_event_notifications (replaces v2.3), create_event_notification,
 // update_event_notification, delete_event_notification.
 import "./events/index.js";
+// Phase 6 domain barrel — Plan 06-02 ships 6 dashboard CRUD tools:
+// list_dashboards, get_dashboard, create_dashboard, update_dashboard,
+// delete_dashboard, remove_widget. The barrel is incrementally populated
+// across Tasks 1-4 of Plan 06-02. Plan 06-03 will extend with DASH-06
+// add_widget_from_template alongside the widget-template library.
+import "./dashboards/index.js";
 
 // Names that already fit `<verb>_<domain>_<noun>` (10 of 23 — list_streams
 // displaced; the new Phase 3 handler is registered via ./streams/index.js
