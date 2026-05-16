@@ -28,7 +28,7 @@ export function buildErrorRateOverTime(options = {}) {
         row_groups: [{
             type: "time",
             fields: ["timestamp"],
-            interval: { type: "timeunit", value: 1, unit: "auto" },
+            interval: { type: "auto" },
         }],
         column_groups: [],
         series: [{ type: "count", id: "count()", field: null }],
@@ -58,7 +58,7 @@ export function buildErrorRateOverTime(options = {}) {
             row_pivots: [{
                 fields: ["timestamp"],
                 type: "time",
-                config: { interval: { type: "timeunit", value: 1, unit: "auto" } },
+                config: { interval: { type: "auto" } },
             }],
             column_pivots: [],
             series: [{ config: {}, function: "count()" }],

@@ -12,6 +12,28 @@
 
 import { randomUUID } from "node:crypto";
 
+// Graylog 7.x Interval (TIMEUNIT shape) wants a single `timeunit` keyword
+// string `<N><letter>` — NOT a separate value/unit pair. Map the builder's
+// human-friendly intervalUnit option onto the single-letter suffix Graylog's
+// keyword grammar accepts.
+const UNIT_LETTERS = {
+    seconds: "s",
+    minutes: "m",
+    hours: "h",
+    days: "d",
+};
+
+// Build the `<N><letter>` keyword (e.g. 5 + "minutes" -> "5m"). Throws clearly
+// on an unknown unit rather than emitting a keyword Graylog will reject — a
+// silent default would mask agent input mistakes.
+function intervalKeyword(value, unit) {
+    const letter = UNIT_LETTERS[unit];
+    if (!letter) {
+        throw new Error(`Unknown interval unit: ${unit}`);
+    }
+    return `${value}${letter}`;
+}
+
 export function buildStreamActivityOverview(options = {}) {
     const widgetId = options.widgetId ?? randomUUID();
     const searchTypeId = options.searchTypeId ?? randomUUID();
@@ -20,11 +42,14 @@ export function buildStreamActivityOverview(options = {}) {
     const limit = options.limit ?? 10;
     const intervalUnit = options.intervalUnit ?? "minutes";
     const intervalValue = options.intervalValue ?? 5;
+    // Compute once so the searchType pivot and the widget config interval reuse
+    // the identical keyword (and an unknown unit throws before either is built).
+    const intervalTimeunit = intervalKeyword(intervalValue, intervalUnit);
 
     const timeBucket = {
         type: "time",
         fields: ["timestamp"],
-        interval: { type: "timeunit", value: intervalValue, unit: intervalUnit },
+        interval: { type: "timeunit", timeunit: intervalTimeunit },
     };
     const streamsBucket = {
         type: "values",
@@ -64,7 +89,7 @@ export function buildStreamActivityOverview(options = {}) {
                 {
                     fields: ["timestamp"],
                     type: "time",
-                    config: { interval: { type: "timeunit", value: intervalValue, unit: intervalUnit } },
+                    config: { interval: { type: "timeunit", timeunit: intervalTimeunit } },
                 },
                 {
                     fields: ["streams"],
