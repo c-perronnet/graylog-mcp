@@ -87,6 +87,7 @@ export const handleDeleteIndexSet = defineMutatingHandler({
                 path: `${indexSetPath}?delete_indices=false`,
                 body: undefined,
                 postApplyEstimate: { id: args.indexSetId, deletedIndices: false },
+                _indexSetId: args.indexSetId,
             };
         }
 
@@ -184,6 +185,7 @@ export const handleDeleteIndexSet = defineMutatingHandler({
                 message: messageForAgent,
             },
             _confirmationToken: confirmationToken,
+            _indexSetId: args.indexSetId,
         };
     },
     apply: async (client, req) => {
@@ -191,12 +193,15 @@ export const handleDeleteIndexSet = defineMutatingHandler({
         // upstream; if we are here the agent has echoed the correct token.
         await client.request(req.method, req.path, req.body);
 
-        // UPDATED D-15: extract the indexSetId from the req.path so the
-        // apply-time message stays consistent with the dry-run preview.
-        // Graylog's 204-no-body response means we cannot forward a job_id;
-        // the agent's discovery path is await_system_job(info_substring).
-        const m = req.path.match(/index_sets\/([^?]+)/);
-        const indexSetId = m ? m[1] : "unknown";
+        // UPDATED D-15: the apply-time message must stay consistent with the
+        // dry-run preview. indexSetId is stashed on the request descriptor at
+        // build() time (F-19 fix 2026-05-16); the legacy path-regex fallback
+        // remains for back-compat with any hand-constructed descriptors so a
+        // future path-format drift can never silently change the apply-time
+        // message. Graylog's 204-no-body response means we cannot forward a
+        // job_id; the agent's discovery path is await_system_job(info_substring).
+        const indexSetId = req._indexSetId
+            ?? (req.path.match(/index_sets\/([^/?]+)/)?.[1] ?? "unknown");
         return {
             async: true,
             job_id_observable_at: "/system/jobs",
