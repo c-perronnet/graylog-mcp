@@ -114,7 +114,7 @@ Dashboards + 6 blueprints land in the same phase per ARCHITECTURE.md.
 - [ ] **DASH-05**: `delete_dashboard`
 - [ ] **DASH-06**: `add_widget_from_template` — drops a widget from the curated template library onto an existing dashboard; widget/position/searchType triplet generation is internal so mismatches are structurally impossible
 - [ ] **DASH-07**: `remove_widget` — explicit widget removal
-- [ ] **DASH-08**: Curated widget-template library (8 templates):
+- [x] **DASH-08**: Curated widget-template library (8 templates):
   - `error_rate_over_time` (histogram, level>=4)
   - `top_sources_by_volume` (field aggregation, count by source)
   - `level_distribution` (pie/donut, count by level)
@@ -278,7 +278,7 @@ Populated by the roadmapper on 2026-05-13. Every v1 requirement maps to exactly 
 | DASH-05 | Phase 6 | Pending |
 | DASH-06 | Phase 6 | Pending |
 | DASH-07 | Phase 6 | Pending |
-| DASH-08 | Phase 6 | Pending |
+| DASH-08 | Phase 6 | Complete |
 | BLUE-01 | Phase 6 | Pending |
 | BLUE-02 | Phase 6 | Pending |
 | BLUE-03 | Phase 6 | Pending |

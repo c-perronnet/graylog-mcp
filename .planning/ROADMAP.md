@@ -130,7 +130,7 @@
   3. The curated widget-template library (DASH-08) ships 8 templates — `error_rate_over_time`, `top_sources_by_volume`, `level_distribution`, `top_error_clusters`, `request_rate_over_time`, `field_value_distribution`, `recent_events_table`, `stream_activity_overview` — and `add_widget_from_template` drops any of them onto an existing dashboard from a single tool call.
   4. All 6 blueprints (BLUE-01 through BLUE-06) compose from `src/services/*` (never from other tool handlers), and their dry-run output is a list of planned requests with explicit `dependsOn` annotations so the agent can reason about each step independently.
 **Plans**: 6 plans
-  - [ ] 06-01-PLAN.md — Foundation (6 services modules + widget-templates skeleton + blueprint-chain helper + widget-position-integrity validator + conflict.js views envelope + 06-U1-SMOKE.md probing the 4 open questions)
+  - [x] 06-01-PLAN.md — Foundation (6 services modules + widget-templates skeleton + blueprint-chain helper + widget-position-integrity validator + conflict.js views envelope + 06-U1-SMOKE.md probing the 4 open questions)
   - [ ] 06-02-PLAN.md — Dashboard CRUD: list/get/create/update/delete_dashboard + remove_widget (DASH-01..05, DASH-07) — C7 ACCEPTANCE GATE via internal Search+View chain; D-02 structural enforcement; D-03 widget-position integrity validator
   - [ ] 06-03-PLAN.md — Widget templates (DASH-08, 8 frozen triplet builders) + add_widget_from_template (DASH-06 — M7 closed-set rejection); top_error_clusters ships as text-widget placeholder per Q3 default
   - [ ] 06-04-PLAN.md — Blueprints A: setup_long_term_archival_index (BLUE-05), setup_debug_log_dropping (BLUE-06), setup_pipeline_for_stream (BLUE-04 — reuses pipeline-dsl/emit)
