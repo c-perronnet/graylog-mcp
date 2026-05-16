@@ -116,7 +116,7 @@
   - [x] 05-01-PLAN.md — Foundation amendments (conflict.js `elements` envelope for /paginated + computeNotificationCascadeHash thin wrapper + 6-variant discriminator + v6→v7 migration + S5 displacement of v2.3 list_event_* + 05-U1-SMOKE.md decision artifact)
   - [x] 05-02-PLAN.md — Event-definition list/get/create/update (EVENT-01..04): M1 ACCEPTANCE GATE (?schedule=false structural) + C5 ACCEPTANCE GATE (visible v6→v7 migration) + CreateEntityRequest envelope + STRICT_NO_ECHO on update
   - [x] 05-03-PLAN.md — Enable/disable (EVENT-06) WILDCARD empty-body + delete_event_definition (EVENT-05) D-08 informational cascade (no token; mirrors Phase 1 delete_input)
-  - [ ] 05-04-PLAN.md — Notification list/create/update/delete (EVENT-07..09): D-05 6-variant discriminator + http-notification-v2 C3 STRICT_NO_ECHO encrypted fields + D-09 cascade-hash + apply-time drift refusal (mirrors Phase 3 delete_stream)
+  - [x] 05-04-PLAN.md — Notification list/create/update/delete (EVENT-07..09): D-05 6-variant discriminator + http-notification-v2 C3 STRICT_NO_ECHO encrypted fields + D-09 cascade-hash + apply-time drift refusal (mirrors Phase 3 delete_stream)
   - [ ] 05-05-PLAN.md — 12-13 snapshot fixtures + 11 schema-parity assertions + auth-redaction inheritance + 05-VALIDATION.md flip + human-verify checkpoint
 **UI hint**: yes
 
