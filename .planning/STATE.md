@@ -520,6 +520,7 @@ None.
 | 260516-mcf | Fix Graylog widget-template interval shape bug | 2026-05-16 | 849f5a5 | [260516-mcf-fix-graylog-widget-template-interval-sha](./quick/260516-mcf-fix-graylog-widget-template-interval-sha/) |
 | 260516-mt4 | Fix Graylog dashboard widget payload shapes (5 bugs) | 2026-05-16 | 332b777 | [260516-mt4-fix-graylog-dashboard-widget-payload-sha](./quick/260516-mt4-fix-graylog-dashboard-widget-payload-sha/) |
 | 260516-n6c | Fix add_widget_from_template and list_dashboards bugs | 2026-05-16 | 83e7342 | [260516-n6c-fix-add-widget-from-template-and-list-da](./quick/260516-n6c-fix-add-widget-from-template-and-list-da/) |
+| 260516-q8r | Fix update_extractor Null extractorType bug | 2026-05-16 | 22c5e60 | [260516-q8r-fix-update-extractor-null-extractortype-](./quick/260516-q8r-fix-update-extractor-null-extractortype-/) |
 
 ## Session Continuity
 
