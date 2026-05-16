@@ -40,13 +40,22 @@ export function redactForPreview(configuration, encryptedFields) {
  * Wrap explicit encrypted-field values in { set_value: <value> } for the wire
  * body. Plain strings → { set_value: string }. Already-shaped Graylog
  * placeholders ({ keep_value: true }, { delete_value: true }, { set_value: x })
- * pass through unchanged. Other types (numbers, booleans) for encrypted fields
- * are not expected and are left as-is; Graylog will reject them with a 400
- * which surfaces via wrapGraylogError.
+ * pass through unchanged. Non-string non-placeholder values (numbers, booleans,
+ * arrays, plain objects) for encrypted fields are rejected here with a thrown
+ * Error: preview-apply parity is the D-04 invariant, and `redactForPreview`
+ * unconditionally replaces ANY value at an encrypted-field key with the
+ * redaction placeholder. If we silently let a non-string fall through to the
+ * wire, the agent sees `<redacted>` in the dry-run preview but Graylog
+ * receives the literal value — a preview/apply mismatch that leaks the
+ * secret. Input types covered by a strict per-type zod schema also catch
+ * this at validation, but generic `z.record(z.unknown())` types (AWS plugin,
+ * CEF, Kafka, Office365, custom plugins) bypass that gate and rely on this
+ * throw.
  *
  * @param {Record<string, unknown> | undefined} configuration
  * @param {Set<string>} encryptedFields
  * @returns {Record<string, unknown> | undefined}
+ * @throws {Error} if an encrypted field carries a non-string non-placeholder value
  */
 export function encodeEncryptedForWire(configuration, encryptedFields) {
     if (!configuration || typeof configuration !== "object") return configuration;
@@ -61,8 +70,15 @@ export function encodeEncryptedForWire(configuration, encryptedFields) {
         }
         if (typeof v === "string") {
             out[field] = { set_value: v };
+            continue;
         }
-        // Other types: leave as-is (Graylog will reject if invalid).
+        // Refuse non-string non-placeholder values for encrypted fields.
+        // Preview-apply parity is the D-04 invariant; when zod can't gate this
+        // (generic z.record(z.unknown()) input types), reject here so the
+        // agent gets a clear error rather than a silent leak.
+        throw new Error(
+            `Encrypted field "${field}" must be a string or a Graylog placeholder ({set_value}/{keep_value}/{delete_value}); got ${typeof v}.`
+        );
     }
     return out;
 }
