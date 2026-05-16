@@ -131,7 +131,7 @@
   4. All 6 blueprints (BLUE-01 through BLUE-06) compose from `src/services/*` (never from other tool handlers), and their dry-run output is a list of planned requests with explicit `dependsOn` annotations so the agent can reason about each step independently.
 **Plans**: 6 plans
   - [x] 06-01-PLAN.md — Foundation (6 services modules + widget-templates skeleton + blueprint-chain helper + widget-position-integrity validator + conflict.js views envelope + 06-U1-SMOKE.md probing the 4 open questions)
-  - [ ] 06-02-PLAN.md — Dashboard CRUD: list/get/create/update/delete_dashboard + remove_widget (DASH-01..05, DASH-07) — C7 ACCEPTANCE GATE via internal Search+View chain; D-02 structural enforcement; D-03 widget-position integrity validator
+  - [x] 06-02-PLAN.md — Dashboard CRUD: list/get/create/update/delete_dashboard + remove_widget (DASH-01..05, DASH-07) — C7 ACCEPTANCE GATE via internal Search+View chain; D-02 structural enforcement; D-03 widget-position integrity validator
   - [ ] 06-03-PLAN.md — Widget templates (DASH-08, 8 frozen triplet builders) + add_widget_from_template (DASH-06 — M7 closed-set rejection); top_error_clusters ships as text-widget placeholder per Q3 default
   - [ ] 06-04-PLAN.md — Blueprints A: setup_long_term_archival_index (BLUE-05), setup_debug_log_dropping (BLUE-06), setup_pipeline_for_stream (BLUE-04 — reuses pipeline-dsl/emit)
   - [ ] 06-05-PLAN.md — Blueprints B: setup_app_monitoring_stack (BLUE-01 — 6-step headline mega-chain), setup_error_alerting (BLUE-02), create_app_health_dashboard (BLUE-03)
@@ -164,7 +164,7 @@
 | 3. Streams & Stream Rules | 5/5 | Complete | 2026-05-15 |
 | 4. Pipelines, Pipeline Rules & Connections | 6/6 | Complete | 2026-05-15 |
 | 5. Events & Notifications | 5/5 | Complete | 2026-05-16 |
-| 6. Dashboards, Widget Templates & Blueprints | 0/? | Not started | - |
+| 6. Dashboards, Widget Templates & Blueprints | 2/6 | In Progress | - |
 | 7. Final Hardening | 0/? | Not started | - |
 
 ---

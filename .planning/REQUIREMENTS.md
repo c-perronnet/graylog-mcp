@@ -107,13 +107,13 @@ Currently read-only in v2.3; this milestone makes them full CRUD.
 
 Dashboards + 6 blueprints land in the same phase per ARCHITECTURE.md.
 
-- [ ] **DASH-01**: `list_dashboards`
-- [ ] **DASH-02**: `get_dashboard` — includes widget layout
-- [ ] **DASH-03**: `create_dashboard` — **internally chains `POST /views/search` then `POST /views`** so the agent never sees the intermediate Search ID (C7)
-- [ ] **DASH-04**: `update_dashboard`
-- [ ] **DASH-05**: `delete_dashboard`
+- [x] **DASH-01**: `list_dashboards`
+- [x] **DASH-02**: `get_dashboard` — includes widget layout
+- [x] **DASH-03**: `create_dashboard` — **internally chains `POST /views/search` then `POST /views`** so the agent never sees the intermediate Search ID (C7)
+- [x] **DASH-04**: `update_dashboard`
+- [x] **DASH-05**: `delete_dashboard`
 - [ ] **DASH-06**: `add_widget_from_template` — drops a widget from the curated template library onto an existing dashboard; widget/position/searchType triplet generation is internal so mismatches are structurally impossible
-- [ ] **DASH-07**: `remove_widget` — explicit widget removal
+- [x] **DASH-07**: `remove_widget` — explicit widget removal
 - [x] **DASH-08**: Curated widget-template library (8 templates):
   - `error_rate_over_time` (histogram, level>=4)
   - `top_sources_by_volume` (field aggregation, count by source)
@@ -271,13 +271,13 @@ Populated by the roadmapper on 2026-05-13. Every v1 requirement maps to exactly 
 | EVENT-07 | Phase 5 | Complete |
 | EVENT-08 | Phase 5 | Complete |
 | EVENT-09 | Phase 5 | Complete |
-| DASH-01 | Phase 6 | Pending |
-| DASH-02 | Phase 6 | Pending |
-| DASH-03 | Phase 6 | Pending |
-| DASH-04 | Phase 6 | Pending |
-| DASH-05 | Phase 6 | Pending |
+| DASH-01 | Phase 6 | Complete |
+| DASH-02 | Phase 6 | Complete |
+| DASH-03 | Phase 6 | Complete |
+| DASH-04 | Phase 6 | Complete |
+| DASH-05 | Phase 6 | Complete |
 | DASH-06 | Phase 6 | Pending |
-| DASH-07 | Phase 6 | Pending |
+| DASH-07 | Phase 6 | Complete |
 | DASH-08 | Phase 6 | Complete |
 | BLUE-01 | Phase 6 | Pending |
 | BLUE-02 | Phase 6 | Pending |
