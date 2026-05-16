@@ -467,3 +467,8 @@ test("schema-parity: create_event_notification", async () => {
     const { CreateEventNotificationSchema } = await import("../src/tools/events/schemas.js");
     await assertSchemaParityForTool("create_event_notification", CreateEventNotificationSchema);
 });
+
+test("schema-parity: update_event_notification", async () => {
+    const { UpdateEventNotificationSchema } = await import("../src/tools/events/schemas.js");
+    await assertSchemaParityForTool("update_event_notification", UpdateEventNotificationSchema);
+});

@@ -30,6 +30,9 @@ import { handleDeleteEventDefinition } from "./delete-event-definition.js";
 //   Reclaims the v2.3 list_event_notifications dispatch name (S5 displacement).
 import { handleListEventNotifications } from "./list-event-notifications.js";
 import { handleCreateEventNotification } from "./create-event-notification.js";
+// Plan 05-04 Task 2 — EVENT-09 part A (update_event_notification).
+//   STRICT_NO_ECHO + C3-class encrypted-field handling on http-notification-v2.
+import { handleUpdateEventNotification } from "./update-event-notification.js";
 
 register("list_event_definitions", handleListEventDefinitions);
 register("get_event_definition", handleGetEventDefinition);
@@ -40,3 +43,4 @@ register("disable_event_definition", handleDisableEventDefinition);
 register("delete_event_definition", handleDeleteEventDefinition);
 register("list_event_notifications", handleListEventNotifications);
 register("create_event_notification", handleCreateEventNotification);
+register("update_event_notification", handleUpdateEventNotification);

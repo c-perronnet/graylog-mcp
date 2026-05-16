@@ -883,6 +883,24 @@ export const toolDefinitions = [
         },
     },
     {
+        name: "update_event_notification",
+        description: "Update an event notification on the active Graylog connection. STRICT_NO_ECHO partial-update (D-10): wire body emits ONLY fields the agent passed in args.changes — unchanged fields are NEVER on the wire (Graylog preserves them server-side). For http-notification-v2's encrypted basic_auth and api_secret, omitting them from args.changes.config means they are NEVER round-tripped on the wire — C3-class encrypted-field protection (mirror Phase 1 update_input D-12; T-05-04-02). Encrypted fields the agent DOES pass wrap as {set_value:<new>} on the wire and surface as <redacted> in the dry-run preview. Variant change (changes.config.type ≠ current.config.type) replaces the variant entirely; the new variant's encrypted-field inventory drives the redaction. body.id always matches the URL segment (Pitfall 8). Pre-flight GET fetches current.config.type for the encrypted-field lookup. dryRun:true by default.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                connectionName: { type: "string", description: "Optional connection name; defaults to active" },
+                dryRun: { type: "boolean", description: "Preview without applying. Default: true" },
+                idempotencyKey: { type: "string", description: "Optional retry-window dedupe key" },
+                notificationId: { type: "string", description: "Notification id from list_event_notifications" },
+                changes: {
+                    type: "object",
+                    description: "Partial update fields: {title?, description?, config?}. Omitting a key is a server-side no-op. For http-notification-v2, encrypted fields (basic_auth, api_secret) are NEVER on the wire unless explicitly set in changes.config.",
+                },
+            },
+            required: ["notificationId", "changes"],
+        },
+    },
+    {
         name: "cluster_log_messages",
         description: "Cluster similar log messages into Drain3-style templates. Fetches messages with the same args as search_messages_graylog, then groups them by structural similarity. Templates are persisted per connection and reused across calls.",
         inputSchema: {

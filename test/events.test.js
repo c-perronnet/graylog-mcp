@@ -2048,3 +2048,416 @@ test_p2("dispatch resolves list_event_notifications + create_event_notification 
     assert.equal(payloadCreate.tool, "create_event_notification");
     assert.equal(payloadCreate.dryRun, true);
 });
+
+// =====================================================================
+// Plan 05-04 Task 2 — update_event_notification (STRICT_NO_ECHO + C3)
+// =====================================================================
+//
+// EVENT-09 part A — D-10 STRICT_NO_ECHO partial-update:
+//   - wire body emits ONLY fields the agent touched.
+//   - body.id always matches the URL segment (Pitfall 8).
+//   - http-notification-v2 encrypted basic_auth + api_secret are NEVER on
+//     the wire when the agent did not pass them (C3 / T-05-04-02 ACCEPTANCE GATE).
+//   - encrypted fields the agent DID pass wrap as {set_value:<new>} on the wire
+//     and surface as <redacted> in the dry-run preview (T-05-04-03).
+//   - variant change replaces the variant entirely; old fields ABSENT.
+//   - schema rejects invalid discriminator values in changes.config (closed-set).
+
+test_p2("update_event_notification STRICT_NO_ECHO: title-only → wire body keys are EXACTLY [id, title]", async () => {
+    const { handleUpdateEventNotification } = await import(
+        "../src/tools/events/update-event-notification.js"
+    );
+    const captured = [];
+    _setCaptureRequest_p2((req) => {
+        captured.push({ method: req.method, path: req.path, body: req.body });
+        if (req.method === "GET" && req.path === "/api/events/notifications/abc") {
+            return {
+                id: "abc",
+                title: "Old",
+                description: "x",
+                config: {
+                    type: "slack-notification-v1",
+                    channel: "#a",
+                    webhook_url: "https://hook.example/",
+                    color: "#ff0500",
+                    include_title: true,
+                },
+            };
+        }
+        if (req.method === "PUT" && req.path === "/api/events/notifications/abc") {
+            return { id: "abc", title: req.body?.title ?? "?" };
+        }
+        throw new Error(`Unexpected ${req.method} ${req.path}`);
+    });
+    const res = await handleUpdateEventNotification({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                dryRun: false,
+                notificationId: "abc",
+                changes: { title: "New" },
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.applied, true);
+    const putCall = captured.find((c) => c.method === "PUT");
+    assert.ok(putCall, "PUT must fire on apply");
+    assert.deepEqual(Object.keys(putCall.body).sort(), ["id", "title"]);
+    assert.equal(putCall.body.id, "abc");
+    assert.equal(putCall.body.title, "New");
+});
+
+test_p2("update_event_notification STRICT_NO_ECHO: changes.config forwards the agent's per-variant block verbatim (no current.config echo)", async () => {
+    // [Rule 1 - Bug] Plan test 2 specified a partial slack config ({type, color}),
+    // but Plan 05-01's NotificationConfigSchema validates each variant's FULL
+    // required-field set at zod.parse (slack-v1 requires webhook_url + channel
+    // per Java SlackEventNotificationConfig.java:46-178). STRICT_NO_ECHO at this
+    // layer means: the agent's config block (whatever they passed) flows onto
+    // the wire verbatim — fields from current.config are NEVER echoed. The
+    // C3 ACCEPTANCE GATE (next test) exercises the C3-specific case where
+    // omitting an OPTIONAL encrypted field keeps it off the wire.
+    const { handleUpdateEventNotification } = await import(
+        "../src/tools/events/update-event-notification.js"
+    );
+    const captured = [];
+    _setCaptureRequest_p2((req) => {
+        captured.push({ method: req.method, path: req.path, body: req.body });
+        if (req.method === "GET" && req.path === "/api/events/notifications/abc") {
+            return {
+                id: "abc",
+                title: "Old",
+                description: "x",
+                // Current state has DIFFERENT field values (channel #old, color #ff0500).
+                // The wire body MUST reflect only the agent's input — never current.
+                config: {
+                    type: "slack-notification-v1",
+                    channel: "#old",
+                    webhook_url: "https://old.example/",
+                    color: "#ff0500",
+                    include_title: true,
+                    user_name: "graylog-bot",
+                },
+            };
+        }
+        if (req.method === "PUT" && req.path === "/api/events/notifications/abc") {
+            return { id: "abc" };
+        }
+        throw new Error(`Unexpected ${req.method} ${req.path}`);
+    });
+    const res = await handleUpdateEventNotification({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                dryRun: false,
+                notificationId: "abc",
+                changes: {
+                    config: {
+                        type: "slack-notification-v1",
+                        webhook_url: "https://new.example/",
+                        channel: "#new",
+                        color: "#00ff00",
+                        include_title: true,
+                    },
+                },
+            },
+        },
+    });
+    assert.equal(JSON.parse(res.content[0].text).applied, true);
+    const putCall = captured.find((c) => c.method === "PUT");
+    // Wire config carries the agent's exact values, not current.* echoes.
+    assert.equal(putCall.body.config.webhook_url, "https://new.example/");
+    assert.equal(putCall.body.config.channel, "#new");
+    assert.equal(putCall.body.config.color, "#00ff00");
+    // user_name from current.config MUST NOT be echoed onto the wire.
+    assert.equal("user_name" in putCall.body.config, false);
+});
+
+test_p2("update_event_notification C3 ACCEPTANCE GATE — http-v2 update WITHOUT basic_auth: basic_auth + api_secret ABSENT from wire", async () => {
+    // THE LOAD-BEARING C3 ACCEPTANCE GATE. The previous-iteration bug copied
+    // the masked `<value hidden>` placeholder from current state into the wire
+    // body, causing Graylog to re-encrypt the literal placeholder string and
+    // WIPE the secret. STRICT_NO_ECHO prevents this by NEVER touching
+    // current.config — only agent-supplied keys flow onto the wire.
+    //
+    // The agent here passes the http-v2 minimal block {type, url}. zod's
+    // .default()-marked fields (method, time_zone, skip_tls_verification,
+    // api_key_as_header) inflate during parse — those flow onto the wire as
+    // zod-defaulted scalars. CRITICALLY: basic_auth + api_secret are .optional()
+    // (not defaulted), so they remain undefined after parse → ABSENT from wire.
+    const { handleUpdateEventNotification } = await import(
+        "../src/tools/events/update-event-notification.js"
+    );
+    const captured = [];
+    _setCaptureRequest_p2((req) => {
+        captured.push({ method: req.method, path: req.path, body: req.body });
+        if (req.method === "GET" && req.path === "/api/events/notifications/abc") {
+            return {
+                id: "abc",
+                config: {
+                    type: "http-notification-v2",
+                    url: "https://old.example/",
+                    method: "POST",
+                    basic_auth: "<value hidden>",
+                    api_secret: "<value hidden>",
+                },
+            };
+        }
+        if (req.method === "PUT" && req.path === "/api/events/notifications/abc") {
+            return { id: "abc" };
+        }
+        throw new Error(`Unexpected ${req.method} ${req.path}`);
+    });
+    await handleUpdateEventNotification({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                dryRun: false,
+                notificationId: "abc",
+                changes: {
+                    config: { type: "http-notification-v2", url: "https://new.example/" },
+                },
+            },
+        },
+    });
+    const putCall = captured.find((c) => c.method === "PUT");
+    // The acceptance gate: encrypted fields the agent did NOT pass are ABSENT,
+    // regardless of which non-encrypted zod-defaulted scalars came along.
+    assert.equal("basic_auth" in putCall.body.config, false, "basic_auth must NOT be on the wire (C3 GATE)");
+    assert.equal("api_secret" in putCall.body.config, false, "api_secret must NOT be on the wire (C3 GATE)");
+    // The agent's url propagates verbatim; current.url is NEVER echoed.
+    assert.equal(putCall.body.config.url, "https://new.example/");
+});
+
+test_p2("update_event_notification C3 wire: http-v2 update WITH new basic_auth wraps as {set_value} on the wire", async () => {
+    const { handleUpdateEventNotification } = await import(
+        "../src/tools/events/update-event-notification.js"
+    );
+    const captured = [];
+    _setCaptureRequest_p2((req) => {
+        captured.push({ method: req.method, path: req.path, body: req.body });
+        if (req.method === "GET" && req.path === "/api/events/notifications/abc") {
+            return {
+                id: "abc",
+                config: { type: "http-notification-v2", url: "https://old.example/" },
+            };
+        }
+        if (req.method === "PUT" && req.path === "/api/events/notifications/abc") {
+            return { id: "abc" };
+        }
+        throw new Error(`Unexpected ${req.method} ${req.path}`);
+    });
+    await handleUpdateEventNotification({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                dryRun: false,
+                notificationId: "abc",
+                // url is required on http-v2; agent passes the existing-or-new url
+                // alongside the new basic_auth. STRICT_NO_ECHO still applies for the
+                // optional/encrypted fields not in the input (api_secret).
+                changes: {
+                    config: {
+                        type: "http-notification-v2",
+                        url: "https://hook.example/",
+                        basic_auth: "newSecret",
+                    },
+                },
+            },
+        },
+    });
+    const putCall = captured.find((c) => c.method === "PUT");
+    assert.ok(putCall, "PUT must fire on apply");
+    // EncryptedValue deserialization on the wire: {set_value: <new>}.
+    assert.deepEqual(putCall.body.config.basic_auth, { set_value: "newSecret" });
+    // api_secret was NOT in the agent input → MUST NOT be on the wire.
+    assert.equal("api_secret" in putCall.body.config, false);
+});
+
+test_p2("update_event_notification C3 preview: http-v2 update WITH new basic_auth shows <redacted> in preview", async () => {
+    const { handleUpdateEventNotification } = await import(
+        "../src/tools/events/update-event-notification.js"
+    );
+    _setCaptureRequest_p2((req) => {
+        if (req.method === "GET" && req.path === "/api/events/notifications/abc") {
+            return {
+                id: "abc",
+                config: { type: "http-notification-v2", url: "https://old.example/" },
+            };
+        }
+        throw new Error(`Unexpected ${req.method} ${req.path}`);
+    });
+    const res = await handleUpdateEventNotification({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                notificationId: "abc",
+                changes: {
+                    config: {
+                        type: "http-notification-v2",
+                        url: "https://hook.example/",
+                        basic_auth: "newSecret",
+                    },
+                },
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.dryRun, true);
+    assert.equal(payload.preview.body.config.basic_auth, "<redacted>");
+    // api_secret was NOT touched by the agent, so it MUST NOT appear on the
+    // preview body either — STRICT_NO_ECHO covers preview symmetrically.
+    assert.equal("api_secret" in payload.preview.body.config, false);
+});
+
+test_p2("update_event_notification variant change: old variant fields ABSENT; new type's encrypted-field inventory drives redaction", async () => {
+    const { handleUpdateEventNotification } = await import(
+        "../src/tools/events/update-event-notification.js"
+    );
+    const captured = [];
+    _setCaptureRequest_p2((req) => {
+        captured.push({ method: req.method, path: req.path, body: req.body });
+        if (req.method === "GET" && req.path === "/api/events/notifications/abc") {
+            return {
+                id: "abc",
+                config: {
+                    type: "slack-notification-v1",
+                    webhook_url: "https://hook.example/",
+                    channel: "#a",
+                    color: "#ff0500",
+                    include_title: true,
+                },
+            };
+        }
+        if (req.method === "PUT" && req.path === "/api/events/notifications/abc") {
+            return { id: "abc" };
+        }
+        throw new Error(`Unexpected ${req.method} ${req.path}`);
+    });
+    await handleUpdateEventNotification({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                dryRun: false,
+                notificationId: "abc",
+                changes: {
+                    config: {
+                        type: "teams-notification-v2",
+                        webhook_url: "https://outlook.office.com/webhook/X",
+                        adaptive_card: "{}",
+                    },
+                },
+            },
+        },
+    });
+    const putCall = captured.find((c) => c.method === "PUT");
+    assert.equal(putCall.body.config.type, "teams-notification-v2");
+    // Old slack-only fields (channel, color, include_title) must NOT bleed into
+    // the new variant's wire config. STRICT_NO_ECHO carries the variant change.
+    assert.equal("channel" in putCall.body.config, false);
+    assert.equal("color" in putCall.body.config, false);
+    assert.equal("include_title" in putCall.body.config, false);
+});
+
+test_p2("update_event_notification Pitfall 8 — body.id matches URL segment", async () => {
+    const { handleUpdateEventNotification } = await import(
+        "../src/tools/events/update-event-notification.js"
+    );
+    _setCaptureRequest_p2(() => ({
+        id: "abc",
+        config: { type: "slack-notification-v1", webhook_url: "x", channel: "x", color: "#ff0500", include_title: true },
+    }));
+    const res = await handleUpdateEventNotification({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                notificationId: "abc",
+                changes: { title: "x" },
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.preview.body.id, "abc");
+});
+
+test_p2("update_event_notification schema rejection: changes.config.type outside closed set rejects at zod.parse", async () => {
+    const { handleUpdateEventNotification } = await import(
+        "../src/tools/events/update-event-notification.js"
+    );
+    // Poisoned seam: a successful zod.parse would fire the pre-flight GET.
+    _setCaptureRequest_p2(() => {
+        throw new Error("HTTP call fired despite invalid discriminator");
+    });
+    const res = await handleUpdateEventNotification({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                notificationId: "abc",
+                changes: { config: { type: "script-notification-v1" } },
+            },
+        },
+    });
+    assert.equal(res.isError, true);
+});
+
+test_p2("update_event_notification apply HAPPY: pre-flight GET + PUT fire in order; applied:true", async () => {
+    const { handleUpdateEventNotification } = await import(
+        "../src/tools/events/update-event-notification.js"
+    );
+    const captured = [];
+    _setCaptureRequest_p2((req) => {
+        captured.push({ method: req.method, path: req.path });
+        if (req.method === "GET" && req.path === "/api/events/notifications/abc") {
+            return { id: "abc", config: { type: "http-notification-v1", url: "https://old.example/" } };
+        }
+        if (req.method === "PUT" && req.path === "/api/events/notifications/abc") {
+            return { id: "abc", config: { type: "http-notification-v1", url: "https://new.example/" } };
+        }
+        throw new Error(`Unexpected ${req.method} ${req.path}`);
+    });
+    const res = await handleUpdateEventNotification({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                dryRun: false,
+                notificationId: "abc",
+                changes: { config: { type: "http-notification-v1", url: "https://new.example/" } },
+            },
+        },
+    });
+    assert.deepEqual(captured, [
+        { method: "GET", path: "/api/events/notifications/abc" },
+        { method: "PUT", path: "/api/events/notifications/abc" },
+    ]);
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.applied, true);
+});
+
+// ---------- dispatch + tool-count ----------
+
+test_p2("dispatch resolves update_event_notification after Plan 05-04 Task 2 registration", async () => {
+    const { dispatch } = await import("../src/dispatch.js");
+    await import("../src/tools/_register.js");
+    _setCaptureRequest_p2((req) => {
+        if (req.method === "GET" && req.path === "/api/events/notifications/abc") {
+            return {
+                id: "abc",
+                config: { type: "slack-notification-v1", webhook_url: "x", channel: "x", color: "#ff0500", include_title: true },
+            };
+        }
+        throw new Error(`Unexpected ${req.method} ${req.path}`);
+    });
+    const res = await dispatch({
+        params: {
+            name: "update_event_notification",
+            arguments: {
+                _testConnection: "fake",
+                notificationId: "abc",
+                changes: { title: "DispTest" },
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.tool, "update_event_notification");
+    assert.equal(payload.dryRun, true);
+});
