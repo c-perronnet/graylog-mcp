@@ -16,6 +16,7 @@ export class GraylogError extends Error {
 }
 
 export class GraylogValidationError extends GraylogError { kind = "validation"; }
+export class GraylogUnauthorizedError extends GraylogError { kind = "unauthorized"; }
 export class GraylogPermissionError extends GraylogError { kind = "permission"; }
 export class GraylogNotFoundError extends GraylogError { kind = "not_found"; }
 export class GraylogConflictError extends GraylogError { kind = "conflict"; }
@@ -27,6 +28,7 @@ export class GraylogUnprocessableError extends GraylogError { kind = "unprocessa
 export function mapGraylogError(res, ctx) {
     const Ctor =
         res.status === 400 ? GraylogValidationError :
+        res.status === 401 ? GraylogUnauthorizedError :
         res.status === 403 ? GraylogPermissionError :
         res.status === 404 ? GraylogNotFoundError :
         res.status === 409 ? GraylogConflictError :
