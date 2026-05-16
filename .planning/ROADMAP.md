@@ -129,12 +129,13 @@
   2. The blueprint `setup_app_monitoring_stack(app_name, source_pattern)` produces a working stream + pipeline (with starter rules) + dashboard (with 4 starter widgets from the curated library) + error-rate event definition, all reachable in the Graylog UI on apply, with the dry-run output showing the full ordered chain of would-be requests annotated with `dependsOn` references.
   3. The curated widget-template library (DASH-08) ships 8 templates — `error_rate_over_time`, `top_sources_by_volume`, `level_distribution`, `top_error_clusters`, `request_rate_over_time`, `field_value_distribution`, `recent_events_table`, `stream_activity_overview` — and `add_widget_from_template` drops any of them onto an existing dashboard from a single tool call.
   4. All 6 blueprints (BLUE-01 through BLUE-06) compose from `src/services/*` (never from other tool handlers), and their dry-run output is a list of planned requests with explicit `dependsOn` annotations so the agent can reason about each step independently.
-**Plans**: 5 plans
-  - [x] 02-01-PLAN.md — Foundation amendments (handler.js _confirmationToken forward + requireConfirm gate; conflict.js index_sets envelope) + await_system_job (INDEX-08) + list_index_sets (INDEX-01) + get_index_set (INDEX-02) + U1 live-smoke decision artifact
-  - [x] 02-02-PLAN.md — create_index_set (INDEX-03) with D-10 + D-08 friendly aliases + D-09 6 strict configs + M5 idempotency; update_index_set (INDEX-04) with D-11 atomic strategy-replace + U1-resolved partial-update + ND2 pre-flight
-  - [x] 02-03-PLAN.md — delete_index_set (INDEX-05) C1 mitigation centerpiece — sha-256 confirmation hash, D-04 inverted default, D-05 stats hard-block, ND1 default refusal, D-15 async envelope
-  - [x] 02-04-PLAN.md — set_default_index_set (INDEX-06) D-13 can_be_default invariant + cycle_deflector (INDEX-07) ND3 writable pre-flight + UPDATED D-14 sync semantics + side_effects.observable_at
-  - [x] 02-05-PLAN.md — Snapshot fixtures (9 per RESEARCH §Snapshot Fixture Design) + schema-parity enrichment (8 tools) + auth-redaction confirmationToken allowlist + VALIDATION.md flip + human-verify checkpoint
+**Plans**: 6 plans
+  - [ ] 06-01-PLAN.md — Foundation (6 services modules + widget-templates skeleton + blueprint-chain helper + widget-position-integrity validator + conflict.js views envelope + 06-U1-SMOKE.md probing the 4 open questions)
+  - [ ] 06-02-PLAN.md — Dashboard CRUD: list/get/create/update/delete_dashboard + remove_widget (DASH-01..05, DASH-07) — C7 ACCEPTANCE GATE via internal Search+View chain; D-02 structural enforcement; D-03 widget-position integrity validator
+  - [ ] 06-03-PLAN.md — Widget templates (DASH-08, 8 frozen triplet builders) + add_widget_from_template (DASH-06 — M7 closed-set rejection); top_error_clusters ships as text-widget placeholder per Q3 default
+  - [ ] 06-04-PLAN.md — Blueprints A: setup_long_term_archival_index (BLUE-05), setup_debug_log_dropping (BLUE-06), setup_pipeline_for_stream (BLUE-04 — reuses pipeline-dsl/emit)
+  - [ ] 06-05-PLAN.md — Blueprints B: setup_app_monitoring_stack (BLUE-01 — 6-step headline mega-chain), setup_error_alerting (BLUE-02), create_app_health_dashboard (BLUE-03)
+  - [ ] 06-06-PLAN.md — Snapshot freeze (18 fixtures incl. C7 + D-03 + M7 + BLUE-01 mega-chain + BLUE-01 partial-failure) + schema-parity for 14 tools + auth-redaction lint + 06-VALIDATION.md flip + human-verify checkpoint
 **UI hint**: yes
 
 ### Phase 7: Final Hardening
