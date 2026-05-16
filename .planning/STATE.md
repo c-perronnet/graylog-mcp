@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v2.3
 milestone_name: milestone
-status: Phase complete — ready for verification
-last_updated: "2026-05-16T03:29:17.338Z"
+status: Executing Phase 07
+last_updated: "2026-05-16T03:49:06.823Z"
 progress:
   total_phases: 8
   completed_phases: 7
-  total_plans: 38
+  total_plans: 41
   completed_plans: 38
-  percent: 100
+  percent: 93
 ---
 
 # Project Memory: Graylog MCP — Full Admin Surface
@@ -27,8 +27,8 @@ progress:
 
 ## Current Position
 
-Phase: 06 (dashboards-widgets-blueprints) — COMPLETE (ready for /gsd-verify-work)
-Plan: 6 of 6 (all plans complete; Phase 6 closed via AFK auto-approval)
+Phase: 07 (final-hardening) — EXECUTING
+Plan: 1 of 3
 
 - **Phase**: 6 — Dashboards, Widget Templates & Blueprints (foundation landed Plan 06-01; Dashboard CRUD landed Plan 06-02 — DASH-01..05 + DASH-07 ship the C7 ACCEPTANCE GATE; widget-template library + DASH-06 add_widget_from_template landed Plan 06-03 — M7 ACCEPTANCE GATE + DASH-08 finalized + Q3 TEXT_WIDGET_PLACEHOLDER for top_error_clusters; Blueprints A landed Plan 06-04 — BLUE-04/05/06 ship setup_pipeline_for_stream (variable-length N+2 chain) + setup_long_term_archival_index (1-step chain) + setup_debug_log_dropping (3-step chain with syslog inversion); Blueprints B landed Plan 06-05 — BLUE-01/02/03 close the wire-tool surface for Phase 6: BLUE-01 setup_app_monitoring_stack HEADLINE 6-step multi-domain chain with composite step 5 preserving C7 mitigation + custom apply walker for stream_id-key resolution + BLUE-02 setup_error_alerting 1-step error-rate event def + BLUE-03 create_app_health_dashboard thin wrapper over create_dashboard with 4 default widgets pre-wired; Plan 06-06 (snapshot freeze) is the final phase plan)
 - **Plan**: 2 of 6 complete (Plan 06-02 ships the 6 dashboard CRUD tools — DASH-01 list_dashboards (narrow projection [id, title, summary, description] + Q1 WRAPPER_SIDE_TYPE_FILTER drops saved-searches even if upstream ?query=type:DASHBOARD leaks + response.views envelope unwrap per Pitfall 1), DASH-02 get_dashboard (full ViewDTO via plain async handler; 404 via wrapGraylogError; load-bearing for remove_widget pre-flight + update_dashboard GET-current overlay), DASH-03 create_dashboard (THE C7 ACCEPTANCE GATE — internal Search+View 2-step chain via executeChain; agent NEVER sees the intermediate Search ID; D-01 chain transcript surfaced via handler.js req.chain spread amendment; D-02 .strict() schema rejects agent-supplied searchId at zod parse; D-03 widget-position validator runs BEFORE the FOUND-11 existingMatches probe — orphan widget/position refuses with widget_position_integrity_violation and NO HTTP fires; wrapper-generated UUID widget IDs via randomUUID() + leading-underscore _setUUIDGeneratorForTests test seam; FOUND-11 existingMatches probe filters on view.type==="DASHBOARD" so saved-search title collisions don't count as duplicates), DASH-04 update_dashboard (STRICT_NO_ECHO partial-update with GET-current pre-flight + overlay covering title/description/summary only; UpdateDashboardSchema.changes is .strict() so searchId is rejected at parse — search-ID immutable post-creation; Pitfall 8 body.id matches URL; CreateEntityRequest envelope mirrors createDashboard), DASH-05 delete_dashboard (LEAF DELETE Phase 5 D-08 informational-cascade pattern — NO cascade-hash, NO confirmationToken, NO requireConfirm; informational cascades.widgets.count via best-effort GET pre-flight; 404/403/network failure falls through to count:0 and DELETE surfaces real error on apply), DASH-07 remove_widget (symmetric Search+View atomic two-step PUT chain — PUT /api/views/search/{searchId} FIRST stripping widget's search_types from queries[stateKey].search_types so View never references a removed search_type, then PUT /api/views/{id} stripping widget+position+widget_mapping entry; D-03 validator runs on prospective post-remove sets BEFORE wire emission; widget_not_found refusal + dashboard_missing_search_binding refusal before any PUT; Pitfall 9 acceptance — no transactional rollback; transcript surfaces failed_at_step). handler.js gained TWO amendments in Plan 06-02: req.chain spread onto dry-run preview JSON (reused by every BLUE-XX blueprint in Plans 06-04/05); _testConnection stripped from rawArgs BEFORE schema.parse so .strict() schemas don't reject the test seam (Rule 3 unblocker — landed inside Task 2 GREEN atomically). errors.js wrapGraylogError plain-Error reason surface (Rule 2 cross-cutting — surfaces [reason: <tag>] suffix + response.reason field for client-side plain Errors with structured reasons; widget_not_found, widget_position_integrity_violation, dashboard_missing_search_binding all get agent-programmatic identification parity with GraylogError instances). 42 net-new tests in test/dashboards.test.js covering all 6 tools including all C7/D-02/D-03 acceptance gates pinned by named tests. Closes DASH-01, DASH-02, DASH-03, DASH-04, DASH-05, DASH-07 (6 of 8 phase 6 dashboard requirements; DASH-06 add_widget_from_template lands in Plan 06-03; DASH-08 closed by Plan 06-01's widget-template skeleton).
