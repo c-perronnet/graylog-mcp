@@ -517,6 +517,7 @@ None.
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
 | 260516-ivt | Fix client.js bodyless-request 400 bug | 2026-05-16 | d0a9b91 | [260516-ivt-fix-client-js-bodyless-request-400-bug](./quick/260516-ivt-fix-client-js-bodyless-request-400-bug/) |
+| 260516-mcf | Fix Graylog widget-template interval shape bug | 2026-05-16 | 849f5a5 | [260516-mcf-fix-graylog-widget-template-interval-sha](./quick/260516-mcf-fix-graylog-widget-template-interval-sha/) |
 
 ## Session Continuity
 
