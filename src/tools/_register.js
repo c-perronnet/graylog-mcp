@@ -81,6 +81,10 @@ import "./events/index.js";
 // across Tasks 1-4 of Plan 06-02. Plan 06-03 will extend with DASH-06
 // add_widget_from_template alongside the widget-template library.
 import "./dashboards/index.js";
+// Phase 6 Plan 04 blueprints barrel — registers BLUE-04/05/06:
+// setup_pipeline_for_stream, setup_long_term_archival_index,
+// setup_debug_log_dropping. Plan 05 extends this barrel with BLUE-01/02/03.
+import "./blueprints/index.js";
 
 // Names that already fit `<verb>_<domain>_<noun>` (10 of 23 — list_streams
 // displaced; the new Phase 3 handler is registered via ./streams/index.js

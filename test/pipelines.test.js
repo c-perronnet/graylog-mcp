@@ -393,7 +393,7 @@ test("dispatch resolves list_pipelines/get_pipeline/delete_pipeline via the new 
     assert.ok(Array.isArray(payload.items));
 });
 
-test("assertAllToolsRegistered passes after Plan 06-03 end (count = 84; +add_widget_from_template completes DASH-06)", async () => {
+test("assertAllToolsRegistered passes after Plan 06-04 Task 1 (count = 85; +BLUE-05)", async () => {
     const { dispatch, assertAllToolsRegistered } = await import("../src/dispatch.js");
     await import("../src/tools/_register.js");
     const { toolDefinitions } = await import("../src/tools.js");
@@ -417,7 +417,9 @@ test("assertAllToolsRegistered passes after Plan 06-03 end (count = 84; +add_wid
     // Plan 06-03 Task 2 adds DASH-06 add_widget_from_template → 84
     // (the 7th dashboard tool, paired with the 8 widget-template builders
     // shipped in Plan 06-03 Task 1).
-    assert.equal(toolDefinitions.length, 84, `Expected 84 tools after Plan 06-03 end (Phase 6 Plan 03 complete: 7 dashboard tools shipped); got ${toolDefinitions.length}`);
+    // Plan 06-04 Task 1 adds BLUE-05 setup_long_term_archival_index → 85.
+    // Plan 06-04 Tasks 2-3 add BLUE-06 + BLUE-04 → 86 → 87.
+    assert.equal(toolDefinitions.length, 85, `Expected 85 tools after Plan 06-04 Task 1 (BLUE-05 shipped); got ${toolDefinitions.length}`);
 });
 
 // =====================================================================

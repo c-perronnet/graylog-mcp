@@ -1745,4 +1745,37 @@ export const toolDefinitions = [
             required: ["dashboardId", "templateName"],
         },
     },
+    // ====================================================================
+    // Phase 6 Plan 04 — Blueprints A (BLUE-04/05/06).
+    //
+    // 3 of the 6 BLUE-XX blueprints (the simpler chains; Plan 05 ships
+    // BLUE-01/02/03 with longer chains). All 3 compose from src/services/*
+    // ONLY (D-09 architectural boundary, grep-pinned in test/blueprints.test.js).
+    // Each routes through defineMutatingHandler so dryRun:true default,
+    // idempotency key derivation, and the writable-flag connection gate are
+    // inherited uniformly. Each apply path walks executeChain (Plan 06-01)
+    // so __SERVER_ASSIGNED__step{N} placeholders are substituted into
+    // downstream step bodies at apply-time.
+    // ====================================================================
+    {
+        name: "setup_long_term_archival_index",
+        description: "Blueprint (BLUE-05): create an index set bundled for long-term archival — SizeBasedRotationStrategyConfig (1 GiB/index) + DeletionRetentionStrategyConfig (max_number_of_indices ≈ retentionDays, 1 index/day approximation). 1-step chain wrapping create_index_set. Dry-run preview surfaces `chain: [{step:1, tool:'create_index_set', request:{...}}]`; apply walks the chain via executeChain. Defaults: indexPrefix slugified from name; shards 4, replicas 1, writable true. Schema: { name, retentionDays:1..36500, description?, indexPrefix?, shards?, replicas? }.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                connectionName: { type: "string", description: "Optional per-call connection override" },
+                dryRun: { type: "boolean", description: "Default true. Set to false to apply." },
+                idempotencyKey: { type: "string", description: "Optional agent-supplied idempotency key" },
+                name: { type: "string", description: "Human-readable index-set title; slugified into the default indexPrefix when indexPrefix is not supplied." },
+                retentionDays: { type: "number", description: "Retention window in days (1..36500). Maps to max_number_of_indices on DeletionRetentionStrategyConfig (1 index per day approximation)." },
+                description: { type: "string", description: "Optional free-form description (default: 'Long-term archival index for <name>')" },
+                indexPrefix: { type: "string", description: "Optional Elasticsearch index prefix. When omitted, slugified from `name` (lowercase + underscores)." },
+                shards: { type: "number", description: "Elasticsearch shards per index (default 4)" },
+                replicas: { type: "number", description: "Elasticsearch replicas per shard (default 1)" },
+            },
+            required: ["name", "retentionDays"],
+        },
+    },
+    // Plan 06-04 Task 2 — setup_debug_log_dropping appends here.
+    // Plan 06-04 Task 3 — setup_pipeline_for_stream appends here.
 ];
