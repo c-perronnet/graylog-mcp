@@ -137,7 +137,7 @@ Composed entirely from services layers built in earlier phases. Compose at the s
 
 ### Final Hardening (HARD)
 
-- [ ] **HARD-01**: Tool-description audit — every tool ≤200 chars with a clear discrimination sentence; automated check as merge gate
+- [x] **HARD-01**: Tool-description audit — every tool ≤200 chars with a clear discrimination sentence; automated check as merge gate
 - [ ] **HARD-02**: `list_admin_tools(domain?)` meta-tool for agent discoverability across the ~91-tool surface (M7)
 - [ ] **HARD-03**: v7-vs-v6 read-tool smoke-test pass — confirm existing v2.3 tools still work against Graylog 7.2 (`GET /api/streams` deprecation, histogram fallback chain, event-definition list path)
 - [ ] **HARD-04**: c8 coverage report integrated; document baseline coverage % at milestone end
@@ -285,7 +285,7 @@ Populated by the roadmapper on 2026-05-13. Every v1 requirement maps to exactly 
 | BLUE-04 | Phase 6 | Complete |
 | BLUE-05 | Phase 6 | Complete |
 | BLUE-06 | Phase 6 | Complete |
-| HARD-01 | Phase 7 | Pending |
+| HARD-01 | Phase 7 | Complete |
 | HARD-02 | Phase 7 | Pending |
 | HARD-03 | Phase 7 | Pending |
 | HARD-04 | Phase 7 | Pending |

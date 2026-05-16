@@ -148,7 +148,7 @@
   3. All v2.3 read tools (`fetch_graylog_messages`, `get_log_histogram` with each of its 4 fallback strategies individually, `get_event_definitions`, etc.) pass a smoke-test pass against Graylog 7.2 — any v7 breakage encountered is a documented targeted fix, not a refactor.
   4. `c8 node --test` produces a coverage report; the baseline coverage percentage is documented in the milestone-complete artifact, and a follow-up migration plan exists for the deprecated `GET /api/streams` → `GET /api/streams/paginated` path.
 **Plans**: 3 plans
-  - [ ] 07-01-PLAN.md — HARD-01 tool-description audit script + wholesale-fix pass over 96 over-budget descriptions in src/tools.js + node:test regression gate + package.json audit:tool-descriptions runner
+  - [x] 07-01-PLAN.md — HARD-01 tool-description audit script + wholesale-fix pass over 96 over-budget descriptions in src/tools.js + node:test regression gate + package.json audit:tool-descriptions runner
   - [ ] 07-02-PLAN.md — HARD-02 list_admin_tools meta-tool (+1 net-new tool; 90→91) + HARD-04 c8 coverage integration (only new npm devDep this milestone) + baseline % capture
   - [ ] 07-03-PLAN.md — HARD-03 v7-vs-v6 read-tool smoke (5 fixtures, 9 tests covering critical drift surfaces from PITFALLS.md) + HARD-05 /api/streams deprecation migration doc + 07-VALIDATION.md flip + MILESTONE-SUMMARY.md
 
@@ -162,8 +162,8 @@
 | 3. Streams & Stream Rules | 5/5 | Complete | 2026-05-15 |
 | 4. Pipelines, Pipeline Rules & Connections | 6/6 | Complete | 2026-05-15 |
 | 5. Events & Notifications | 5/5 | Complete | 2026-05-16 |
-| 6. Dashboards, Widget Templates & Blueprints | 2/6 | In Progress | - |
-| 7. Final Hardening | 0/3 | Not started | - |
+| 6. Dashboards, Widget Templates & Blueprints | 6/6 | Complete | 2026-05-16 |
+| 7. Final Hardening | 1/3 | In Progress | - |
 
 ---
 *Roadmap created: 2026-05-13*
