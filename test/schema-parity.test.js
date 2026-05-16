@@ -448,3 +448,8 @@ test("schema-parity: disable_event_definition", async () => {
     const { DisableEventDefinitionSchema } = await import("../src/tools/events/schemas.js");
     await assertSchemaParityForTool("disable_event_definition", DisableEventDefinitionSchema);
 });
+
+test("schema-parity: delete_event_definition", async () => {
+    const { DeleteEventDefinitionSchema } = await import("../src/tools/events/schemas.js");
+    await assertSchemaParityForTool("delete_event_definition", DeleteEventDefinitionSchema);
+});

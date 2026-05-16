@@ -821,6 +821,26 @@ export const toolDefinitions = [
             required: ["definitionId"],
         },
     },
+    // Plan 05-03 Task 2 — EVENT-05 delete_event_definition (count 72 → 73).
+    // D-08 INFORMATIONAL cascade: pre-flight GET surfaces the notifications
+    // the def references in cascades.notifications, but no confirmationToken
+    // is issued — notifications survive the delete (they are independent
+    // resources). Contrast Plan 05-04 delete_event_notification which IS
+    // load-bearing and issues a 64-hex cascade-hash via D-09.
+    {
+        name: "delete_event_definition",
+        description: "Delete an event definition on the active Graylog connection. Dry-run preview enumerates the notifications this def references via cascades.notifications (informational — the notifications themselves survive the delete; only the def→notification wiring vanishes). No confirmation token issued (D-08 leaf-delete pattern; cf. delete_event_notification which IS a load-bearing delete with cascade-hash gate). Pre-flight GET is best-effort: 404/403 fall through to an empty cascade array; the DELETE itself surfaces the real error on apply via wrapGraylogError. dryRun:true by default.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                connectionName: { type: "string", description: "Optional connection name; defaults to active" },
+                dryRun: { type: "boolean", description: "Preview without applying. Default: true" },
+                idempotencyKey: { type: "string", description: "Optional retry-window dedupe key" },
+                definitionId: { type: "string", description: "Event definition id from list_event_definitions" },
+            },
+            required: ["definitionId"],
+        },
+    },
     {
         name: "cluster_log_messages",
         description: "Cluster similar log messages into Drain3-style templates. Fetches messages with the same args as search_messages_graylog, then groups them by structural similarity. Templates are persisted per connection and reused across calls.",
