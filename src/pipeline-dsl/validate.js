@@ -18,7 +18,11 @@ const RESERVED = new Set(["if", "true", "false", "null"]);
 // reserved keywords + bare identifiers (they don't have a following paren).
 // Case-insensitive so camelCase typos like `toUpperCase` are captured for
 // flagging.
-const FN_PATTERN = /\b([a-zA-Z_][a-zA-Z0-9_]*)\s*\(/g;
+//
+// Pattern is a literal here (not module-scoped state), so callers always get
+// a fresh regex with `lastIndex: 0` — safe under any future async or
+// concurrent caller.
+const FN_PATTERN_SRC = "\\b([a-zA-Z_][a-zA-Z0-9_]*)\\s*\\(";
 
 /**
  * Validate a pipeline-rule DSL source string against the MERGED function
@@ -38,12 +42,30 @@ export function validateRuleSource(source, mergedCatalogue) {
         return { errors, warnings };
     }
 
-    // Paren balance — naive single-pass counter (ignores string content; the
-    // server parser is authoritative for string-aware balance).
+    // String-aware paren balance. Parens inside DSL string literals must NOT
+    // count toward balance — `then set_field("y", "hello (world)")` is valid
+    // even though the literal contains an unbalanced ")". RuleLang.g4 uses
+    // double-quoted strings with `\` as the escape character.
     let parens = 0;
     let firstUnbalancedClose = -1;
+    let inString = false;
+    let escape = false;
     for (let i = 0; i < source.length; i += 1) {
         const ch = source[i];
+        if (inString) {
+            if (escape) {
+                escape = false;
+            } else if (ch === "\\") {
+                escape = true;
+            } else if (ch === '"') {
+                inString = false;
+            }
+            continue;
+        }
+        if (ch === '"') {
+            inString = true;
+            continue;
+        }
         if (ch === "(") parens += 1;
         else if (ch === ")") {
             parens -= 1;
@@ -69,9 +91,12 @@ export function validateRuleSource(source, mergedCatalogue) {
     // `null`) — they look like function calls but are grammar productions.
     // The Graylog grammar's own reserved set `rule|when|then|end|let` never
     // appears followed by `(` so they fall through the regex naturally.
-    FN_PATTERN.lastIndex = 0;
+    //
+    // Fresh local regex per call so stateful `lastIndex` can never leak
+    // across async or concurrent calls.
+    const fnPattern = new RegExp(FN_PATTERN_SRC, "g");
     let m;
-    while ((m = FN_PATTERN.exec(source)) !== null) {
+    while ((m = fnPattern.exec(source)) !== null) {
         const name = m[1];
         if (RESERVED.has(name)) continue;
         if (!mergedCatalogue.has(name)) {
