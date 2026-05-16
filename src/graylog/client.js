@@ -33,7 +33,7 @@ export function makeClient(conn) {
             // the wrapper-layer check that lives in Plan 04. Even if a future
             // service-layer call bypasses defineMutatingHandler, a connection
             // marked writable: false cannot issue any non-GET request.
-            if (conn.writable === false && method !== "GET") {
+            if (conn.writable === false && method.toUpperCase() !== "GET") {
                 throw new GraylogError(
                     `Connection is read-only (writable: false). Refusing ${method} ${path}.`,
                     { status: 0, method, path, body: null }
