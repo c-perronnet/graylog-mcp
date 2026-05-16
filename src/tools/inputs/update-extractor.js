@@ -17,10 +17,13 @@
 // fields (TLS cert passwords, AWS credentials); extractors do not.
 //
 // extractor_type is immutable on update — Graylog rejects type changes
-// server-side (see ExtractorsResource.update). The merge below uses
-// current.extractor_type unconditionally; the schema does not even allow
-// extractor_type in `changes`, so this is structural enforcement at both the
-// zod layer AND the build layer.
+// server-side (see ExtractorsResource.update). The merge below sources it
+// from `current.extractor_type ?? current.type`: Graylog's extractor READ
+// DTO names the field `type`, while the WRITE body (CreateExtractorRequest)
+// expects `extractor_type` — a read-vs-write key asymmetry. The `?? current.type`
+// fallback handles the real read DTO today while staying correct if a future
+// Graylog version exposes `extractor_type` on read. The schema does not allow
+// extractor_type in `changes`, so immutability is enforced at the zod layer.
 
 import { defineMutatingHandler } from "../_shared/handler.js";
 import { UpdateExtractorSchema } from "./schemas.js";
@@ -54,8 +57,9 @@ export const handleUpdateExtractor = defineMutatingHandler({
             cursor_strategy: args.changes.cursor_strategy ?? current.cursor_strategy,
             source_field: args.changes.source_field ?? current.source_field,
             target_field: args.changes.target_field ?? current.target_field,
-            // Immutable — always from current.
-            extractor_type: current.extractor_type,
+            // Immutable — always from current. Read DTO names this `type`;
+            // write body expects `extractor_type` (read-vs-write key asymmetry).
+            extractor_type: current.extractor_type ?? current.type,
             extractor_config: args.changes.extractor_config ?? current.extractor_config,
             ...(hasConverters
                 ? { converters: args.changes.converters ?? current.converters }
