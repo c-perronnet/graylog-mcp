@@ -12,7 +12,9 @@ export function toIdBody(response, hint) {
     if (!response) return { id: null, body: null };
     const candidates = hint?.idFields ?? ["id"];
     for (const field of candidates) {
-        if (response[field]) return { id: response[field], body: response };
+        if (response[field] !== undefined && response[field] !== null) {
+            return { id: response[field], body: response };
+        }
     }
     return { id: null, body: response };
 }
