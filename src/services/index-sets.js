@@ -29,7 +29,7 @@
  * @param {string} [args.creationDate]                         ISO-8601; default now()
  * @param {number} [args.indexOptimizationMaxNumSegments]      default 1
  * @param {boolean} [args.indexOptimizationDisabled]           default false
- * @param {string} [args.fieldTypeRefreshInterval]             default "PT5S"
+ * @param {number} [args.fieldTypeRefreshInterval]             ms (Graylog wire); default 5000
  * @param {boolean} [args.writable]                            default true
  * @returns {Promise<unknown>}
  */
@@ -48,7 +48,7 @@ export function createIndexSet(client, args) {
         creation_date: args.creationDate ?? new Date().toISOString(),
         index_optimization_max_num_segments: args.indexOptimizationMaxNumSegments ?? 1,
         index_optimization_disabled: args.indexOptimizationDisabled ?? false,
-        field_type_refresh_interval: args.fieldTypeRefreshInterval ?? "PT5S",
+        field_type_refresh_interval: args.fieldTypeRefreshInterval ?? 5000,
         writable: args.writable ?? true,
     });
 }
