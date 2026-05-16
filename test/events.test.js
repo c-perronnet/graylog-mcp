@@ -1315,3 +1315,259 @@ test_p2("dispatch resolves enable_event_definition + disable_event_definition af
     assert.equal(payloadDisable.tool, "disable_event_definition");
     assert.equal(payloadDisable.dryRun, true);
 });
+
+// =====================================================================
+// Plan 05-03 Task 2 — delete_event_definition (D-08 informational cascade)
+// =====================================================================
+//
+// EVENT-05 (D-08 informational cascade — mirror Phase 1 delete_input):
+//   - DELETE /api/events/definitions/{id}.
+//   - Pre-flights GET /api/events/definitions/{id} to read the current
+//     `notifications[]` array; populates `cascades.notifications` in the
+//     dry-run preview JSON.
+//   - INFORMATIONAL ONLY — NO confirmationToken issued. Notifications survive
+//     the delete (they are independent resources owned by EVENT-07..EVENT-09);
+//     only the def→notification wiring vanishes.
+//   - Pre-flight is best-effort: 404 / 403 falls through to an empty cascades
+//     array; the DELETE itself surfaces the real error via wrapGraylogError.
+//
+// CONTRAST with Plan 05-04's delete_event_notification (D-09):
+//   - Notifications are LOAD-BEARING (delete is destructive across the
+//     def→notification linkage AND across all event-procedure references).
+//   - That handler ISSUES a 64-hex cascade-hash + REFUSES drift at apply
+//     time. D-08 here does NOT — the wiring loss is observable but not
+//     destructive.
+
+test_p2("delete_event_definition wire path: DELETE /api/events/definitions/{id}", async () => {
+    const { handleDeleteEventDefinition } = await import("../src/tools/events/delete-event-definition.js");
+    _setCaptureRequest_p2(eventsMultiCapture_p2([
+        { method: "GET", pathPattern: "/api/events/definitions/abc", response: { id: "abc", notifications: [] } },
+    ]));
+    const res = await handleDeleteEventDefinition({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                definitionId: "abc",
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.preview.method, "DELETE");
+    assert.equal(payload.preview.path, "/api/events/definitions/abc");
+});
+
+test_p2("delete_event_definition D-08 informational cascade populated from pre-flight notifications[]", async () => {
+    const { handleDeleteEventDefinition } = await import("../src/tools/events/delete-event-definition.js");
+    _setCaptureRequest_p2(eventsMultiCapture_p2([
+        {
+            method: "GET",
+            pathPattern: "/api/events/definitions/abc",
+            response: {
+                id: "abc",
+                title: "Spike Alert",
+                notifications: [
+                    { notification_id: "notif-1", notification_parameters: null },
+                    { notification_id: "notif-2", notification_parameters: { threshold: 10 } },
+                ],
+            },
+        },
+    ]));
+    const res = await handleDeleteEventDefinition({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                definitionId: "abc",
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.deepEqual(payload.cascades.notifications, [
+        { notification_id: "notif-1", notification_parameters: null },
+        { notification_id: "notif-2", notification_parameters: { threshold: 10 } },
+    ]);
+});
+
+test_p2("delete_event_definition D-08 issues NO confirmationToken (informational, not refusal gate)", async () => {
+    const { handleDeleteEventDefinition } = await import("../src/tools/events/delete-event-definition.js");
+    _setCaptureRequest_p2(eventsMultiCapture_p2([
+        {
+            method: "GET",
+            pathPattern: "/api/events/definitions/abc",
+            response: {
+                id: "abc",
+                notifications: [
+                    { notification_id: "notif-1", notification_parameters: null },
+                    { notification_id: "notif-2", notification_parameters: { threshold: 10 } },
+                ],
+            },
+        },
+    ]));
+    const res = await handleDeleteEventDefinition({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                definitionId: "abc",
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    // INFORMATIONAL cascade — confirmationToken key MUST be absent.
+    // Contrast with delete_event_notification (Plan 05-04) which DOES issue
+    // a 64-hex cascade-hash.
+    assert.equal("confirmationToken" in payload, false);
+});
+
+test_p2("delete_event_definition D-08 best-effort: 404 pre-flight → empty cascades.notifications", async () => {
+    const { handleDeleteEventDefinition } = await import("../src/tools/events/delete-event-definition.js");
+    _setCaptureRequest_p2(() => {
+        throw new GraylogNotFoundError_p2("not found", {
+            status: 404,
+            method: "GET",
+            path: "/api/events/definitions/missing",
+            body: null,
+        });
+    });
+    const res = await handleDeleteEventDefinition({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                definitionId: "missing",
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    // Best-effort: pre-flight 404 falls through to empty array, NOT missing.
+    // The DELETE itself will surface the real 404 on apply via wrapGraylogError.
+    assert.deepEqual(payload.cascades.notifications, []);
+});
+
+test_p2("delete_event_definition D-08 best-effort: 403 pre-flight → empty cascades.notifications", async () => {
+    const { GraylogPermissionError } = await import("../src/graylog/errors.js");
+    const { handleDeleteEventDefinition } = await import("../src/tools/events/delete-event-definition.js");
+    _setCaptureRequest_p2(() => {
+        throw new GraylogPermissionError("forbidden", {
+            status: 403,
+            method: "GET",
+            path: "/api/events/definitions/locked",
+            body: null,
+        });
+    });
+    const res = await handleDeleteEventDefinition({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                definitionId: "locked",
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.deepEqual(payload.cascades.notifications, []);
+});
+
+test_p2("delete_event_definition: NO cascade-hash code path (static-grep proof)", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { fileURLToPath } = await import("node:url");
+    const { dirname, join } = await import("node:path");
+    const __dir = dirname(fileURLToPath(import.meta.url));
+    const src = readFileSync(
+        join(__dir, "..", "src", "tools", "events", "delete-event-definition.js"),
+        "utf8",
+    );
+    // D-08 informational — none of these symbols may appear in the handler.
+    assert.equal(src.includes("_confirmationToken"), false, "delete_event_definition must NOT set _confirmationToken");
+    assert.equal(src.includes("computeCascadeHash"), false, "delete_event_definition must NOT import computeCascadeHash");
+    assert.equal(src.includes("computeNotificationCascadeHash"), false, "delete_event_definition must NOT import computeNotificationCascadeHash");
+});
+
+test_p2("delete_event_definition postApplyEstimate: {id, deleted: true}", async () => {
+    const { handleDeleteEventDefinition } = await import("../src/tools/events/delete-event-definition.js");
+    _setCaptureRequest_p2(eventsMultiCapture_p2([
+        { method: "GET", pathPattern: "/api/events/definitions/abc", response: { id: "abc", notifications: [] } },
+    ]));
+    const res = await handleDeleteEventDefinition({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                definitionId: "abc",
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.deepEqual(payload.postApplyEstimate, { id: "abc", deleted: true });
+});
+
+test_p2("delete_event_definition writable=false short-circuits BEFORE pre-flight GET", async () => {
+    _setConnectionsForTests_p2({
+        readonly: { baseUrl: "x", apiToken: "x", writable: false },
+    });
+    // Capture seam must NOT be hit — writable gate short-circuits in handler.js
+    // step 3, BEFORE build() runs. Set a poisoned route to verify.
+    _setCaptureRequest_p2(() => {
+        throw new Error("Pre-flight GET fired despite writable=false; gate is broken");
+    });
+    const { handleDeleteEventDefinition } = await import("../src/tools/events/delete-event-definition.js");
+    const res = await handleDeleteEventDefinition({
+        params: {
+            arguments: {
+                connectionName: "readonly",
+                definitionId: "abc",
+            },
+        },
+    });
+    assert.equal(res.isError, true);
+    assert.equal(res.reason, "connection_read_only");
+    _clearConnectionsForTests_p2();
+});
+
+test_p2("delete_event_definition apply: pre-flight GET + DELETE fire in order; applied:true", async () => {
+    const { handleDeleteEventDefinition } = await import("../src/tools/events/delete-event-definition.js");
+    const captured = [];
+    _setCaptureRequest_p2((req) => {
+        captured.push({ method: req.method, path: req.path });
+        if (req.method === "GET" && req.path === "/api/events/definitions/abc") {
+            return { id: "abc", notifications: [{ notification_id: "n1" }] };
+        }
+        if (req.method === "DELETE" && req.path === "/api/events/definitions/abc") {
+            return { id: "abc", deleted: true };
+        }
+        throw new Error(`Unexpected ${req.method} ${req.path}`);
+    });
+    const res = await handleDeleteEventDefinition({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                definitionId: "abc",
+                dryRun: false,
+            },
+        },
+    });
+    // Both pre-flight GET (from build) and DELETE (from apply) must fire.
+    assert.deepEqual(captured, [
+        { method: "GET", path: "/api/events/definitions/abc" },
+        { method: "DELETE", path: "/api/events/definitions/abc" },
+    ]);
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.applied, true);
+});
+
+// ---------- dispatch + tool count ----------
+
+test_p2("dispatch resolves delete_event_definition after Plan 05-03 Task 2 registration", async () => {
+    const { dispatch } = await import("../src/dispatch.js");
+    await import("../src/tools/_register.js");
+    _setCaptureRequest_p2(eventsMultiCapture_p2([
+        { method: "GET", pathPattern: "/api/events/definitions/abc", response: { id: "abc", notifications: [] } },
+    ]));
+    const res = await dispatch({
+        params: {
+            name: "delete_event_definition",
+            arguments: {
+                _testConnection: "fake",
+                definitionId: "abc",
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.tool, "delete_event_definition");
+    assert.equal(payload.dryRun, true);
+});
