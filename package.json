@@ -9,7 +9,8 @@
         "dev": "node --watch src/index.js",
         "test": "node --test 'test/**/*.test.js'",
         "test:manual": "echo \"Error: no test specified\" && exit 1",
-        "audit:tool-descriptions": "node scripts/audit-tool-descriptions.js"
+        "audit:tool-descriptions": "node scripts/audit-tool-descriptions.js",
+        "coverage": "c8 --reporter=text --reporter=lcov --reporter=text-summary node --test 'test/**/*.test.js'"
     },
     "keywords": [
         "mcp",
@@ -40,6 +41,7 @@
     },
     "devDependencies": {
         "@types/node": "^22.0.0",
+        "c8": "^10.1.3",
         "typescript": "^5.9.2"
     },
     "engines": {
