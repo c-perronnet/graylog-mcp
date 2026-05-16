@@ -85,7 +85,7 @@ export const handleDeleteIndexSet = defineMutatingHandler({
             return {
                 method: "DELETE",
                 path: `${indexSetPath}?delete_indices=false`,
-                body: undefined,
+                // DELETE is body-less; apply() passes null to client.request().
                 postApplyEstimate: { id: args.indexSetId, deletedIndices: false },
                 _indexSetId: args.indexSetId,
             };
@@ -160,7 +160,7 @@ export const handleDeleteIndexSet = defineMutatingHandler({
         return {
             method: "DELETE",
             path: `${indexSetPath}?delete_indices=true`,
-            body: undefined,
+            // DELETE is body-less; apply() passes null to client.request().
             cascades: {
                 // Sorted for stable preview output (the hash sorts internally;
                 // the cascade list is for the agent's reading, also sorted for
@@ -191,7 +191,10 @@ export const handleDeleteIndexSet = defineMutatingHandler({
     apply: async (client, req) => {
         // The writable gate (D-16) and requireConfirm gate (D-01) both fired
         // upstream; if we are here the agent has echoed the correct token.
-        await client.request(req.method, req.path, req.body);
+        // DELETE is body-less — pass null per the project's idiom for
+        // body-less requests (see GET calls in build() above). build() never
+        // sets req.body on either branch, so there is no payload to forward.
+        await client.request(req.method, req.path, null);
 
         // UPDATED D-15: the apply-time message must stay consistent with the
         // dry-run preview. indexSetId is stashed on the request descriptor at
