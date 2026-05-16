@@ -203,3 +203,36 @@ test("findExistingMatches picks elements before items when both are present (cha
     assert.equal(matches.length, 1);
     assert.equal(matches[0].id, "e1", "elements MUST win over items");
 });
+
+// =====================================================================
+// Plan 06-01 Test 11 — views envelope normalization (Phase 6 Pitfall 1)
+// =====================================================================
+//
+// Graylog /api/views returns PaginatedResponse<ViewDTO> which serializes as
+// { views: [...], total, page, per_page }. Phase 6 list_dashboards (DASH-01)
+// and create_dashboard FOUND-11 duplicate-title pre-checks consume
+// findExistingMatches against /api/views; without the views envelope
+// amendment, the list-pre-check returns [] for any non-empty cluster.
+// Pitfall 1 of 06-RESEARCH.md.
+
+test("findExistingMatches unwraps response.views envelope (Phase 6 Pitfall 1 — Graylog /api/views PaginatedResponse)", async () => {
+    _setCaptureRequest(() => ({
+        views: [
+            { id: "v-1", title: "Dashboard A", type: "DASHBOARD" },
+            { id: "v-2", title: "Dashboard B", type: "DASHBOARD" },
+        ],
+        total: 2,
+        page: 1,
+        per_page: 50,
+    }));
+    const client = makeClient(FAKE_CONN);
+    const matches = await findExistingMatches(client, {
+        listPath: "/api/views",
+        matchFn: () => true,
+    });
+    assert.equal(matches.length, 2);
+    assert.equal(matches[0].id, "v-1");
+    assert.equal(matches[0].title, "Dashboard A");
+    assert.equal(matches[0].similarity_reason, "exact");
+    assert.equal(matches[1].id, "v-2");
+});

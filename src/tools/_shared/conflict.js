@@ -25,8 +25,12 @@ export async function findExistingMatches(client, opts = {}) {
     // Graylog list endpoints sometimes wrap the array in a domain-specific
     // envelope. Phase 5 adds `elements` for the /paginated PageListResponse
     // shape (events/definitions/paginated + events/notifications/paginated).
-    // Position: `elements` BEFORE `items` so the modern PageListResponse wins
-    // over the rare endpoint that uses a generic `items` wrapper.
+    // Phase 6 adds `views` for the /api/views PaginatedResponse shape
+    // (dashboards/saved-searches) — see 06-RESEARCH.md §Pitfall 1.
+    // Position: `elements` BEFORE `views` BEFORE `items` so the modern
+    // PageListResponse wins, Phase 6 PaginatedResponse wins over the rare
+    // endpoint that uses a generic `items` wrapper, and the fall-through to
+    // `items` is preserved as the last resort.
     const items = Array.isArray(response)
         ? response
         : (response?.inputs
@@ -34,6 +38,7 @@ export async function findExistingMatches(client, opts = {}) {
             ?? response?.extractors
             ?? response?.index_sets
             ?? response?.elements
+            ?? response?.views
             ?? response?.items
             ?? []);
     return items.filter(opts.matchFn).map((item) => ({
