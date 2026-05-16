@@ -40,6 +40,11 @@ import {
 } from "../src/tools/dashboards/create-dashboard.js";
 import { handleUpdateDashboard } from "../src/tools/dashboards/update-dashboard.js";
 import { handleDeleteDashboard } from "../src/tools/dashboards/delete-dashboard.js";
+import {
+    handleRemoveWidget,
+    _setWidgetPositionValidatorForTests as _setRemoveWidgetValidatorForTests,
+    _clearWidgetPositionValidatorForTests as _clearRemoveWidgetValidatorForTests,
+} from "../src/tools/dashboards/remove-widget.js";
 
 import {
     ListDashboardsSchema,
@@ -47,6 +52,7 @@ import {
     CreateDashboardSchema,
     UpdateDashboardSchema,
     DeleteDashboardSchema,
+    RemoveWidgetSchema,
 } from "../src/tools/dashboards/schemas.js";
 
 import {
@@ -70,6 +76,7 @@ afterEach(() => {
     setActiveConnection(null);
     _clearUUIDGeneratorForTests();
     _clearWidgetPositionValidatorForTests();
+    _clearRemoveWidgetValidatorForTests();
 });
 
 // Seeded deterministic UUID generator for byte-stable snapshot fixtures.
@@ -1011,6 +1018,247 @@ test("UpdateDashboardSchema rejects missing dashboardId at parse", () => {
 test("DeleteDashboardSchema rejects missing dashboardId at parse", () => {
     assert.throws(
         () => DeleteDashboardSchema.parse({}),
+        (err) => err?.name === "ZodError",
+    );
+});
+
+// =====================================================================
+// DASH-07 remove_widget — symmetric Search+View 2-step PUT chain
+// =====================================================================
+//
+// remove_widget orchestrates the symmetric two-step PUT chain that
+// removes a widget from BOTH the bound Search entity (strip its
+// search_types) AND the ViewDTO (strip widget + position +
+// widget_mapping entry). D-03 validator runs on the PROSPECTIVE
+// post-remove sets before wire emission.
+
+const VIEW_FOR_REMOVE = {
+    id: "v-1",
+    type: "DASHBOARD",
+    title: "Mixed Dashboard",
+    search_id: "S-bound",
+    properties: [],
+    requires: {},
+    favorite: false,
+    state: {
+        "q-1": {
+            selected_fields: null,
+            static_message_list_id: null,
+            titles: { titles: {} },
+            widgets: [
+                { id: "w-keep", type: "messages" },
+                { id: "w-remove", type: "aggregation" },
+            ],
+            widget_mapping: {
+                "w-keep": ["st-keep-1"],
+                "w-remove": ["st-remove-1", "st-remove-2"],
+            },
+            positions: {
+                "w-keep": { col: 1, row: 1, height: 2, width: 4 },
+                "w-remove": { col: 5, row: 1, height: 2, width: 4 },
+            },
+            formatting: null,
+            display_mode_settings: { positions_inferred: false, show_summary: false, show_message_row: false },
+        },
+    },
+};
+
+const SEARCH_FOR_REMOVE = {
+    id: "S-bound",
+    queries: [{
+        id: "q-1",
+        timerange: { type: "relative", from: 300 },
+        filter: null,
+        filters: [],
+        query: { type: "elasticsearch", query_string: "" },
+        search_types: [
+            { id: "st-keep-1", type: "messages" },
+            { id: "st-remove-1", type: "pivot" },
+            { id: "st-remove-2", type: "pivot" },
+        ],
+    }],
+    parameters: [],
+    skipNoStreamsCheck: false,
+};
+
+function removeWidgetCapture(searchOverride, viewOverride) {
+    return dashboardsMultiCapture([
+        { method: "GET", pathPattern: "/api/views/v-1", response: viewOverride ?? VIEW_FOR_REMOVE },
+        { method: "GET", pathPattern: "/api/views/search/S-bound", response: searchOverride ?? SEARCH_FOR_REMOVE },
+    ]);
+}
+
+// Test 19 — pre-flight GETs on view AND search (call order matters)
+test("remove_widget pre-flights GET on view AND search (Search+View symmetric)", async () => {
+    const order = [];
+    _setCaptureRequest((req) => {
+        order.push(`${req.method} ${req.path}`);
+        if (req.path === "/api/views/v-1") return VIEW_FOR_REMOVE;
+        if (req.path === "/api/views/search/S-bound") return SEARCH_FOR_REMOVE;
+        throw new Error(`unexpected route ${req.method} ${req.path}`);
+    });
+    await handleRemoveWidget({
+        params: { arguments: { _testConnection: "fake", dashboardId: "v-1", widgetId: "w-remove" } },
+    });
+    // Two GETs in order: view first (we don't know searchId until we GET the view),
+    // then search.
+    assert.equal(order[0], "GET /api/views/v-1");
+    assert.equal(order[1], "GET /api/views/search/S-bound");
+});
+
+// Test 20 — dry-run emits 2-step chain
+test("remove_widget dry-run emits 2-step chain (PUT /api/views/search/{searchId} + PUT /api/views/{id})", async () => {
+    _setCaptureRequest(removeWidgetCapture());
+    const res = await handleRemoveWidget({
+        params: { arguments: { _testConnection: "fake", dashboardId: "v-1", widgetId: "w-remove" } },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.dryRun, true);
+    assert.ok(Array.isArray(payload.chain), "chain must be present in dry-run");
+    assert.equal(payload.chain.length, 2);
+    assert.equal(payload.chain[0].step, 1);
+    assert.equal(payload.chain[0].request.method, "PUT");
+    assert.equal(payload.chain[0].request.path, "/api/views/search/S-bound");
+    assert.equal(payload.chain[1].step, 2);
+    assert.equal(payload.chain[1].request.method, "PUT");
+    assert.equal(payload.chain[1].request.path, "/api/views/v-1");
+});
+
+// Test 21 — step 1 strips widget's search_types from Search
+test("remove_widget step 1 strips widget's search_types (drawn from widget_mapping) from Search.queries[].search_types", async () => {
+    _setCaptureRequest(removeWidgetCapture());
+    const res = await handleRemoveWidget({
+        params: { arguments: { _testConnection: "fake", dashboardId: "v-1", widgetId: "w-remove" } },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    const step1Body = payload.chain[0].request.body;
+    // st-remove-1 + st-remove-2 stripped; st-keep-1 preserved.
+    const stIds = step1Body.queries[0].search_types.map((st) => st.id);
+    assert.deepEqual(stIds, ["st-keep-1"]);
+});
+
+// Test 22 — step 2 strips widget + position + widget_mapping entry
+test("remove_widget step 2 strips widget + position + widget_mapping entry from ViewDTO state", async () => {
+    _setCaptureRequest(removeWidgetCapture());
+    const res = await handleRemoveWidget({
+        params: { arguments: { _testConnection: "fake", dashboardId: "v-1", widgetId: "w-remove" } },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    const step2Body = payload.chain[1].request.body;
+    assert.equal(step2Body.entity.id, "v-1");
+    assert.equal(step2Body.share_request, null);
+    const state = step2Body.entity.state["q-1"];
+    // Widget gone.
+    const widgetIds = state.widgets.map((w) => w.id);
+    assert.deepEqual(widgetIds, ["w-keep"]);
+    // Position entry gone.
+    assert.equal(state.positions["w-remove"], undefined);
+    assert.ok(state.positions["w-keep"], "w-keep position must remain");
+    // widget_mapping entry gone.
+    assert.equal(state.widget_mapping["w-remove"], undefined);
+    assert.deepEqual(state.widget_mapping["w-keep"], ["st-keep-1"]);
+});
+
+// Test 23 — D-03 validator runs on post-remove sets (refusal before HTTP wire emission)
+test("remove_widget D-03 validator runs on prospective post-remove sets; refuses BEFORE any PUT fires", async () => {
+    let putFired = false;
+    _setCaptureRequest((req) => {
+        if (req.method === "GET" && req.path === "/api/views/v-1") return VIEW_FOR_REMOVE;
+        if (req.method === "GET" && req.path === "/api/views/search/S-bound") return SEARCH_FOR_REMOVE;
+        if (req.method === "PUT") putFired = true;
+        throw new Error(`Unexpected ${req.method} ${req.path}`);
+    });
+    // Inject a stub that throws — simulates a corruption that would leave
+    // an orphan position after removal.
+    _setRemoveWidgetValidatorForTests(() => {
+        // Match the production validator's message style ("integrity violation"
+        // substring is the load-bearing word the test asserts against).
+        const err = new Error("Widget/position integrity violation: simulated orphan in post-remove set");
+        err.reason = "widget_position_integrity_violation";
+        err.isClientSide = true;
+        throw err;
+    });
+    const res = await handleRemoveWidget({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                dashboardId: "v-1",
+                widgetId: "w-remove",
+                dryRun: false,
+            },
+        },
+    });
+    assert.equal(res.isError, true);
+    assert.match(res.content[0].text, /widget_position_integrity_violation|integrity/i);
+    assert.equal(putFired, false, "D-03 refusal must happen BEFORE any PUT");
+});
+
+// Test 24 — widget_not_found refusal
+test("remove_widget refuses with widget_not_found when widgetId absent from current ViewDTO", async () => {
+    let putFired = false;
+    _setCaptureRequest((req) => {
+        if (req.method === "GET" && req.path === "/api/views/v-1") return VIEW_FOR_REMOVE;
+        if (req.method === "GET" && req.path === "/api/views/search/S-bound") return SEARCH_FOR_REMOVE;
+        if (req.method === "PUT") putFired = true;
+        throw new Error(`Unexpected ${req.method} ${req.path}`);
+    });
+    const res = await handleRemoveWidget({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                dashboardId: "v-1",
+                widgetId: "w-nonexistent",
+                dryRun: false,
+            },
+        },
+    });
+    assert.equal(res.isError, true);
+    assert.match(res.content[0].text, /widget_not_found/);
+    assert.equal(putFired, false, "widget_not_found refusal must happen BEFORE any PUT");
+});
+
+// Test 25 — apply walks the chain through executeChain in order
+test("remove_widget apply walks the 2-step PUT chain in order via executeChain", async () => {
+    const putOrder = [];
+    _setCaptureRequest((req) => {
+        if (req.method === "GET" && req.path === "/api/views/v-1") return VIEW_FOR_REMOVE;
+        if (req.method === "GET" && req.path === "/api/views/search/S-bound") return SEARCH_FOR_REMOVE;
+        if (req.method === "PUT" && req.path === "/api/views/search/S-bound") {
+            putOrder.push("PUT-search");
+            return { id: "S-bound", queries: req.body.queries };
+        }
+        if (req.method === "PUT" && req.path === "/api/views/v-1") {
+            putOrder.push("PUT-view");
+            return { ...req.body.entity };
+        }
+        throw new Error(`unexpected ${req.method} ${req.path}`);
+    });
+    const res = await handleRemoveWidget({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                dashboardId: "v-1",
+                widgetId: "w-remove",
+                dryRun: false,
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.applied, true);
+    // Search MUST be updated FIRST so the View's widget_mapping never points
+    // at an existing search_type that we're about to remove. Order is
+    // load-bearing for partial-failure semantics.
+    assert.deepEqual(putOrder, ["PUT-search", "PUT-view"]);
+});
+
+// Schema parity
+test("RemoveWidgetSchema requires both dashboardId AND widgetId", () => {
+    assert.throws(
+        () => RemoveWidgetSchema.parse({ dashboardId: "v-1" }),
+        (err) => err?.name === "ZodError",
+    );
+    assert.throws(
+        () => RemoveWidgetSchema.parse({ widgetId: "w-1" }),
         (err) => err?.name === "ZodError",
     );
 });

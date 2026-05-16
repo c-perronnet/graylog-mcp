@@ -74,7 +74,22 @@ export function wrapGraylogError(err, toolName) {
     }
     // Plain Error fallback (network failure, programmer error, etc.)
     const msg = err?.message ?? String(err);
-    return errorResponse(`[${toolName}] ${msg}`);
+    let text = `[${toolName}] ${msg}`;
+    // Plan 06-02: client-side errors (e.g. widget_position_integrity_violation,
+    // widget_not_found, dashboard_missing_search_binding from remove_widget;
+    // widget_position_integrity_violation from create_dashboard) attach a
+    // structured `reason` tag for agent-programmatic identification. Surface
+    // it in the envelope text so a regex/contains check on the reason works
+    // even when the underlying message doesn't repeat the keyword. Matches
+    // the GraylogError path's `[reason: ...]` suffix style for consistency.
+    if (typeof err?.reason === "string" && err.reason.length > 0) {
+        text += ` [reason: ${err.reason}]`;
+    }
+    const out = errorResponse(text);
+    if (typeof err?.reason === "string" && err.reason.length > 0) {
+        out.reason = err.reason;
+    }
+    return out;
 }
 
 // Truncate response body to a short string for the error message. Never returns more

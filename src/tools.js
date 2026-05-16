@@ -1697,4 +1697,19 @@ export const toolDefinitions = [
             required: ["dashboardId"],
         },
     },
+    {
+        name: "remove_widget",
+        description: "Remove a widget from a Graylog dashboard. Symmetric two-step PUT chain (PUT /api/views/search + PUT /api/views) — strips the widget's search_types from the bound Search AND the widget + position + widget_mapping entry from the View. D-03 widget-position integrity validated on prospective post-remove sets before wire emission. Use add_widget_from_template (DASH-06) to add widgets.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                connectionName: { type: "string" },
+                dryRun: { type: "boolean", description: "Default true." },
+                idempotencyKey: { type: "string" },
+                dashboardId: { type: "string" },
+                widgetId: { type: "string", description: "The widget's id (from get_dashboard's state.{queryId}.widgets[].id)." },
+            },
+            required: ["dashboardId", "widgetId"],
+        },
+    },
 ];

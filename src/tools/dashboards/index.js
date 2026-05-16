@@ -22,9 +22,12 @@ import { handleCreateDashboard } from "./create-dashboard.js";
 // Plan 06-02 Task 3 — DASH-04 update + DASH-05 delete (leaf).
 import { handleUpdateDashboard } from "./update-dashboard.js";
 import { handleDeleteDashboard } from "./delete-dashboard.js";
+// Plan 06-02 Task 4 — DASH-07 remove_widget (symmetric 2-step PUT chain).
+import { handleRemoveWidget } from "./remove-widget.js";
 
 register("list_dashboards", handleListDashboards);
 register("get_dashboard", handleGetDashboard);
 register("create_dashboard", handleCreateDashboard);
 register("update_dashboard", handleUpdateDashboard);
 register("delete_dashboard", handleDeleteDashboard);
+register("remove_widget", handleRemoveWidget);
