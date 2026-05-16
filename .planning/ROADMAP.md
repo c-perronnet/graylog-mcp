@@ -8,11 +8,11 @@
 ## Phases
 
 - [x] **Phase 0: Foundation** — Cross-cutting infrastructure (dispatch refactor, HTTP client, mutating-handler factory, dry-run primitive, zod adoption, snapshot test harness) so every subsequent domain phase composes the same safety primitives.
-- [ ] **Phase 1: Inputs & Extractors** — CRUD for inputs (GELF/Beats/Syslog/Raw) + extractors, including the partial-update pattern that protects encrypted fields on `update_input`.
-- [ ] **Phase 2: Index Sets & Retention** — Index-set CRUD with rotation/retention strategies, the inverted `deleteIndices` default, and the reusable `await_system_job` async-poll primitive.
-- [ ] **Phase 3: Streams & Stream Rules** — Stream CRUD + stream-rule CRUD with `test_stream_match` validation and pre-delete cascade preview (rules + pipeline connections + event defs).
-- [ ] **Phase 4: Pipelines, Pipeline Rules & Connections** — Pipeline CRUD + the `src/pipeline-dsl/` subsystem (emit/escape/validate/builtins), server-authoritative parse pre-flight, and `simulate_pipeline_rule`.
-- [ ] **Phase 5: Events & Notifications** — Full CRUD upgrade for event definitions and notifications, with `schedule: false` default and v6→v7 aggregation-syntax migration helper.
+- [x] **Phase 1: Inputs & Extractors** — CRUD for inputs (GELF/Beats/Syslog/Raw) + extractors, including the partial-update pattern that protects encrypted fields on `update_input`.
+- [x] **Phase 2: Index Sets & Retention** — Index-set CRUD with rotation/retention strategies, the inverted `deleteIndices` default, and the reusable `await_system_job` async-poll primitive.
+- [x] **Phase 3: Streams & Stream Rules** — Stream CRUD + stream-rule CRUD with `test_stream_match` validation and pre-delete cascade preview (rules + pipeline connections + event defs).
+- [x] **Phase 4: Pipelines, Pipeline Rules & Connections** — Pipeline CRUD + the `src/pipeline-dsl/` subsystem (emit/escape/validate/builtins), server-authoritative parse pre-flight, and `simulate_pipeline_rule`.
+- [x] **Phase 5: Events & Notifications** — Full CRUD upgrade for event definitions and notifications, with `schedule: false` default and v6→v7 aggregation-syntax migration helper.
 - [ ] **Phase 6: Dashboards, Widget Templates & Blueprints** — Dashboard CRUD via internal Search+View chain, the 8-template curated widget library, and the 6 cross-domain blueprints composed from services.
 - [ ] **Phase 7: Final Hardening** — Tool-description audit, `list_admin_tools` meta-tool, v7-vs-v6 read-tool smoke pass, c8 coverage baseline, and `/api/streams` deprecation plan.
 
@@ -117,7 +117,7 @@
   - [x] 05-02-PLAN.md — Event-definition list/get/create/update (EVENT-01..04): M1 ACCEPTANCE GATE (?schedule=false structural) + C5 ACCEPTANCE GATE (visible v6→v7 migration) + CreateEntityRequest envelope + STRICT_NO_ECHO on update
   - [x] 05-03-PLAN.md — Enable/disable (EVENT-06) WILDCARD empty-body + delete_event_definition (EVENT-05) D-08 informational cascade (no token; mirrors Phase 1 delete_input)
   - [x] 05-04-PLAN.md — Notification list/create/update/delete (EVENT-07..09): D-05 6-variant discriminator + http-notification-v2 C3 STRICT_NO_ECHO encrypted fields + D-09 cascade-hash + apply-time drift refusal (mirrors Phase 3 delete_stream)
-  - [ ] 05-05-PLAN.md — 12-13 snapshot fixtures + 11 schema-parity assertions + auth-redaction inheritance + 05-VALIDATION.md flip + human-verify checkpoint
+  - [x] 05-05-PLAN.md — 12-13 snapshot fixtures + 11 schema-parity assertions + auth-redaction inheritance + 05-VALIDATION.md flip + human-verify checkpoint
 **UI hint**: yes
 
 ### Phase 6: Dashboards, Widget Templates & Blueprints
@@ -132,9 +132,9 @@
 **Plans**: 5 plans
   - [x] 02-01-PLAN.md — Foundation amendments (handler.js _confirmationToken forward + requireConfirm gate; conflict.js index_sets envelope) + await_system_job (INDEX-08) + list_index_sets (INDEX-01) + get_index_set (INDEX-02) + U1 live-smoke decision artifact
   - [x] 02-02-PLAN.md — create_index_set (INDEX-03) with D-10 + D-08 friendly aliases + D-09 6 strict configs + M5 idempotency; update_index_set (INDEX-04) with D-11 atomic strategy-replace + U1-resolved partial-update + ND2 pre-flight
-  - [ ] 02-03-PLAN.md — delete_index_set (INDEX-05) C1 mitigation centerpiece — sha-256 confirmation hash, D-04 inverted default, D-05 stats hard-block, ND1 default refusal, D-15 async envelope
-  - [ ] 02-04-PLAN.md — set_default_index_set (INDEX-06) D-13 can_be_default invariant + cycle_deflector (INDEX-07) ND3 writable pre-flight + UPDATED D-14 sync semantics + side_effects.observable_at
-  - [ ] 02-05-PLAN.md — Snapshot fixtures (9 per RESEARCH §Snapshot Fixture Design) + schema-parity enrichment (8 tools) + auth-redaction confirmationToken allowlist + VALIDATION.md flip + human-verify checkpoint
+  - [x] 02-03-PLAN.md — delete_index_set (INDEX-05) C1 mitigation centerpiece — sha-256 confirmation hash, D-04 inverted default, D-05 stats hard-block, ND1 default refusal, D-15 async envelope
+  - [x] 02-04-PLAN.md — set_default_index_set (INDEX-06) D-13 can_be_default invariant + cycle_deflector (INDEX-07) ND3 writable pre-flight + UPDATED D-14 sync semantics + side_effects.observable_at
+  - [x] 02-05-PLAN.md — Snapshot fixtures (9 per RESEARCH §Snapshot Fixture Design) + schema-parity enrichment (8 tools) + auth-redaction confirmationToken allowlist + VALIDATION.md flip + human-verify checkpoint
 **UI hint**: yes
 
 ### Phase 7: Final Hardening
@@ -159,10 +159,10 @@
 |-------|----------------|--------|-----------|
 | 0. Foundation | 6/6 | Complete | 2026-05-15 |
 | 1. Inputs & Extractors | 5/5 | Complete | 2026-05-15 |
-| 2. Index Sets & Retention | 2/5 | In Progress | - |
-| 3. Streams & Stream Rules | 4/5 | In Progress | - |
-| 4. Pipelines, Pipeline Rules & Connections | 5/6 | In Progress | - |
-| 5. Events & Notifications | 1/5 | In Progress | - |
+| 2. Index Sets & Retention | 5/5 | Complete | 2026-05-15 |
+| 3. Streams & Stream Rules | 5/5 | Complete | 2026-05-15 |
+| 4. Pipelines, Pipeline Rules & Connections | 6/6 | Complete | 2026-05-15 |
+| 5. Events & Notifications | 5/5 | Complete | 2026-05-16 |
 | 6. Dashboards, Widget Templates & Blueprints | 0/? | Not started | - |
 | 7. Final Hardening | 0/? | Not started | - |
 
