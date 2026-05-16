@@ -93,10 +93,10 @@ The DSL subsystem is the hardest part of this milestone.
 
 Currently read-only in v2.3; this milestone makes them full CRUD.
 
-- [ ] **EVENT-01**: `list_event_definitions` — narrow projection
-- [ ] **EVENT-02**: `get_event_definition`
-- [ ] **EVENT-03**: `create_event_definition` — **`schedule` defaults to `false`** (not Graylog's `true`); v7 aggregation syntax only; helper warns if input matches v6 syntax (C5)
-- [ ] **EVENT-04**: `update_event_definition`
+- [x] **EVENT-01**: `list_event_definitions` — narrow projection
+- [x] **EVENT-02**: `get_event_definition`
+- [x] **EVENT-03**: `create_event_definition` — **`schedule` defaults to `false`** (not Graylog's `true`); v7 aggregation syntax only; helper warns if input matches v6 syntax (C5)
+- [x] **EVENT-04**: `update_event_definition`
 - [ ] **EVENT-05**: `delete_event_definition`
 - [ ] **EVENT-06**: `enable_event_definition` / `disable_event_definition` — wrapper handles the `WILDCARD` empty-body quirk
 - [ ] **EVENT-07**: `list_event_notifications`
@@ -262,10 +262,10 @@ Populated by the roadmapper on 2026-05-13. Every v1 requirement maps to exactly 
 | PIPE-12 | Phase 4 | Complete |
 | PIPE-13 | Phase 4 | Complete |
 | PIPE-14 | Phase 4 | Complete |
-| EVENT-01 | Phase 5 | Pending |
-| EVENT-02 | Phase 5 | Pending |
-| EVENT-03 | Phase 5 | Pending |
-| EVENT-04 | Phase 5 | Pending |
+| EVENT-01 | Phase 5 | Complete |
+| EVENT-02 | Phase 5 | Complete |
+| EVENT-03 | Phase 5 | Complete |
+| EVENT-04 | Phase 5 | Complete |
 | EVENT-05 | Phase 5 | Pending |
 | EVENT-06 | Phase 5 | Pending |
 | EVENT-07 | Phase 5 | Pending |
