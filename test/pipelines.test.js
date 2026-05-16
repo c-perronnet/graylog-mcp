@@ -2618,8 +2618,23 @@ function paginatedRuleResponse({ page, perPage, rules, usedInPipelines, total })
     };
 }
 
+// F-22 helper — predicate for the existence pre-flight GET.
+// Distinguishes `/api/system/pipelines/rule/{id}` (single rule) from
+// `/api/system/pipelines/rule/paginated?...` (paginated list).
+function isRuleExistencePreflight(req, ruleId) {
+    return req.method === "GET"
+        && req.path === `/api/system/pipelines/rule/${ruleId}`;
+}
+
+// F-22 helper — minimal RuleSource DTO. The pre-flight only cares about
+// existence (404 vs 200); body shape is unused by discoverReferencingPipelines.
+function ruleExistenceStub(ruleId, title) {
+    return { id: ruleId, title: title ?? `R-${ruleId}` };
+}
+
 test("delete_pipeline_rule HAPPY (0 referencing pipelines): cascades.pipelines:[]; confirmationToken is 64-hex", async () => {
     _setCaptureRequest((req) => {
+        if (isRuleExistencePreflight(req, "r1")) return ruleExistenceStub("r1");
         if (req.method === "GET" && req.path.startsWith("/api/system/pipelines/rule/paginated")) {
             return paginatedRuleResponse({
                 page: 1,
@@ -2680,6 +2695,7 @@ test("delete_pipeline_rule FROZEN HASH (two pipelines for ruleId=r1) is the pinn
 
 test("delete_pipeline_rule HAPPY (2 referencing pipelines): cascades.pipelines has 2 entries; hash != empty-cascade hash", async () => {
     _setCaptureRequest((req) => {
+        if (isRuleExistencePreflight(req, "r1")) return ruleExistenceStub("r1");
         if (req.method === "GET" && req.path.startsWith("/api/system/pipelines/rule/paginated")) {
             return paginatedRuleResponse({
                 page: 1,
@@ -2709,6 +2725,7 @@ test("delete_pipeline_rule HAPPY (2 referencing pipelines): cascades.pipelines h
 test("delete_pipeline_rule Strategy A multi-page: rule on page 3 is found after walking pages 1-3", async () => {
     const pageRequests = [];
     _setCaptureRequest((req) => {
+        if (isRuleExistencePreflight(req, "rT")) return ruleExistenceStub("rT", "TARGET");
         if (req.method === "GET" && req.path.startsWith("/api/system/pipelines/rule/paginated")) {
             pageRequests.push(req.path);
             // Pages 1 + 2 have 50 rules each WITHOUT the target.
@@ -2746,8 +2763,14 @@ test("delete_pipeline_rule Strategy A multi-page: rule on page 3 is found after 
 });
 
 test("delete_pipeline_rule Strategy A early-exit: stops on partial page (< perPage rules)", async () => {
+    // F-22: existence pre-flight succeeds (rule exists), but the paginated
+    // walk does NOT find it on page 1 (eviction / drift between the two
+    // calls). The handler must early-exit on the partial page (10 < 50)
+    // and return empty cascades — apply-time re-fetch + drift refusal
+    // remains the safety net.
     const pageRequests = [];
     _setCaptureRequest((req) => {
+        if (isRuleExistencePreflight(req, "rEvicted")) return ruleExistenceStub("rEvicted");
         if (req.method === "GET" && req.path.startsWith("/api/system/pipelines/rule/paginated")) {
             pageRequests.push(req.path);
             const m = req.path.match(/page=(\d+)/);
@@ -2764,19 +2787,24 @@ test("delete_pipeline_rule Strategy A early-exit: stops on partial page (< perPa
         throw new Error(`unexpected ${req.method} ${req.path}`);
     });
     const res = await handleDeletePipelineRule({
-        params: { arguments: { _testConnection: "fake", ruleId: "rMissing" } },
+        params: { arguments: { _testConnection: "fake", ruleId: "rEvicted" } },
     });
     const payload = JSON.parse(res.content[0].text);
     assert.equal(pageRequests.length, 1, "must stop after partial page");
-    // Rule not found → pipelines:[] (let the DELETE handle 404 server-side).
+    // Rule exists (pre-flight passed) but not in paginated walk → []
+    // (apply-time re-fetch + cascade-hash drift refusal still protects).
     assert.deepEqual(payload.cascades.pipelines, []);
 });
 
 test("delete_pipeline_rule Strategy A safety cap (Pitfall 7): 201 pages of full responses → returns []", async () => {
     // Synthetic safety-cap test: each page returns 50 rules without the
-    // target. The handler walks up to 200 pages then gives up.
+    // target. The handler walks up to 200 pages then gives up. F-22:
+    // existence pre-flight succeeds first (the rule exists but is somehow
+    // not surfacing in the paginated list — pathological drift/eviction
+    // scenario); the safety cap still bounds the walk at 200 pages.
     const pageRequests = [];
     _setCaptureRequest((req) => {
+        if (isRuleExistencePreflight(req, "rEvictedFull")) return ruleExistenceStub("rEvictedFull");
         if (req.method === "GET" && req.path.startsWith("/api/system/pipelines/rule/paginated")) {
             pageRequests.push(req.path);
             const rules = [];
@@ -2786,7 +2814,7 @@ test("delete_pipeline_rule Strategy A safety cap (Pitfall 7): 201 pages of full 
         throw new Error(`unexpected ${req.method} ${req.path}`);
     });
     const res = await handleDeletePipelineRule({
-        params: { arguments: { _testConnection: "fake", ruleId: "rMissing" } },
+        params: { arguments: { _testConnection: "fake", ruleId: "rEvictedFull" } },
     });
     // The safety cap must terminate the walk at 200 pages.
     assert.equal(pageRequests.length, 200, "safety cap must limit pagination at 200 pages");
@@ -2798,6 +2826,7 @@ test("delete_pipeline_rule apply HAPPY (hash matches): DELETE fires; sync envelo
     const captured = [];
     _setCaptureRequest((req) => {
         captured.push(req);
+        if (isRuleExistencePreflight(req, "r1")) return ruleExistenceStub("r1");
         if (req.method === "GET" && req.path.startsWith("/api/system/pipelines/rule/paginated")) {
             return paginatedRuleResponse({
                 page: 1,
@@ -2849,6 +2878,7 @@ test("delete_pipeline_rule apply DRIFT (D-14 acceptance gate): re-fetch hash dif
     const captured = [];
     _setCaptureRequest((req) => {
         captured.push(req);
+        if (isRuleExistencePreflight(req, "r1")) return ruleExistenceStub("r1");
         if (req.method === "GET" && req.path.startsWith("/api/system/pipelines/rule/paginated")) {
             paginatedCalls += 1;
             if (paginatedCalls === 1) {
@@ -2891,6 +2921,7 @@ test("delete_pipeline_rule apply CONFIRMATION MISMATCH: wrong token → reason:c
     const captured = [];
     _setCaptureRequest((req) => {
         captured.push(req);
+        if (isRuleExistencePreflight(req, "r1")) return ruleExistenceStub("r1");
         if (req.method === "GET" && req.path.startsWith("/api/system/pipelines/rule/paginated")) {
             return paginatedRuleResponse({
                 page: 1,
@@ -2941,6 +2972,7 @@ test("delete_pipeline_rule path: DELETE URL is /api/system/pipelines/rule/{id}; 
     const captured = [];
     _setCaptureRequest((req) => {
         captured.push(req);
+        if (isRuleExistencePreflight(req, "r1")) return ruleExistenceStub("r1");
         if (req.method === "GET" && req.path.startsWith("/api/system/pipelines/rule/paginated")) {
             return paginatedRuleResponse({
                 page: 1,
@@ -2956,7 +2988,9 @@ test("delete_pipeline_rule path: DELETE URL is /api/system/pipelines/rule/{id}; 
         params: { arguments: { _testConnection: "fake", ruleId: "r1" } },
     });
     const dryPayload = JSON.parse(dry.content[0].text);
-    assert.match(captured[0].path, /^\/api\/system\/pipelines\/rule\/paginated\?page=1&per_page=50$/);
+    // F-22: first call is the existence pre-flight; paginated walk is second.
+    assert.equal(captured[0].path, "/api/system/pipelines/rule/r1");
+    assert.match(captured[1].path, /^\/api\/system\/pipelines\/rule\/paginated\?page=1&per_page=50$/);
     // Apply.
     await handleDeletePipelineRule({
         params: {
@@ -2969,6 +3003,7 @@ test("delete_pipeline_rule path: DELETE URL is /api/system/pipelines/rule/{id}; 
 
 test("delete_pipeline_rule uses fallback `rsp.used_in_pipelines` (no `context` wrapper) per RESEARCH line 1277", async () => {
     _setCaptureRequest((req) => {
+        if (isRuleExistencePreflight(req, "r1")) return ruleExistenceStub("r1");
         if (req.method === "GET" && req.path.startsWith("/api/system/pipelines/rule/paginated")) {
             // Without context wrapper — used_in_pipelines at top level.
             return {
@@ -2991,6 +3026,7 @@ test("delete_pipeline_rule uses fallback `rsp.used_in_pipelines` (no `context` w
 
 test("delete_pipeline_rule cascade pre-flight failure: GET throws → reason:cascade_preflight_failed", async () => {
     _setCaptureRequest((req) => {
+        if (isRuleExistencePreflight(req, "r1")) return ruleExistenceStub("r1");
         if (req.method === "GET" && req.path.startsWith("/api/system/pipelines/rule/paginated")) {
             throw new GraylogValidationError("upstream 503", {
                 status: 503,
@@ -3006,6 +3042,129 @@ test("delete_pipeline_rule cascade pre-flight failure: GET throws → reason:cas
     });
     assert.equal(res.isError, true);
     assert.match(res.content[0].text, /cascade_preflight_failed/);
+});
+
+// F-22 — existence pre-flight 404: pipeline_rule_not_found
+//
+// Before the fix, the paginated walk silently returned [] when the rule
+// did not exist, which is indistinguishable from "rule found but
+// unreferenced". The agent would receive a confirmationToken over an
+// empty cascade, advance to apply, and only discover the missing rule as
+// a generic 404 on the DELETE call (after the cascade-hash gate already
+// opened). The pre-flight GET /api/system/pipelines/rule/{id} disambiguates:
+// 404 → reason:"pipeline_rule_not_found" surfaces in the dry-run envelope.
+
+test("delete_pipeline_rule F-22: existence pre-flight 404 → reason:pipeline_rule_not_found; paginated walk NEVER fires", async () => {
+    const captured = [];
+    _setCaptureRequest((req) => {
+        captured.push(req);
+        if (isRuleExistencePreflight(req, "rGhost")) {
+            throw new GraylogNotFoundError("rule not found", {
+                status: 404,
+                method: "GET",
+                path: "/api/system/pipelines/rule/rGhost",
+                body: { message: "not found" },
+            });
+        }
+        if (req.method === "GET" && req.path.startsWith("/api/system/pipelines/rule/paginated")) {
+            throw new Error("paginated walk must NEVER fire when pre-flight 404s");
+        }
+        throw new Error(`unexpected ${req.method} ${req.path}`);
+    });
+    const res = await handleDeletePipelineRule({
+        params: { arguments: { _testConnection: "fake", ruleId: "rGhost" } },
+    });
+    assert.equal(res.isError, true);
+    assert.equal(res.reason, "pipeline_rule_not_found");
+    assert.match(res.content[0].text, /pipeline_rule_not_found/);
+    // Only the pre-flight fired; the paginated walk was short-circuited.
+    assert.equal(captured.length, 1);
+    assert.equal(captured[0].path, "/api/system/pipelines/rule/rGhost");
+});
+
+test("delete_pipeline_rule F-22: existence pre-flight non-404 error → reason:cascade_preflight_failed", async () => {
+    // 5xx (or 403) on the pre-flight is a transport / permission problem,
+    // NOT a "rule does not exist" signal — surface the same
+    // cascade_preflight_failed reason as a paginated-GET failure.
+    _setCaptureRequest((req) => {
+        if (isRuleExistencePreflight(req, "r1")) {
+            throw new GraylogValidationError("upstream 503", {
+                status: 503,
+                method: "GET",
+                path: "/api/system/pipelines/rule/r1",
+                body: null,
+            });
+        }
+        throw new Error(`unexpected ${req.method} ${req.path}`);
+    });
+    const res = await handleDeletePipelineRule({
+        params: { arguments: { _testConnection: "fake", ruleId: "r1" } },
+    });
+    assert.equal(res.isError, true);
+    assert.match(res.content[0].text, /cascade_preflight_failed/);
+});
+
+test("delete_pipeline_rule F-22: apply-time existence pre-flight 404 (rule deleted between dry-run and apply) → pipeline_rule_not_found; DELETE NEVER fires", async () => {
+    // Stale-preview scenario: dry-run sees a rule that exists with no
+    // referencing pipelines (empty cascade → frozen empty-cascade hash).
+    // Between dry-run and apply, the rule is deleted. apply()'s re-fetch
+    // existence pre-flight 404s; DELETE must NEVER fire on a non-existent
+    // resource — the structured pipeline_rule_not_found reason is more
+    // informative than a generic 404 envelope.
+    const captured = [];
+    let preflightCalls = 0;
+    _setCaptureRequest((req) => {
+        captured.push(req);
+        if (isRuleExistencePreflight(req, "rDoomed")) {
+            preflightCalls += 1;
+            if (preflightCalls === 1) {
+                // dry-run pre-flight succeeds → rule exists.
+                return ruleExistenceStub("rDoomed");
+            }
+            // apply-time pre-flight → rule has been deleted.
+            throw new GraylogNotFoundError("rule not found", {
+                status: 404,
+                method: "GET",
+                path: "/api/system/pipelines/rule/rDoomed",
+                body: { message: "not found" },
+            });
+        }
+        if (req.method === "GET" && req.path.startsWith("/api/system/pipelines/rule/paginated")) {
+            return paginatedRuleResponse({
+                page: 1,
+                perPage: 50,
+                rules: [{ id: "rDoomed", title: "Doomed" }],
+                usedInPipelines: { rDoomed: [] },
+            });
+        }
+        if (req.method === "DELETE") {
+            throw new Error("DELETE must NEVER fire when apply-time pre-flight 404s");
+        }
+        throw new Error(`unexpected ${req.method} ${req.path}`);
+    });
+    // 1. Dry-run captures the empty-cascade confirmationToken.
+    const dry = await handleDeletePipelineRule({
+        params: { arguments: { _testConnection: "fake", ruleId: "rDoomed" } },
+    });
+    const dryPayload = JSON.parse(dry.content[0].text);
+    const token = dryPayload.confirmationToken;
+    // 2. Apply — apply-time pre-flight 404s.
+    const res = await handleDeletePipelineRule({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                ruleId: "rDoomed",
+                dryRun: false,
+                confirm: token,
+            },
+        },
+    });
+    assert.equal(res.isError, true);
+    assert.equal(res.reason, "pipeline_rule_not_found");
+    // Two pre-flights fired (dry-run + apply); zero DELETEs.
+    assert.equal(preflightCalls, 2);
+    const deletes = captured.filter((r) => r.method === "DELETE");
+    assert.equal(deletes.length, 0);
 });
 
 // =====================================================================

@@ -166,6 +166,21 @@ function paginatedRuleResponse({ page, perPage, rules, usedInPipelines, total })
     };
 }
 
+// F-22 helper — predicate for the existence pre-flight GET inside
+// discoverReferencingPipelines. The pre-flight fires `GET
+// /api/system/pipelines/rule/{id}` BEFORE the paginated walk so a
+// missing rule surfaces as reason:"pipeline_rule_not_found" rather
+// than an empty cascade (which is indistinguishable from "rule found
+// but unreferenced").
+function isRuleExistencePreflight(req, ruleId) {
+    return req.method === "GET"
+        && req.path === `/api/system/pipelines/rule/${ruleId}`;
+}
+
+function ruleExistenceStub(ruleId, title) {
+    return { id: ruleId, title: title ?? `R-${ruleId}` };
+}
+
 // =====================================================================
 // F1 — list_pipelines narrow projection of a 2-pipeline cluster
 // =====================================================================
@@ -460,6 +475,7 @@ const PINNED_HASH_EMPTY_CASCADE = "9541cfc2cf6b92acde474f487f3e824942c1e0df4ae43
 
 test("snapshot: delete_pipeline_rule populated cascade (r1 + [p1,p2]) pins frozen hash 66267019…3a1 (PIPE-10 + D-14)", async (t) => {
     _setCaptureRequest((req) => {
+        if (isRuleExistencePreflight(req, "r1")) return ruleExistenceStub("r1", "FixtureRule");
         if (req.method === "GET" && req.path.startsWith("/api/system/pipelines/rule/paginated")) {
             return paginatedRuleResponse({
                 page: 1,
@@ -504,6 +520,7 @@ test("snapshot: delete_pipeline_rule populated cascade (r1 + [p1,p2]) pins froze
 
 test("snapshot: delete_pipeline_rule empty cascade (r1 + []) pins frozen hash 9541cfc2…5b1 — DIFFERS from F8 (PIPE-10 + D-14 disambiguation)", async (t) => {
     _setCaptureRequest((req) => {
+        if (isRuleExistencePreflight(req, "r1")) return ruleExistenceStub("r1", "FixtureRule");
         if (req.method === "GET" && req.path.startsWith("/api/system/pipelines/rule/paginated")) {
             return paginatedRuleResponse({
                 page: 1,

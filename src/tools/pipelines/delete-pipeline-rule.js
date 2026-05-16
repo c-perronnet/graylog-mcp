@@ -25,7 +25,12 @@
 // Execution order (do NOT reorder — each step is a structural enforcement):
 //
 //   1. build():
-//      a. discoverReferencingPipelines (Strategy A paginated walk)
+//      a. discoverReferencingPipelines:
+//         i.  existence pre-flight GET /api/system/pipelines/rule/{id}
+//             (F-22: 404 → reason:"pipeline_rule_not_found"; distinguishes
+//             "rule missing" from "rule found but unreferenced" — without
+//             this, both surface as empty cascade and the agent cannot tell)
+//         ii. Strategy A paginated walk for used_in_pipelines join
 //      b. compute confirmationToken via computeRuleCascadeHash (Plan 04-01)
 //      c. emit dryRun preview with cascades.pipelines + confirmationToken
 //
@@ -34,7 +39,10 @@
 //
 //   3. apply():
 //      a. extract ruleId from req.path (mirror Phase 3 delete_stream.apply)
-//      b. discoverReferencingPipelines AGAIN (re-fetch)
+//      b. discoverReferencingPipelines AGAIN (re-fetch — also re-runs the
+//         existence pre-flight, so a rule deleted between dry-run and apply
+//         surfaces as pipeline_rule_not_found rather than a generic 404 on
+//         the DELETE call)
 //      c. recompute hash; refuse with isError reason:"cascade_changed_since_preview"
 //         if it drifted (D-14 acceptance gate — DELETE NEVER fires)
 //      d. fire DELETE; return sync { deleted: true, ruleId }
@@ -49,7 +57,7 @@ import { defineMutatingHandler } from "../_shared/handler.js";
 import { DeletePipelineRuleSchema } from "./schemas.js";
 import { computeRuleCascadeHash } from "../_shared/cascade-hash.js";
 import { makeClient } from "../../graylog/client.js";
-import { GraylogValidationError } from "../../graylog/errors.js";
+import { GraylogValidationError, GraylogNotFoundError } from "../../graylog/errors.js";
 
 /**
  * Walk the paginated rule list to find the target rule and its referencing
@@ -60,12 +68,61 @@ import { GraylogValidationError } from "../../graylog/errors.js";
  * `rules` array for its `used_in_pipelines[id]` entry to be present
  * (Pitfall 7).
  *
+ * Existence disambiguation (F-22): the paginated walk alone CANNOT tell
+ * "rule not found" from "rule found but unreferenced" — both produce an
+ * empty result (the missing rule never appears; the unreferenced rule
+ * appears but has no `used_in_pipelines` entry). Without a separate
+ * signal, the agent would compute a confirmation token over an empty
+ * cascade for a non-existent rule and only discover the 404 at apply
+ * time — after the cascade hash gate has already opened. We pre-flight
+ * a single `GET /api/system/pipelines/rule/{id}` (cheap, 404-on-missing)
+ * BEFORE walking the paginated list so a missing rule surfaces as a
+ * structured `pipeline_rule_not_found` reason that the agent can
+ * recognize. Any non-404 error during the pre-flight is propagated as
+ * `cascade_preflight_failed` (same shape as a paginated-GET failure).
+ *
  * @param {object} client
  * @param {string} ruleId
  * @returns {Promise<Array<{id: string, title: string}>>} referencing pipelines
- * @throws GraylogValidationError(reason:"cascade_preflight_failed") on GET failure
+ * @throws GraylogNotFoundError(reason:"pipeline_rule_not_found") if the rule
+ *   does not exist on the server (caught & rendered by wrapGraylogError).
+ * @throws GraylogValidationError(reason:"cascade_preflight_failed") on
+ *   GET failure (existence pre-flight non-404 error OR paginated walk error).
  */
 async function discoverReferencingPipelines(client, ruleId) {
+    // 1. Existence pre-flight (F-22) — distinguish "rule not found" from
+    //    "rule found but unreferenced". 404 → tag with reason and throw;
+    //    other errors → cascade_preflight_failed (consistent with the
+    //    paginated walk's failure mode below).
+    try {
+        await client.request(
+            "GET",
+            `/api/system/pipelines/rule/${ruleId}`,   // Pitfall 3 (rule variant)
+            null,
+        );
+    } catch (err) {
+        if (err?.isGraylogError && err.status === 404) {
+            const nf = new GraylogNotFoundError(
+                `Pipeline rule not found: ${ruleId}`,
+                { status: 404, method: "GET", path: `/api/system/pipelines/rule/${ruleId}` },
+            );
+            nf.reason = "pipeline_rule_not_found";
+            throw nf;
+        }
+        // Non-404 (5xx, 403, network) — preserve the cascade pre-flight
+        // failure shape so the agent sees one stable reason for "the
+        // pre-flight could not establish cascade state".
+        const e = new GraylogValidationError(
+            `Cascade pre-flight failed: GET /api/system/pipelines/rule/${ruleId} — ${err.message}`,
+            { status: err?.status ?? 503, method: "GET", path: `/api/system/pipelines/rule/${ruleId}` },
+        );
+        e.reason = "cascade_preflight_failed";
+        throw e;
+    }
+
+    // 2. Paginated walk for the `used_in_pipelines` join. At this point we
+    //    KNOW the rule exists, so any empty result genuinely means "rule
+    //    found but unreferenced".
     const perPage = 50;
     const maxPages = 200; // Pitfall 7 safety cap (10000 rules max)
     for (let page = 1; page <= maxPages; page++) {
@@ -99,8 +156,10 @@ async function discoverReferencingPipelines(client, ruleId) {
         // Early-exit on partial page (= last page; rule not in cluster).
         if (rules.length < perPage) break;
     }
-    // Rule not found across all pages: return []. The DELETE call will
-    // surface a 404 server-side; the agent sees a clean MCP error envelope.
+    // Rule existence was confirmed by the pre-flight, but it did not
+    // appear in the paginated walk (eviction between calls, or pagination
+    // shape drift). Return [] — apply-time re-fetch + drift refusal still
+    // protects against acting on a stale cascade.
     return [];
 }
 
