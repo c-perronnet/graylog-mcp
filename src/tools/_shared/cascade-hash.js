@@ -69,14 +69,39 @@ export function computeC1Hash({ indexSetId, deleteIndices, indexNames, messageCo
  * Sub-collections may overlap during rotation transitions; the Set return
  * type dedupes. Output is unsorted — computeC1Hash sorts before hashing.
  *
+ * Shape-drift defense (F-18): every bucket is type-checked at runtime before
+ * iteration. Jackson's Set<String> serialization is what we expect today
+ * (JSON array), but a future Graylog DTO change that emits a Set as an object
+ * — or an array where we expect an object — must NOT silently feed garbage
+ * (e.g., per-character iteration of a string, or Object.keys of a string
+ * yielding numeric indices) into the C1 confirmation hash. A bucket whose
+ * runtime shape doesn't match its documented contract is treated as empty,
+ * which is the same behavior as a missing bucket — the apply-time hash will
+ * then differ from any dry-run hash computed against the real shape, and the
+ * world-changed-refusal gate trips loudly instead of deleting wrong indices.
+ *
  * @param {object} [allIndices]
  * @returns {string[]} deduped index names (unsorted)
  */
 export function collectIndexNames(allIndices) {
     const names = new Set();
-    for (const name of allIndices?.closed?.indices ?? []) names.add(name);
-    for (const name of allIndices?.reopened?.indices ?? []) names.add(name);
-    for (const name of Object.keys(allIndices?.all?.indices ?? {})) names.add(name);
+    // closed.indices — documented Set<String>, expected as JSON array.
+    const closed = allIndices?.closed?.indices;
+    if (Array.isArray(closed)) {
+        for (const name of closed) names.add(name);
+    }
+    // reopened.indices — documented Set<String>, expected as JSON array.
+    const reopened = allIndices?.reopened?.indices;
+    if (Array.isArray(reopened)) {
+        for (const name of reopened) names.add(name);
+    }
+    // all.indices — documented Map<String, IndexInfo>, expected as JSON object
+    // keyed by index name. Reject arrays and primitives so Object.keys can't
+    // produce numeric-index keys ("0", "1", ...) from a misshapen payload.
+    const all = allIndices?.all?.indices;
+    if (typeof all === "object" && all !== null && !Array.isArray(all)) {
+        for (const name of Object.keys(all)) names.add(name);
+    }
     return [...names];
 }
 
