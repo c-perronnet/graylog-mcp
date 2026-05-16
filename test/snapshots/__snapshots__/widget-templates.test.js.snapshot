@@ -22,9 +22,7 @@ exports[`snapshot: error_rate_over_time builder emits bar-viz pivot with level:>
           "type": "time",
           "config": {
             "interval": {
-              "type": "timeunit",
-              "value": 1,
-              "unit": "auto"
+              "type": "auto"
             }
           }
         }
@@ -62,9 +60,7 @@ exports[`snapshot: error_rate_over_time builder emits bar-viz pivot with level:>
           "timestamp"
         ],
         "interval": {
-          "type": "timeunit",
-          "value": 1,
-          "unit": "auto"
+          "type": "auto"
         }
       }
     ],
@@ -375,9 +371,7 @@ exports[`snapshot: request_rate_over_time builder emits line-viz time-bucket (DA
           "type": "time",
           "config": {
             "interval": {
-              "type": "timeunit",
-              "value": 1,
-              "unit": "auto"
+              "type": "auto"
             }
           }
         }
@@ -413,9 +407,7 @@ exports[`snapshot: request_rate_over_time builder emits line-viz time-bucket (DA
           "timestamp"
         ],
         "interval": {
-          "type": "timeunit",
-          "value": 1,
-          "unit": "auto"
+          "type": "auto"
         }
       }
     ],
@@ -469,8 +461,7 @@ exports[`snapshot: stream_activity_overview builder emits 2-bucket pivot (time Ã
           "config": {
             "interval": {
               "type": "timeunit",
-              "value": 5,
-              "unit": "minutes"
+              "timeunit": "5m"
             }
           }
         },
@@ -517,8 +508,7 @@ exports[`snapshot: stream_activity_overview builder emits 2-bucket pivot (time Ã
         ],
         "interval": {
           "type": "timeunit",
-          "value": 5,
-          "unit": "minutes"
+          "timeunit": "5m"
         }
       },
       {

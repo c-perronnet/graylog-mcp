@@ -47,9 +47,7 @@ exports[`snapshot: create_app_health_dashboard BLUE-03 2-step Search+View chain 
                       "type": "time",
                       "config": {
                         "interval": {
-                          "type": "timeunit",
-                          "value": 1,
-                          "unit": "auto"
+                          "type": "auto"
                         }
                       }
                     }
@@ -281,9 +279,7 @@ exports[`snapshot: create_app_health_dashboard BLUE-03 2-step Search+View chain 
                         "timestamp"
                       ],
                       "interval": {
-                        "type": "timeunit",
-                        "value": 1,
-                        "unit": "auto"
+                        "type": "auto"
                       }
                     }
                   ],
@@ -470,9 +466,7 @@ exports[`snapshot: create_app_health_dashboard BLUE-03 2-step Search+View chain 
                           "type": "time",
                           "config": {
                             "interval": {
-                              "type": "timeunit",
-                              "value": 1,
-                              "unit": "auto"
+                              "type": "auto"
                             }
                           }
                         }
@@ -841,9 +835,7 @@ exports[`snapshot: setup_app_monitoring_stack BLUE-01 ACCEPTANCE GATE 6-step cha
                               "timestamp"
                             ],
                             "interval": {
-                              "type": "timeunit",
-                              "value": 1,
-                              "unit": "auto"
+                              "type": "auto"
                             }
                           }
                         ],
@@ -1024,9 +1016,7 @@ exports[`snapshot: setup_app_monitoring_stack BLUE-01 ACCEPTANCE GATE 6-step cha
                                 "type": "time",
                                 "config": {
                                   "interval": {
-                                    "type": "timeunit",
-                                    "value": 1,
-                                    "unit": "auto"
+                                    "type": "auto"
                                   }
                                 }
                               }

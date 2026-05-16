@@ -65,9 +65,7 @@ exports[`snapshot: add_widget_from_template error_rate_over_time 2-step PUT chai
                       "type": "time",
                       "config": {
                         "interval": {
-                          "type": "timeunit",
-                          "value": 1,
-                          "unit": "auto"
+                          "type": "auto"
                         }
                       }
                     }
@@ -166,9 +164,7 @@ exports[`snapshot: add_widget_from_template error_rate_over_time 2-step PUT chai
                         "timestamp"
                       ],
                       "interval": {
-                        "type": "timeunit",
-                        "value": 1,
-                        "unit": "auto"
+                        "type": "auto"
                       }
                     }
                   ],
@@ -252,9 +248,7 @@ exports[`snapshot: add_widget_from_template error_rate_over_time 2-step PUT chai
                           "type": "time",
                           "config": {
                             "interval": {
-                              "type": "timeunit",
-                              "value": 1,
-                              "unit": "auto"
+                              "type": "auto"
                             }
                           }
                         }
