@@ -60,7 +60,7 @@ exports[`regression: use_connection switches active connection 1`] = `
 
 exports[`regression: use_connection unknown name → not-found error response 1`] = `
 {
-  "isError": false,
+  "isError": true,
   "contentType": "text",
   "text": "Connection \\"no_such_connection_xyz\\" not found. Available: test_a, test_b"
 }

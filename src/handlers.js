@@ -72,6 +72,7 @@ export function useConnectionHandler(request) {
     if (!connections[connectionName]) {
         const available = Object.keys(connections).join(", ");
         return {
+            isError: true,
             content: [{
                 type: "text",
                 text: `Connection "${connectionName}" not found. Available: ${available || "none"}`,
