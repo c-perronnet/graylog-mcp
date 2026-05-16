@@ -1660,4 +1660,41 @@ export const toolDefinitions = [
             required: ["title", "widgets"],
         },
     },
+    {
+        name: "update_dashboard",
+        description: "Update a Graylog dashboard's metadata (title/description/summary only) via STRICT_NO_ECHO partial update. Pre-flight GET fetches the full ViewDTO; agent's changes are overlaid; PUT carries the merged DTO. searchId is schema-rejected (D-02 — immutable post-creation). For widget composition changes use add_widget_from_template (DASH-06) or remove_widget (DASH-07).",
+        inputSchema: {
+            type: "object",
+            properties: {
+                connectionName: { type: "string" },
+                dryRun: { type: "boolean", description: "Default true." },
+                idempotencyKey: { type: "string" },
+                dashboardId: { type: "string", description: "The dashboard's ViewDTO id." },
+                changes: {
+                    type: "object",
+                    description: "Partial update — title/description/summary only. searchId is REJECTED at zod parse (D-02).",
+                    properties: {
+                        title: { type: "string" },
+                        description: { type: "string" },
+                        summary: { type: "string" },
+                    },
+                },
+            },
+            required: ["dashboardId", "changes"],
+        },
+    },
+    {
+        name: "delete_dashboard",
+        description: "Delete a Graylog dashboard. Leaf delete (no cascade refusal): widgets vanish with the view; bound Search becomes orphan per Graylog model. Dry-run surfaces an informational cascades.widgets.count (best-effort GET pre-flight). NO confirmationToken; no drift refusal at apply time.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                connectionName: { type: "string" },
+                dryRun: { type: "boolean", description: "Default true." },
+                idempotencyKey: { type: "string" },
+                dashboardId: { type: "string" },
+            },
+            required: ["dashboardId"],
+        },
+    },
 ];

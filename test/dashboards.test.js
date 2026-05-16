@@ -38,11 +38,15 @@ import {
     _setWidgetPositionValidatorForTests,
     _clearWidgetPositionValidatorForTests,
 } from "../src/tools/dashboards/create-dashboard.js";
+import { handleUpdateDashboard } from "../src/tools/dashboards/update-dashboard.js";
+import { handleDeleteDashboard } from "../src/tools/dashboards/delete-dashboard.js";
 
 import {
     ListDashboardsSchema,
     GetDashboardSchema,
     CreateDashboardSchema,
+    UpdateDashboardSchema,
+    DeleteDashboardSchema,
 } from "../src/tools/dashboards/schemas.js";
 
 import {
@@ -760,4 +764,253 @@ test("create_dashboard apply substitutes step1.response.id into step2 body.entit
     // with the REAL Search ID from step 1's response.
     assert.equal(step2Body.entity.search_id, "S-substituted-id");
     assert.notEqual(step2Body.entity.search_id, "__SERVER_ASSIGNED__step1");
+});
+
+// =====================================================================
+// DASH-04 update_dashboard — STRICT_NO_ECHO + D-02 searchId-immutability
+// =====================================================================
+
+const CURRENT_VIEW_FOR_UPDATE = {
+    id: "v-1",
+    type: "DASHBOARD",
+    title: "Original Title",
+    summary: "Original summary",
+    description: "Original description",
+    search_id: "S-bound-1",
+    properties: [],
+    requires: {},
+    favorite: false,
+    state: {
+        "q-1": {
+            widgets: [{ id: "w-1", type: "messages" }],
+            widget_mapping: { "w-1": ["st-1"] },
+            positions: { "w-1": { col: 1, row: 1, height: 2, width: 4 } },
+            titles: { titles: {} },
+            display_mode_settings: { positions_inferred: false, show_summary: false, show_message_row: false },
+        },
+    },
+};
+
+// Test 11 — STRICT_NO_ECHO overlay via GET pre-flight
+test("update_dashboard dry-run overlays changes onto GET-current ViewDTO (STRICT_NO_ECHO partial-update)", async () => {
+    _setCaptureRequest(dashboardsMultiCapture([
+        { method: "GET", pathPattern: "/api/views/v-1", response: CURRENT_VIEW_FOR_UPDATE },
+    ]));
+    const res = await handleUpdateDashboard({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                dashboardId: "v-1",
+                changes: { title: "New Title" },
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.dryRun, true);
+    assert.equal(payload.preview.method, "PUT");
+    assert.equal(payload.preview.path, "/api/views/v-1");
+    // Touched field updated.
+    assert.equal(payload.preview.body.entity.title, "New Title");
+    // Untouched immutable fields pass through from GET response unchanged.
+    assert.equal(payload.preview.body.entity.search_id, "S-bound-1");
+    assert.equal(payload.preview.body.entity.type, "DASHBOARD");
+    assert.equal(payload.preview.body.entity.summary, "Original summary");
+    assert.equal(payload.preview.body.entity.description, "Original description");
+    // State passes through unchanged — composition edits flow through DASH-06/07.
+    assert.deepEqual(payload.preview.body.entity.state, CURRENT_VIEW_FOR_UPDATE.state);
+    // Pitfall 8: body.id MUST match URL segment.
+    assert.equal(payload.preview.body.entity.id, "v-1");
+    // CreateEntityRequest envelope shape.
+    assert.equal(payload.preview.body.share_request, null);
+});
+
+// Test 12 — D-02 STRUCTURAL reject of searchId in changes
+test("update_dashboard schema REJECTS searchId in changes (D-02 structural .strict() reject)", async () => {
+    const res = await handleUpdateDashboard({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                dashboardId: "v-1",
+                changes: { searchId: "hijack-me" },
+            },
+        },
+    });
+    assert.equal(res.isError, true);
+    assert.match(res.content[0].text, /searchId|[Uu]nrecognized/);
+});
+
+test("UpdateDashboardSchema.changes parse-level rejects searchId via .strict() (D-02 contract assertion)", () => {
+    assert.throws(
+        () => UpdateDashboardSchema.parse({
+            dashboardId: "v-1",
+            changes: { searchId: "any" },
+        }),
+        (err) => err?.name === "ZodError",
+    );
+});
+
+// Test 13 — empty changes refusal
+test("update_dashboard schema REJECTS empty changes object (must contain at least one field)", async () => {
+    const res = await handleUpdateDashboard({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                dashboardId: "v-1",
+                changes: {},
+            },
+        },
+    });
+    assert.equal(res.isError, true);
+    assert.match(res.content[0].text, /at least one field/i);
+});
+
+test("update_dashboard apply path PUTs merged DTO with CreateEntityRequest envelope", async () => {
+    const captured = [];
+    _setCaptureRequest(dashboardsMultiCapture([
+        { method: "GET", pathPattern: "/api/views/v-1", response: CURRENT_VIEW_FOR_UPDATE },
+        {
+            method: "PUT",
+            pathPattern: "/api/views/v-1",
+            response: (req) => {
+                captured.push(req);
+                return { ...CURRENT_VIEW_FOR_UPDATE, title: req.body.entity.title };
+            },
+        },
+    ]));
+    const res = await handleUpdateDashboard({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                dashboardId: "v-1",
+                changes: { description: "Updated desc" },
+                dryRun: false,
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.applied, true);
+    assert.equal(captured.length, 1);
+    assert.equal(captured[0].body.entity.description, "Updated desc");
+    assert.equal(captured[0].body.entity.search_id, "S-bound-1");  // unchanged
+    assert.equal(captured[0].body.share_request, null);
+});
+
+// =====================================================================
+// DASH-05 delete_dashboard — leaf delete with informational cascade
+// =====================================================================
+
+const VIEW_WITH_MULTIPLE_WIDGETS = {
+    id: "v-multi",
+    type: "DASHBOARD",
+    search_id: "S-multi",
+    state: {
+        "q-1": {
+            widgets: [
+                { id: "w-1", type: "messages" },
+                { id: "w-2", type: "aggregation" },
+                { id: "w-3", type: "value" },
+            ],
+        },
+        "q-2": {
+            widgets: [
+                { id: "w-4", type: "messages" },
+            ],
+        },
+    },
+};
+
+test("delete_dashboard dry-run surfaces informational cascades.widgets.count across all states", async () => {
+    _setCaptureRequest(dashboardsMultiCapture([
+        { method: "GET", pathPattern: "/api/views/v-multi", response: VIEW_WITH_MULTIPLE_WIDGETS },
+    ]));
+    const res = await handleDeleteDashboard({
+        params: { arguments: { _testConnection: "fake", dashboardId: "v-multi" } },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.dryRun, true);
+    assert.equal(payload.preview.method, "DELETE");
+    assert.equal(payload.preview.path, "/api/views/v-multi");
+    // 3 widgets in q-1 + 1 widget in q-2 = 4 total.
+    assert.equal(payload.cascades.widgets.count, 4);
+});
+
+test("delete_dashboard has NO confirmationToken in dry-run (leaf delete; no drift refusal)", async () => {
+    _setCaptureRequest(dashboardsMultiCapture([
+        { method: "GET", pathPattern: "/api/views/v-1", response: CURRENT_VIEW_FOR_UPDATE },
+    ]));
+    const res = await handleDeleteDashboard({
+        params: { arguments: { _testConnection: "fake", dashboardId: "v-1" } },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.confirmationToken, undefined);
+});
+
+test("delete_dashboard apply issues DELETE /api/views/{id} and returns deleted:true body", async () => {
+    const captured = [];
+    _setCaptureRequest(dashboardsMultiCapture([
+        { method: "GET", pathPattern: "/api/views/v-1", response: CURRENT_VIEW_FOR_UPDATE },
+        {
+            method: "DELETE",
+            pathPattern: "/api/views/v-1",
+            response: (req) => {
+                captured.push(req);
+                return null;  // Graylog DELETE returns 204 no-content.
+            },
+        },
+    ]));
+    const res = await handleDeleteDashboard({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                dashboardId: "v-1",
+                dryRun: false,
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.applied, true);
+    assert.equal(payload.result.id, "v-1");
+    assert.equal(payload.result.body.deleted, true);
+    assert.equal(captured.length, 1);
+    assert.equal(captured[0].method, "DELETE");
+});
+
+test("delete_dashboard cascade pre-flight 404 falls through to widgetCount:0 (best-effort)", async () => {
+    _setCaptureRequest(dashboardsMultiCapture([
+        {
+            method: "GET",
+            pathPattern: "/api/views/missing",
+            response: () => {
+                throw new GraylogNotFoundError("not found", {
+                    status: 404, method: "GET", path: "/api/views/missing", body: null,
+                });
+            },
+        },
+    ]));
+    const res = await handleDeleteDashboard({
+        params: { arguments: { _testConnection: "fake", dashboardId: "missing" } },
+    });
+    // Dry-run STILL renders even when pre-flight fails — the DELETE itself
+    // surfaces the real error on apply via wrapGraylogError.
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.dryRun, true);
+    assert.equal(payload.cascades.widgets.count, 0);
+});
+
+// =====================================================================
+// Schema parity checks
+// =====================================================================
+
+test("UpdateDashboardSchema rejects missing dashboardId at parse", () => {
+    assert.throws(
+        () => UpdateDashboardSchema.parse({ changes: { title: "new" } }),
+        (err) => err?.name === "ZodError",
+    );
+});
+
+test("DeleteDashboardSchema rejects missing dashboardId at parse", () => {
+    assert.throws(
+        () => DeleteDashboardSchema.parse({}),
+        (err) => err?.name === "ZodError",
+    );
 });

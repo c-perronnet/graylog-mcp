@@ -19,7 +19,12 @@ import { handleListDashboards } from "./list-dashboards.js";
 import { handleGetDashboard } from "./get-dashboard.js";
 // Plan 06-02 Task 2 — DASH-03 create_dashboard (C7 ACCEPTANCE GATE).
 import { handleCreateDashboard } from "./create-dashboard.js";
+// Plan 06-02 Task 3 — DASH-04 update + DASH-05 delete (leaf).
+import { handleUpdateDashboard } from "./update-dashboard.js";
+import { handleDeleteDashboard } from "./delete-dashboard.js";
 
 register("list_dashboards", handleListDashboards);
 register("get_dashboard", handleGetDashboard);
 register("create_dashboard", handleCreateDashboard);
+register("update_dashboard", handleUpdateDashboard);
+register("delete_dashboard", handleDeleteDashboard);
