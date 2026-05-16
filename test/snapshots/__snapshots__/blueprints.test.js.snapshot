@@ -1,0 +1,1779 @@
+exports[`snapshot: create_app_health_dashboard BLUE-03 2-step Search+View chain (F20) 1`] = `
+{
+  "dryRun": true,
+  "tool": "create_app_health_dashboard",
+  "connection": "fixture_conn",
+  "idempotencyKey": "1c21e0e60be9885ed95bc0b1f184a85e",
+  "summary": "Create health dashboard for stream stream-fixed-1 (4 default widgets via internal Search+View chain)",
+  "preview": {
+    "method": "POST",
+    "path": "/api/views",
+    "body": {
+      "entity": {
+        "type": "DASHBOARD",
+        "title": "Payment service health",
+        "summary": "4 pre-wired widgets",
+        "description": "Auto-generated health dashboard for stream stream-fixed-1",
+        "search_id": "__SERVER_ASSIGNED__step1",
+        "properties": [],
+        "requires": {},
+        "state": {
+          "q-1": {
+            "selected_fields": null,
+            "static_message_list_id": null,
+            "titles": {
+              "titles": {}
+            },
+            "widgets": [
+              {
+                "id": "UUID-1",
+                "type": "aggregation",
+                "filter": null,
+                "filters": [],
+                "query": {
+                  "type": "elasticsearch",
+                  "query_string": "level:>=4"
+                },
+                "streams": [
+                  "stream-fixed-1"
+                ],
+                "stream_categories": [],
+                "config": {
+                  "row_pivots": [
+                    {
+                      "fields": [
+                        "timestamp"
+                      ],
+                      "type": "time",
+                      "config": {
+                        "interval": {
+                          "type": "timeunit",
+                          "value": 1,
+                          "unit": "auto"
+                        }
+                      }
+                    }
+                  ],
+                  "column_pivots": [],
+                  "series": [
+                    {
+                      "config": {},
+                      "function": "count()"
+                    }
+                  ],
+                  "sort": [],
+                  "visualization": "bar",
+                  "rollup": true,
+                  "event_annotation": false
+                },
+                "description": "Error rate over time (level >= 4)"
+              },
+              {
+                "id": "UUID-2",
+                "type": "aggregation",
+                "filter": null,
+                "filters": [],
+                "query": {
+                  "type": "elasticsearch",
+                  "query_string": ""
+                },
+                "streams": [
+                  "stream-fixed-1"
+                ],
+                "stream_categories": [],
+                "config": {
+                  "row_pivots": [
+                    {
+                      "fields": [
+                        "source"
+                      ],
+                      "type": "values",
+                      "config": {
+                        "limit": 15,
+                        "skip_empty_values": true
+                      }
+                    }
+                  ],
+                  "column_pivots": [],
+                  "series": [
+                    {
+                      "config": {},
+                      "function": "count()"
+                    }
+                  ],
+                  "sort": [
+                    {
+                      "type": "series",
+                      "id": "count()",
+                      "direction": "Descending"
+                    }
+                  ],
+                  "visualization": "table",
+                  "rollup": true,
+                  "event_annotation": false
+                },
+                "description": "Top 15 sources by message volume"
+              },
+              {
+                "id": "UUID-3",
+                "type": "aggregation",
+                "filter": null,
+                "filters": [],
+                "query": {
+                  "type": "elasticsearch",
+                  "query_string": ""
+                },
+                "streams": [
+                  "stream-fixed-1"
+                ],
+                "stream_categories": [],
+                "config": {
+                  "row_pivots": [
+                    {
+                      "fields": [
+                        "level"
+                      ],
+                      "type": "values",
+                      "config": {
+                        "limit": 10,
+                        "skip_empty_values": false
+                      }
+                    }
+                  ],
+                  "column_pivots": [],
+                  "series": [
+                    {
+                      "config": {},
+                      "function": "count()"
+                    }
+                  ],
+                  "sort": [],
+                  "visualization": "pie",
+                  "rollup": true,
+                  "event_annotation": false
+                },
+                "description": "Message distribution by level"
+              },
+              {
+                "id": "UUID-4",
+                "type": "messages",
+                "filter": null,
+                "filters": [],
+                "query": {
+                  "type": "elasticsearch",
+                  "query_string": ""
+                },
+                "streams": [
+                  "stream-fixed-1"
+                ],
+                "stream_categories": [],
+                "config": {
+                  "fields": [
+                    "timestamp",
+                    "source",
+                    "level",
+                    "message"
+                  ],
+                  "show_message_row": true,
+                  "show_summary": false,
+                  "decorators": [],
+                  "sort": [
+                    {
+                      "field": "timestamp",
+                      "order": "DESC"
+                    }
+                  ]
+                },
+                "description": "Recent messages (most-recent first)"
+              }
+            ],
+            "widget_mapping": {
+              "UUID-1": [
+                "UUID-5"
+              ],
+              "UUID-2": [
+                "UUID-6"
+              ],
+              "UUID-3": [
+                "UUID-7"
+              ],
+              "UUID-4": [
+                "UUID-8"
+              ]
+            },
+            "positions": {
+              "UUID-1": {
+                "col": {
+                  "type": "infinity"
+                },
+                "row": 1,
+                "height": 4,
+                "width": 6
+              },
+              "UUID-2": {
+                "col": 7,
+                "row": 1,
+                "height": 4,
+                "width": 6
+              },
+              "UUID-3": {
+                "col": 1,
+                "row": 5,
+                "height": 4,
+                "width": 4
+              },
+              "UUID-4": {
+                "col": {
+                  "type": "infinity"
+                },
+                "row": 9,
+                "height": 6,
+                "width": 12
+              }
+            },
+            "formatting": null,
+            "display_mode_settings": {
+              "positions_inferred": false,
+              "show_summary": false,
+              "show_message_row": false
+            }
+          }
+        },
+        "favorite": false
+      },
+      "share_request": null
+    }
+  },
+  "postApplyEstimate": {
+    "id": "__SERVER_ASSIGNED__"
+  },
+  "existingMatches": [],
+  "chain": [
+    {
+      "step": 1,
+      "tool": "create_search",
+      "request": {
+        "method": "POST",
+        "path": "/api/views/search",
+        "body": {
+          "queries": [
+            {
+              "id": "q-1",
+              "timerange": {
+                "type": "relative",
+                "from": 900
+              },
+              "filter": null,
+              "filters": [],
+              "query": {
+                "type": "elasticsearch",
+                "query_string": ""
+              },
+              "search_types": [
+                {
+                  "type": "pivot",
+                  "id": "UUID-5",
+                  "name": null,
+                  "row_groups": [
+                    {
+                      "type": "time",
+                      "fields": [
+                        "timestamp"
+                      ],
+                      "interval": {
+                        "type": "timeunit",
+                        "value": 1,
+                        "unit": "auto"
+                      }
+                    }
+                  ],
+                  "column_groups": [],
+                  "series": [
+                    {
+                      "type": "count",
+                      "id": "count()",
+                      "field": null
+                    }
+                  ],
+                  "sort": [],
+                  "rollup": true,
+                  "filter": null,
+                  "filters": [],
+                  "query": {
+                    "type": "elasticsearch",
+                    "query_string": "level:>=4"
+                  },
+                  "streams": [
+                    "stream-fixed-1"
+                  ],
+                  "stream_categories": []
+                },
+                {
+                  "type": "pivot",
+                  "id": "UUID-6",
+                  "name": null,
+                  "row_groups": [
+                    {
+                      "type": "values",
+                      "fields": [
+                        "source"
+                      ],
+                      "limit": 15,
+                      "skip_empty_values": true
+                    }
+                  ],
+                  "column_groups": [],
+                  "series": [
+                    {
+                      "type": "count",
+                      "id": "count()",
+                      "field": null
+                    }
+                  ],
+                  "sort": [
+                    {
+                      "type": "series",
+                      "id": "count()",
+                      "direction": "Descending"
+                    }
+                  ],
+                  "rollup": true,
+                  "filter": null,
+                  "filters": [],
+                  "query": {
+                    "type": "elasticsearch",
+                    "query_string": ""
+                  },
+                  "streams": [
+                    "stream-fixed-1"
+                  ],
+                  "stream_categories": []
+                },
+                {
+                  "type": "pivot",
+                  "id": "UUID-7",
+                  "name": null,
+                  "row_groups": [
+                    {
+                      "type": "values",
+                      "fields": [
+                        "level"
+                      ],
+                      "limit": 10,
+                      "skip_empty_values": false
+                    }
+                  ],
+                  "column_groups": [],
+                  "series": [
+                    {
+                      "type": "count",
+                      "id": "count()",
+                      "field": null
+                    }
+                  ],
+                  "sort": [],
+                  "rollup": true,
+                  "filter": null,
+                  "filters": [],
+                  "query": {
+                    "type": "elasticsearch",
+                    "query_string": ""
+                  },
+                  "streams": [
+                    "stream-fixed-1"
+                  ],
+                  "stream_categories": []
+                },
+                {
+                  "type": "messages",
+                  "id": "UUID-8",
+                  "name": null,
+                  "limit": 100,
+                  "offset": 0,
+                  "sort": [
+                    {
+                      "field": "timestamp",
+                      "order": "DESC"
+                    }
+                  ],
+                  "decorators": [],
+                  "filter": null,
+                  "filters": [],
+                  "query": {
+                    "type": "elasticsearch",
+                    "query_string": ""
+                  },
+                  "streams": [
+                    "stream-fixed-1"
+                  ],
+                  "stream_categories": [],
+                  "fields": [
+                    "timestamp",
+                    "source",
+                    "level",
+                    "message"
+                  ]
+                }
+              ]
+            }
+          ],
+          "parameters": [],
+          "skipNoStreamsCheck": false
+        }
+      },
+      "postApplyEstimate": {
+        "id": "__SERVER_ASSIGNED__"
+      }
+    },
+    {
+      "step": 2,
+      "tool": "create_view",
+      "request": {
+        "method": "POST",
+        "path": "/api/views",
+        "body": {
+          "entity": {
+            "type": "DASHBOARD",
+            "title": "Payment service health",
+            "summary": "4 pre-wired widgets",
+            "description": "Auto-generated health dashboard for stream stream-fixed-1",
+            "search_id": "__SERVER_ASSIGNED__step1",
+            "properties": [],
+            "requires": {},
+            "state": {
+              "q-1": {
+                "selected_fields": null,
+                "static_message_list_id": null,
+                "titles": {
+                  "titles": {}
+                },
+                "widgets": [
+                  {
+                    "id": "UUID-1",
+                    "type": "aggregation",
+                    "filter": null,
+                    "filters": [],
+                    "query": {
+                      "type": "elasticsearch",
+                      "query_string": "level:>=4"
+                    },
+                    "streams": [
+                      "stream-fixed-1"
+                    ],
+                    "stream_categories": [],
+                    "config": {
+                      "row_pivots": [
+                        {
+                          "fields": [
+                            "timestamp"
+                          ],
+                          "type": "time",
+                          "config": {
+                            "interval": {
+                              "type": "timeunit",
+                              "value": 1,
+                              "unit": "auto"
+                            }
+                          }
+                        }
+                      ],
+                      "column_pivots": [],
+                      "series": [
+                        {
+                          "config": {},
+                          "function": "count()"
+                        }
+                      ],
+                      "sort": [],
+                      "visualization": "bar",
+                      "rollup": true,
+                      "event_annotation": false
+                    },
+                    "description": "Error rate over time (level >= 4)"
+                  },
+                  {
+                    "id": "UUID-2",
+                    "type": "aggregation",
+                    "filter": null,
+                    "filters": [],
+                    "query": {
+                      "type": "elasticsearch",
+                      "query_string": ""
+                    },
+                    "streams": [
+                      "stream-fixed-1"
+                    ],
+                    "stream_categories": [],
+                    "config": {
+                      "row_pivots": [
+                        {
+                          "fields": [
+                            "source"
+                          ],
+                          "type": "values",
+                          "config": {
+                            "limit": 15,
+                            "skip_empty_values": true
+                          }
+                        }
+                      ],
+                      "column_pivots": [],
+                      "series": [
+                        {
+                          "config": {},
+                          "function": "count()"
+                        }
+                      ],
+                      "sort": [
+                        {
+                          "type": "series",
+                          "id": "count()",
+                          "direction": "Descending"
+                        }
+                      ],
+                      "visualization": "table",
+                      "rollup": true,
+                      "event_annotation": false
+                    },
+                    "description": "Top 15 sources by message volume"
+                  },
+                  {
+                    "id": "UUID-3",
+                    "type": "aggregation",
+                    "filter": null,
+                    "filters": [],
+                    "query": {
+                      "type": "elasticsearch",
+                      "query_string": ""
+                    },
+                    "streams": [
+                      "stream-fixed-1"
+                    ],
+                    "stream_categories": [],
+                    "config": {
+                      "row_pivots": [
+                        {
+                          "fields": [
+                            "level"
+                          ],
+                          "type": "values",
+                          "config": {
+                            "limit": 10,
+                            "skip_empty_values": false
+                          }
+                        }
+                      ],
+                      "column_pivots": [],
+                      "series": [
+                        {
+                          "config": {},
+                          "function": "count()"
+                        }
+                      ],
+                      "sort": [],
+                      "visualization": "pie",
+                      "rollup": true,
+                      "event_annotation": false
+                    },
+                    "description": "Message distribution by level"
+                  },
+                  {
+                    "id": "UUID-4",
+                    "type": "messages",
+                    "filter": null,
+                    "filters": [],
+                    "query": {
+                      "type": "elasticsearch",
+                      "query_string": ""
+                    },
+                    "streams": [
+                      "stream-fixed-1"
+                    ],
+                    "stream_categories": [],
+                    "config": {
+                      "fields": [
+                        "timestamp",
+                        "source",
+                        "level",
+                        "message"
+                      ],
+                      "show_message_row": true,
+                      "show_summary": false,
+                      "decorators": [],
+                      "sort": [
+                        {
+                          "field": "timestamp",
+                          "order": "DESC"
+                        }
+                      ]
+                    },
+                    "description": "Recent messages (most-recent first)"
+                  }
+                ],
+                "widget_mapping": {
+                  "UUID-1": [
+                    "UUID-5"
+                  ],
+                  "UUID-2": [
+                    "UUID-6"
+                  ],
+                  "UUID-3": [
+                    "UUID-7"
+                  ],
+                  "UUID-4": [
+                    "UUID-8"
+                  ]
+                },
+                "positions": {
+                  "UUID-1": {
+                    "col": {
+                      "type": "infinity"
+                    },
+                    "row": 1,
+                    "height": 4,
+                    "width": 6
+                  },
+                  "UUID-2": {
+                    "col": 7,
+                    "row": 1,
+                    "height": 4,
+                    "width": 6
+                  },
+                  "UUID-3": {
+                    "col": 1,
+                    "row": 5,
+                    "height": 4,
+                    "width": 4
+                  },
+                  "UUID-4": {
+                    "col": {
+                      "type": "infinity"
+                    },
+                    "row": 9,
+                    "height": 6,
+                    "width": 12
+                  }
+                },
+                "formatting": null,
+                "display_mode_settings": {
+                  "positions_inferred": false,
+                  "show_summary": false,
+                  "show_message_row": false
+                }
+              }
+            },
+            "favorite": false
+          },
+          "share_request": null
+        }
+      },
+      "dependsOn": {
+        "from": "step1.response.id",
+        "as": "searchId"
+      },
+      "postApplyEstimate": {
+        "id": "__SERVER_ASSIGNED__"
+      }
+    }
+  ],
+  "applyHint": "Re-call with dryRun: false to apply"
+}
+`;
+
+exports[`snapshot: setup_app_monitoring_stack BLUE-01 ACCEPTANCE GATE 6-step chain (F17) 1`] = `
+{
+  "dryRun": true,
+  "tool": "setup_app_monitoring_stack",
+  "connection": "fixture_conn",
+  "idempotencyKey": "51dd5ced8a66be6d12d1cf4645fa129f",
+  "summary": "Set up app monitoring stack for payment-svc (stream + pipeline + dashboard + alert; 6-step chain)",
+  "preview": {
+    "method": "POST",
+    "path": "/api/streams",
+    "body": {
+      "entity": {
+        "title": "payment-svc stream",
+        "description": "Auto-generated by setup_app_monitoring_stack for payment-svc",
+        "rules": [
+          {
+            "type": 2,
+            "field": "source",
+            "value": "payment-*",
+            "inverted": false,
+            "description": "source matches payment-*"
+          }
+        ],
+        "content_pack": null,
+        "matching_type": "AND",
+        "remove_matches_from_default_stream": false,
+        "index_set_id": "ix-fixed-1"
+      },
+      "share_request": null
+    }
+  },
+  "postApplyEstimate": {
+    "id": "__SERVER_ASSIGNED__"
+  },
+  "existingMatches": [],
+  "chain": [
+    {
+      "step": 1,
+      "tool": "create_stream",
+      "request": {
+        "method": "POST",
+        "path": "/api/streams",
+        "body": {
+          "entity": {
+            "title": "payment-svc stream",
+            "description": "Auto-generated by setup_app_monitoring_stack for payment-svc",
+            "rules": [
+              {
+                "type": 2,
+                "field": "source",
+                "value": "payment-*",
+                "inverted": false,
+                "description": "source matches payment-*"
+              }
+            ],
+            "content_pack": null,
+            "matching_type": "AND",
+            "remove_matches_from_default_stream": false,
+            "index_set_id": "ix-fixed-1"
+          },
+          "share_request": null
+        }
+      },
+      "postApplyEstimate": {
+        "stream_id": "__SERVER_ASSIGNED__"
+      }
+    },
+    {
+      "step": 2,
+      "tool": "create_pipeline_rule",
+      "request": {
+        "method": "POST",
+        "path": "/api/system/pipelines/rule",
+        "body": {
+          "title": "payment-svc_drop_debug",
+          "description": "Drop debug-level messages",
+          "source": "rule \\"payment-svc_drop_debug\\"\\nwhen\\n    $message.level > 7\\nthen\\n    drop_message();\\nend"
+        }
+      },
+      "postApplyEstimate": {
+        "id": "__SERVER_ASSIGNED__"
+      }
+    },
+    {
+      "step": 3,
+      "tool": "create_pipeline",
+      "request": {
+        "method": "POST",
+        "path": "/api/system/pipelines/pipeline",
+        "body": {
+          "title": "payment-svc_pipeline",
+          "description": "Pipeline for payment-svc",
+          "source": "pipeline \\"payment-svc_pipeline\\"\\nstage 0 match either\\n    rule \\"payment-svc_drop_debug\\"\\nend"
+        }
+      },
+      "postApplyEstimate": {
+        "id": "__SERVER_ASSIGNED__"
+      }
+    },
+    {
+      "step": 4,
+      "tool": "connect_pipelines_to_stream",
+      "request": {
+        "method": "POST",
+        "path": "/api/system/pipelines/connections/to_stream",
+        "body": {
+          "stream_id": "__SERVER_ASSIGNED__step1.stream_id",
+          "pipeline_ids": [
+            "__SERVER_ASSIGNED__step3"
+          ]
+        }
+      },
+      "dependsOn": [
+        {
+          "from": "step1.response.stream_id",
+          "as": "stream_id"
+        },
+        {
+          "from": "step3.response.id",
+          "as": "pipeline_ids[0]"
+        }
+      ]
+    },
+    {
+      "step": 5,
+      "tool": "create_dashboard",
+      "request": {
+        "method": "POST",
+        "path": "/api/views (internal Search+View chain)",
+        "body": {
+          "chain": [
+            {
+              "step": "5a",
+              "method": "POST",
+              "path": "/api/views/search",
+              "body": {
+                "queries": [
+                  {
+                    "id": "q-1",
+                    "timerange": {
+                      "type": "relative",
+                      "from": 900
+                    },
+                    "filter": null,
+                    "filters": [],
+                    "query": {
+                      "type": "elasticsearch",
+                      "query_string": ""
+                    },
+                    "search_types": [
+                      {
+                        "type": "pivot",
+                        "id": "UUID-1",
+                        "name": null,
+                        "row_groups": [
+                          {
+                            "type": "time",
+                            "fields": [
+                              "timestamp"
+                            ],
+                            "interval": {
+                              "type": "timeunit",
+                              "value": 1,
+                              "unit": "auto"
+                            }
+                          }
+                        ],
+                        "column_groups": [],
+                        "series": [
+                          {
+                            "type": "count",
+                            "id": "count()",
+                            "field": null
+                          }
+                        ],
+                        "sort": [],
+                        "rollup": true,
+                        "filter": null,
+                        "filters": [],
+                        "query": {
+                          "type": "elasticsearch",
+                          "query_string": "level:>=4"
+                        },
+                        "streams": [
+                          "__SERVER_ASSIGNED__step1.stream_id"
+                        ],
+                        "stream_categories": []
+                      },
+                      {
+                        "type": "pivot",
+                        "id": "UUID-2",
+                        "name": null,
+                        "row_groups": [
+                          {
+                            "type": "values",
+                            "fields": [
+                              "source"
+                            ],
+                            "limit": 15,
+                            "skip_empty_values": true
+                          }
+                        ],
+                        "column_groups": [],
+                        "series": [
+                          {
+                            "type": "count",
+                            "id": "count()",
+                            "field": null
+                          }
+                        ],
+                        "sort": [
+                          {
+                            "type": "series",
+                            "id": "count()",
+                            "direction": "Descending"
+                          }
+                        ],
+                        "rollup": true,
+                        "filter": null,
+                        "filters": [],
+                        "query": {
+                          "type": "elasticsearch",
+                          "query_string": ""
+                        },
+                        "streams": [
+                          "__SERVER_ASSIGNED__step1.stream_id"
+                        ],
+                        "stream_categories": []
+                      },
+                      {
+                        "type": "pivot",
+                        "id": "UUID-3",
+                        "name": null,
+                        "row_groups": [
+                          {
+                            "type": "values",
+                            "fields": [
+                              "level"
+                            ],
+                            "limit": 10,
+                            "skip_empty_values": false
+                          }
+                        ],
+                        "column_groups": [],
+                        "series": [
+                          {
+                            "type": "count",
+                            "id": "count()",
+                            "field": null
+                          }
+                        ],
+                        "sort": [],
+                        "rollup": true,
+                        "filter": null,
+                        "filters": [],
+                        "query": {
+                          "type": "elasticsearch",
+                          "query_string": ""
+                        },
+                        "streams": [
+                          "__SERVER_ASSIGNED__step1.stream_id"
+                        ],
+                        "stream_categories": []
+                      },
+                      {
+                        "type": "messages",
+                        "id": "UUID-4",
+                        "name": null,
+                        "limit": 100,
+                        "offset": 0,
+                        "sort": [
+                          {
+                            "field": "timestamp",
+                            "order": "DESC"
+                          }
+                        ],
+                        "decorators": [],
+                        "filter": null,
+                        "filters": [],
+                        "query": {
+                          "type": "elasticsearch",
+                          "query_string": ""
+                        },
+                        "streams": [
+                          "__SERVER_ASSIGNED__step1.stream_id"
+                        ],
+                        "stream_categories": [],
+                        "fields": [
+                          "timestamp",
+                          "source",
+                          "level",
+                          "message"
+                        ]
+                      }
+                    ]
+                  }
+                ],
+                "parameters": [],
+                "skipNoStreamsCheck": false
+              }
+            },
+            {
+              "step": "5b",
+              "method": "POST",
+              "path": "/api/views",
+              "body": {
+                "entity": {
+                  "type": "DASHBOARD",
+                  "title": "payment-svc health",
+                  "summary": "Error rate + top sources + level distribution + recent events for payment-svc",
+                  "description": "Auto-generated by setup_app_monitoring_stack",
+                  "search_id": "__SERVER_ASSIGNED__step5a",
+                  "properties": [],
+                  "requires": {},
+                  "state": {
+                    "q-1": {
+                      "selected_fields": null,
+                      "static_message_list_id": null,
+                      "titles": {
+                        "titles": {}
+                      },
+                      "widgets": [
+                        {
+                          "id": "UUID-5",
+                          "type": "aggregation",
+                          "filter": null,
+                          "filters": [],
+                          "query": {
+                            "type": "elasticsearch",
+                            "query_string": "level:>=4"
+                          },
+                          "streams": [
+                            "__SERVER_ASSIGNED__step1.stream_id"
+                          ],
+                          "stream_categories": [],
+                          "config": {
+                            "row_pivots": [
+                              {
+                                "fields": [
+                                  "timestamp"
+                                ],
+                                "type": "time",
+                                "config": {
+                                  "interval": {
+                                    "type": "timeunit",
+                                    "value": 1,
+                                    "unit": "auto"
+                                  }
+                                }
+                              }
+                            ],
+                            "column_pivots": [],
+                            "series": [
+                              {
+                                "config": {},
+                                "function": "count()"
+                              }
+                            ],
+                            "sort": [],
+                            "visualization": "bar",
+                            "rollup": true,
+                            "event_annotation": false
+                          },
+                          "description": "Error rate over time (level >= 4)"
+                        },
+                        {
+                          "id": "UUID-6",
+                          "type": "aggregation",
+                          "filter": null,
+                          "filters": [],
+                          "query": {
+                            "type": "elasticsearch",
+                            "query_string": ""
+                          },
+                          "streams": [
+                            "__SERVER_ASSIGNED__step1.stream_id"
+                          ],
+                          "stream_categories": [],
+                          "config": {
+                            "row_pivots": [
+                              {
+                                "fields": [
+                                  "source"
+                                ],
+                                "type": "values",
+                                "config": {
+                                  "limit": 15,
+                                  "skip_empty_values": true
+                                }
+                              }
+                            ],
+                            "column_pivots": [],
+                            "series": [
+                              {
+                                "config": {},
+                                "function": "count()"
+                              }
+                            ],
+                            "sort": [
+                              {
+                                "type": "series",
+                                "id": "count()",
+                                "direction": "Descending"
+                              }
+                            ],
+                            "visualization": "table",
+                            "rollup": true,
+                            "event_annotation": false
+                          },
+                          "description": "Top 15 sources by message volume"
+                        },
+                        {
+                          "id": "UUID-7",
+                          "type": "aggregation",
+                          "filter": null,
+                          "filters": [],
+                          "query": {
+                            "type": "elasticsearch",
+                            "query_string": ""
+                          },
+                          "streams": [
+                            "__SERVER_ASSIGNED__step1.stream_id"
+                          ],
+                          "stream_categories": [],
+                          "config": {
+                            "row_pivots": [
+                              {
+                                "fields": [
+                                  "level"
+                                ],
+                                "type": "values",
+                                "config": {
+                                  "limit": 10,
+                                  "skip_empty_values": false
+                                }
+                              }
+                            ],
+                            "column_pivots": [],
+                            "series": [
+                              {
+                                "config": {},
+                                "function": "count()"
+                              }
+                            ],
+                            "sort": [],
+                            "visualization": "pie",
+                            "rollup": true,
+                            "event_annotation": false
+                          },
+                          "description": "Message distribution by level"
+                        },
+                        {
+                          "id": "UUID-8",
+                          "type": "messages",
+                          "filter": null,
+                          "filters": [],
+                          "query": {
+                            "type": "elasticsearch",
+                            "query_string": ""
+                          },
+                          "streams": [
+                            "__SERVER_ASSIGNED__step1.stream_id"
+                          ],
+                          "stream_categories": [],
+                          "config": {
+                            "fields": [
+                              "timestamp",
+                              "source",
+                              "level",
+                              "message"
+                            ],
+                            "show_message_row": true,
+                            "show_summary": false,
+                            "decorators": [],
+                            "sort": [
+                              {
+                                "field": "timestamp",
+                                "order": "DESC"
+                              }
+                            ]
+                          },
+                          "description": "Recent messages (most-recent first)"
+                        }
+                      ],
+                      "widget_mapping": {
+                        "UUID-5": [
+                          "UUID-1"
+                        ],
+                        "UUID-6": [
+                          "UUID-2"
+                        ],
+                        "UUID-7": [
+                          "UUID-3"
+                        ],
+                        "UUID-8": [
+                          "UUID-4"
+                        ]
+                      },
+                      "positions": {
+                        "UUID-5": {
+                          "col": {
+                            "type": "infinity"
+                          },
+                          "row": 1,
+                          "height": 4,
+                          "width": 6
+                        },
+                        "UUID-6": {
+                          "col": 7,
+                          "row": 1,
+                          "height": 4,
+                          "width": 6
+                        },
+                        "UUID-7": {
+                          "col": 1,
+                          "row": 5,
+                          "height": 4,
+                          "width": 4
+                        },
+                        "UUID-8": {
+                          "col": {
+                            "type": "infinity"
+                          },
+                          "row": 9,
+                          "height": 6,
+                          "width": 12
+                        }
+                      },
+                      "formatting": null,
+                      "display_mode_settings": {
+                        "positions_inferred": false,
+                        "show_summary": false,
+                        "show_message_row": false
+                      }
+                    }
+                  },
+                  "favorite": false
+                },
+                "share_request": null
+              }
+            }
+          ]
+        }
+      },
+      "dependsOn": {
+        "from": "step1.response.stream_id",
+        "as": "widgets[].streamIds[0]"
+      },
+      "postApplyEstimate": {
+        "id": "__SERVER_ASSIGNED__"
+      }
+    },
+    {
+      "step": 6,
+      "tool": "create_event_definition",
+      "request": {
+        "method": "POST",
+        "path": "/api/events/definitions?schedule=false",
+        "body": {
+          "title": "payment-svc error rate",
+          "description": "Auto-generated error-rate alert for payment-svc",
+          "priority": 2,
+          "alert": true,
+          "config": {
+            "type": "aggregation-v1",
+            "query": "level:>=4",
+            "streams": [
+              "__SERVER_ASSIGNED__step1.stream_id"
+            ],
+            "group_by": [],
+            "series": [
+              {
+                "id": "count-1",
+                "function": "count",
+                "field": null
+              }
+            ],
+            "conditions": {
+              "expression": {
+                "expr": ">",
+                "left": {
+                  "expr": "number-ref",
+                  "ref": "count-1"
+                },
+                "right": {
+                  "expr": "number",
+                  "value": 50
+                }
+              }
+            },
+            "search_within_ms": 300000,
+            "execute_every_ms": 300000
+          },
+          "field_spec": [],
+          "key_spec": [],
+          "notifications": [],
+          "notification_settings": {
+            "grace_period_ms": 60000,
+            "backlog_size": 50
+          }
+        }
+      },
+      "dependsOn": {
+        "from": "step1.response.stream_id",
+        "as": "config.streams[0]"
+      },
+      "postApplyEstimate": {
+        "id": "__SERVER_ASSIGNED__"
+      }
+    }
+  ],
+  "applyHint": "Re-call with dryRun: false to apply"
+}
+`;
+
+exports[`snapshot: setup_app_monitoring_stack BLUE-01 partial-failure at step 4 transcript (F18) 1`] = `
+{
+  "transcript": [
+    {
+      "step": 1,
+      "tool": "create_stream",
+      "request": {
+        "method": "POST",
+        "path": "/api/streams",
+        "body": {
+          "entity": {
+            "title": "payment-svc stream",
+            "description": "Auto-generated by setup_app_monitoring_stack for payment-svc",
+            "rules": [
+              {
+                "type": 2,
+                "field": "source",
+                "value": "payment-*",
+                "inverted": false,
+                "description": "source matches payment-*"
+              }
+            ],
+            "content_pack": null,
+            "matching_type": "AND",
+            "remove_matches_from_default_stream": false,
+            "index_set_id": "ix-fixed-1"
+          },
+          "share_request": null
+        }
+      },
+      "response": {
+        "stream_id": "stream-applied-1"
+      }
+    },
+    {
+      "step": 2,
+      "tool": "create_pipeline_rule",
+      "request": {
+        "method": "POST",
+        "path": "/api/system/pipelines/rule",
+        "body": {
+          "title": "payment-svc_drop_debug",
+          "description": "Drop debug-level messages",
+          "source": "rule \\"payment-svc_drop_debug\\"\\nwhen\\n    $message.level > 7\\nthen\\n    drop_message();\\nend"
+        }
+      },
+      "response": {
+        "id": "rule-applied-1"
+      }
+    },
+    {
+      "step": 3,
+      "tool": "create_pipeline",
+      "request": {
+        "method": "POST",
+        "path": "/api/system/pipelines/pipeline",
+        "body": {
+          "title": "payment-svc_pipeline",
+          "description": "Pipeline for payment-svc",
+          "source": "pipeline \\"payment-svc_pipeline\\"\\nstage 0 match either\\n    rule \\"payment-svc_drop_debug\\"\\nend"
+        }
+      },
+      "response": {
+        "id": "pipeline-applied-1"
+      }
+    },
+    {
+      "step": 4,
+      "tool": "connect_pipelines_to_stream",
+      "request": {
+        "method": "POST",
+        "path": "/api/system/pipelines/connections/to_stream",
+        "body": {
+          "stream_id": "__SERVER_ASSIGNED__step1.stream_id",
+          "pipeline_ids": [
+            "__SERVER_ASSIGNED__step3"
+          ]
+        }
+      },
+      "error": "Pipeline already connected to stream (simulated 409 conflict)"
+    }
+  ],
+  "failed_at_step": 4,
+  "succeeded_steps": [
+    1,
+    2,
+    3
+  ]
+}
+`;
+
+exports[`snapshot: setup_debug_log_dropping BLUE-06 3-step chain with level>6 predicate (F23) 1`] = `
+{
+  "dryRun": true,
+  "tool": "setup_debug_log_dropping",
+  "connection": "fixture_conn",
+  "idempotencyKey": "e84b244263e51476130088509b4776eb",
+  "summary": "Drop messages with level > 6 on stream stream-fixed-1 (3-step chain: rule + pipeline + connect)",
+  "preview": {
+    "method": "POST",
+    "path": "/api/system/pipelines/connections/to_stream",
+    "body": {
+      "stream_id": "stream-fixed-1",
+      "pipeline_ids": [
+        "__SERVER_ASSIGNED__step2"
+      ]
+    }
+  },
+  "postApplyEstimate": {
+    "id": "stream-fixed-1"
+  },
+  "existingMatches": [],
+  "chain": [
+    {
+      "step": 1,
+      "tool": "create_pipeline_rule",
+      "request": {
+        "method": "POST",
+        "path": "/api/system/pipelines/rule",
+        "body": {
+          "title": "drop_sub_6",
+          "description": "Drop messages where level > 6 (syslog inversion: higher = less severe)",
+          "source": "rule \\"drop_sub_6\\"\\nwhen\\n    $message.level > 6\\nthen\\n    drop_message();\\nend"
+        }
+      },
+      "postApplyEstimate": {
+        "id": "__SERVER_ASSIGNED__"
+      }
+    },
+    {
+      "step": 2,
+      "tool": "create_pipeline",
+      "request": {
+        "method": "POST",
+        "path": "/api/system/pipelines/pipeline",
+        "body": {
+          "title": "Drop sub-6 for stream stream-fixed-1",
+          "description": "Pipeline that drops sub-6 log levels on stream stream-fixed-1",
+          "source": "pipeline \\"Drop sub-6 for stream stream-fixed-1\\"\\nstage 0 match either\\n    rule \\"drop_sub_6\\"\\nend"
+        }
+      },
+      "postApplyEstimate": {
+        "id": "__SERVER_ASSIGNED__"
+      }
+    },
+    {
+      "step": 3,
+      "tool": "connect_pipelines_to_stream",
+      "request": {
+        "method": "POST",
+        "path": "/api/system/pipelines/connections/to_stream",
+        "body": {
+          "stream_id": "stream-fixed-1",
+          "pipeline_ids": [
+            "__SERVER_ASSIGNED__step2"
+          ]
+        }
+      },
+      "dependsOn": {
+        "from": "step2.response.id",
+        "as": "pipeline_ids[0]"
+      }
+    }
+  ],
+  "applyHint": "Re-call with dryRun: false to apply"
+}
+`;
+
+exports[`snapshot: setup_error_alerting BLUE-02 1-step chain ?schedule=false (F19) 1`] = `
+{
+  "dryRun": true,
+  "tool": "setup_error_alerting",
+  "connection": "fixture_conn",
+  "idempotencyKey": "752d3ce6df8590ece01869ad002b073f",
+  "summary": "Set up error alerting on stream stream-fixed-1 via notification notif-fixed-1",
+  "preview": {
+    "method": "POST",
+    "path": "/api/events/definitions?schedule=false",
+    "body": {
+      "title": "Payment service error alert",
+      "description": "Auto-generated error-rate alert (>= 50 errors / 5 min)",
+      "priority": 2,
+      "alert": true,
+      "config": {
+        "type": "aggregation-v1",
+        "query": "level:>=4",
+        "streams": [
+          "stream-fixed-1"
+        ],
+        "group_by": [],
+        "series": [
+          {
+            "id": "count-1",
+            "function": "count",
+            "field": null
+          }
+        ],
+        "conditions": {
+          "expression": {
+            "expr": ">",
+            "left": {
+              "expr": "number-ref",
+              "ref": "count-1"
+            },
+            "right": {
+              "expr": "number",
+              "value": 50
+            }
+          }
+        },
+        "search_within_ms": 300000,
+        "execute_every_ms": 300000
+      },
+      "field_spec": [],
+      "key_spec": [],
+      "notifications": [
+        {
+          "notification_id": "notif-fixed-1",
+          "notification_parameters": null
+        }
+      ],
+      "notification_settings": {
+        "grace_period_ms": 60000,
+        "backlog_size": 50
+      }
+    }
+  },
+  "postApplyEstimate": {
+    "id": "__SERVER_ASSIGNED__"
+  },
+  "existingMatches": [],
+  "chain": [
+    {
+      "step": 1,
+      "tool": "create_event_definition",
+      "request": {
+        "method": "POST",
+        "path": "/api/events/definitions?schedule=false",
+        "body": {
+          "title": "Payment service error alert",
+          "description": "Auto-generated error-rate alert (>= 50 errors / 5 min)",
+          "priority": 2,
+          "alert": true,
+          "config": {
+            "type": "aggregation-v1",
+            "query": "level:>=4",
+            "streams": [
+              "stream-fixed-1"
+            ],
+            "group_by": [],
+            "series": [
+              {
+                "id": "count-1",
+                "function": "count",
+                "field": null
+              }
+            ],
+            "conditions": {
+              "expression": {
+                "expr": ">",
+                "left": {
+                  "expr": "number-ref",
+                  "ref": "count-1"
+                },
+                "right": {
+                  "expr": "number",
+                  "value": 50
+                }
+              }
+            },
+            "search_within_ms": 300000,
+            "execute_every_ms": 300000
+          },
+          "field_spec": [],
+          "key_spec": [],
+          "notifications": [
+            {
+              "notification_id": "notif-fixed-1",
+              "notification_parameters": null
+            }
+          ],
+          "notification_settings": {
+            "grace_period_ms": 60000,
+            "backlog_size": 50
+          }
+        }
+      },
+      "postApplyEstimate": {
+        "id": "__SERVER_ASSIGNED__"
+      }
+    }
+  ],
+  "applyHint": "Re-call with dryRun: false to apply"
+}
+`;
+
+exports[`snapshot: setup_long_term_archival_index BLUE-05 1-step chain with frozen creation_date (F22) 1`] = `
+{
+  "dryRun": true,
+  "tool": "setup_long_term_archival_index",
+  "connection": "fixture_conn",
+  "idempotencyKey": "c13191c8f74b618eccf44b16e80ccf21",
+  "summary": "Set up long-term archival index \\"payment-service-archive\\" with 30-day retention (1 GiB/index size rotation + delete retention)",
+  "preview": {
+    "method": "POST",
+    "path": "/api/system/indices/index_sets",
+    "body": {
+      "title": "payment-service-archive",
+      "description": "Long-term archive for payment service logs",
+      "index_prefix": "payment_service_archive",
+      "shards": 4,
+      "replicas": 1,
+      "rotation_strategy_class": "org.graylog2.indexer.rotation.strategies.SizeBasedRotationStrategyConfig",
+      "rotation_strategy": {
+        "type": "org.graylog2.indexer.rotation.strategies.SizeBasedRotationStrategyConfig",
+        "max_size": 1073741824
+      },
+      "retention_strategy_class": "org.graylog2.indexer.retention.strategies.DeletionRetentionStrategyConfig",
+      "retention_strategy": {
+        "type": "org.graylog2.indexer.retention.strategies.DeletionRetentionStrategyConfig",
+        "max_number_of_indices": 30
+      },
+      "writable": true,
+      "index_analyzer": "standard",
+      "index_optimization_max_num_segments": 1,
+      "index_optimization_disabled": false,
+      "field_type_refresh_interval": 5000,
+      "creation_date": "2026-01-01T00:00:00.000Z"
+    }
+  },
+  "postApplyEstimate": {
+    "id": "__SERVER_ASSIGNED__"
+  },
+  "existingMatches": [],
+  "chain": [
+    {
+      "step": 1,
+      "tool": "create_index_set",
+      "request": {
+        "method": "POST",
+        "path": "/api/system/indices/index_sets",
+        "body": {
+          "title": "payment-service-archive",
+          "description": "Long-term archive for payment service logs",
+          "index_prefix": "payment_service_archive",
+          "shards": 4,
+          "replicas": 1,
+          "rotation_strategy_class": "org.graylog2.indexer.rotation.strategies.SizeBasedRotationStrategyConfig",
+          "rotation_strategy": {
+            "type": "org.graylog2.indexer.rotation.strategies.SizeBasedRotationStrategyConfig",
+            "max_size": 1073741824
+          },
+          "retention_strategy_class": "org.graylog2.indexer.retention.strategies.DeletionRetentionStrategyConfig",
+          "retention_strategy": {
+            "type": "org.graylog2.indexer.retention.strategies.DeletionRetentionStrategyConfig",
+            "max_number_of_indices": 30
+          },
+          "writable": true,
+          "index_analyzer": "standard",
+          "index_optimization_max_num_segments": 1,
+          "index_optimization_disabled": false,
+          "field_type_refresh_interval": 5000,
+          "creation_date": "2026-01-01T00:00:00.000Z"
+        }
+      },
+      "postApplyEstimate": {
+        "id": "__SERVER_ASSIGNED__"
+      }
+    }
+  ],
+  "applyHint": "Re-call with dryRun: false to apply"
+}
+`;
+
+exports[`snapshot: setup_pipeline_for_stream BLUE-04 N=3 transforms → 5-step chain (F21) 1`] = `
+{
+  "dryRun": true,
+  "tool": "setup_pipeline_for_stream",
+  "connection": "fixture_conn",
+  "idempotencyKey": "c6411ab3dc3df67dfa62797413c8bbc4",
+  "summary": "Set up pipeline \\"Payment normalization pipeline\\" for stream stream-fixed-1 with 3 transform(s) (5-step chain)",
+  "preview": {
+    "method": "POST",
+    "path": "/api/system/pipelines/connections/to_stream",
+    "body": {
+      "stream_id": "stream-fixed-1",
+      "pipeline_ids": [
+        "__SERVER_ASSIGNED__step4"
+      ]
+    }
+  },
+  "postApplyEstimate": {
+    "id": "stream-fixed-1"
+  },
+  "existingMatches": [],
+  "chain": [
+    {
+      "step": 1,
+      "tool": "create_pipeline_rule",
+      "request": {
+        "method": "POST",
+        "path": "/api/system/pipelines/rule",
+        "body": {
+          "title": "tag_complete",
+          "description": "Generated by setup_pipeline_for_stream (transform 1/3)",
+          "source": "rule \\"tag_complete\\"\\nwhen\\n    has_field(\\"status\\")\\nthen\\n    set_field(field: \\"is_complete\\", value: true);\\nend"
+        }
+      },
+      "postApplyEstimate": {
+        "id": "__SERVER_ASSIGNED__"
+      }
+    },
+    {
+      "step": 2,
+      "tool": "create_pipeline_rule",
+      "request": {
+        "method": "POST",
+        "path": "/api/system/pipelines/rule",
+        "body": {
+          "title": "tag_source",
+          "description": "Generated by setup_pipeline_for_stream (transform 2/3)",
+          "source": "rule \\"tag_source\\"\\nwhen\\n    has_field(\\"source\\")\\nthen\\n    set_field(field: \\"tagged_by\\", value: \\"payment-pipeline\\");\\nend"
+        }
+      },
+      "postApplyEstimate": {
+        "id": "__SERVER_ASSIGNED__"
+      }
+    },
+    {
+      "step": 3,
+      "tool": "create_pipeline_rule",
+      "request": {
+        "method": "POST",
+        "path": "/api/system/pipelines/rule",
+        "body": {
+          "title": "drop_noisy",
+          "description": "Generated by setup_pipeline_for_stream (transform 3/3)",
+          "source": "rule \\"drop_noisy\\"\\nwhen\\n    has_field(\\"debug\\")\\nthen\\n    drop_message();\\nend"
+        }
+      },
+      "postApplyEstimate": {
+        "id": "__SERVER_ASSIGNED__"
+      }
+    },
+    {
+      "step": 4,
+      "tool": "create_pipeline",
+      "request": {
+        "method": "POST",
+        "path": "/api/system/pipelines/pipeline",
+        "body": {
+          "title": "Payment normalization pipeline",
+          "description": "Normalizes payment service log fields",
+          "source": "pipeline \\"Payment normalization pipeline\\"\\nstage 0 match either\\n    rule \\"tag_complete\\"\\n    rule \\"tag_source\\"\\n    rule \\"drop_noisy\\"\\nend"
+        }
+      },
+      "postApplyEstimate": {
+        "id": "__SERVER_ASSIGNED__"
+      }
+    },
+    {
+      "step": 5,
+      "tool": "connect_pipelines_to_stream",
+      "request": {
+        "method": "POST",
+        "path": "/api/system/pipelines/connections/to_stream",
+        "body": {
+          "stream_id": "stream-fixed-1",
+          "pipeline_ids": [
+            "__SERVER_ASSIGNED__step4"
+          ]
+        }
+      },
+      "dependsOn": {
+        "from": "step4.response.id",
+        "as": "pipeline_ids[0]"
+      }
+    }
+  ],
+  "applyHint": "Re-call with dryRun: false to apply"
+}
+`;

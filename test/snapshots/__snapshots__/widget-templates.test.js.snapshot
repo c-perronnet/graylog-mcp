@@ -1,0 +1,684 @@
+exports[`snapshot: error_rate_over_time builder emits bar-viz pivot with level:>=4 query (DASH-08 F10) 1`] = `
+{
+  "widget": {
+    "id": "w-fixed-error-rate",
+    "type": "aggregation",
+    "filter": null,
+    "filters": [],
+    "query": {
+      "type": "elasticsearch",
+      "query_string": "level:>=4"
+    },
+    "streams": [
+      "s-1"
+    ],
+    "stream_categories": [],
+    "config": {
+      "row_pivots": [
+        {
+          "fields": [
+            "timestamp"
+          ],
+          "type": "time",
+          "config": {
+            "interval": {
+              "type": "timeunit",
+              "value": 1,
+              "unit": "auto"
+            }
+          }
+        }
+      ],
+      "column_pivots": [],
+      "series": [
+        {
+          "config": {},
+          "function": "count()"
+        }
+      ],
+      "sort": [],
+      "visualization": "bar",
+      "rollup": true,
+      "event_annotation": false
+    },
+    "description": "Error rate over time (level >= 4)"
+  },
+  "position": {
+    "col": {
+      "type": "infinity"
+    },
+    "row": 1,
+    "height": 4,
+    "width": 6
+  },
+  "searchType": {
+    "type": "pivot",
+    "id": "st-fixed-error-rate",
+    "name": null,
+    "row_groups": [
+      {
+        "type": "time",
+        "fields": [
+          "timestamp"
+        ],
+        "interval": {
+          "type": "timeunit",
+          "value": 1,
+          "unit": "auto"
+        }
+      }
+    ],
+    "column_groups": [],
+    "series": [
+      {
+        "type": "count",
+        "id": "count()",
+        "field": null
+      }
+    ],
+    "sort": [],
+    "rollup": true,
+    "filter": null,
+    "filters": [],
+    "query": {
+      "type": "elasticsearch",
+      "query_string": "level:>=4"
+    },
+    "streams": [
+      "s-1"
+    ],
+    "stream_categories": []
+  }
+}
+`;
+
+exports[`snapshot: field_value_distribution builder emits values-bucket on agent-supplied field (DASH-08 F16) 1`] = `
+{
+  "widget": {
+    "id": "w-fixed-fvd",
+    "type": "aggregation",
+    "filter": null,
+    "filters": [],
+    "query": {
+      "type": "elasticsearch",
+      "query_string": ""
+    },
+    "streams": [
+      "s-1"
+    ],
+    "stream_categories": [],
+    "config": {
+      "row_pivots": [
+        {
+          "fields": [
+            "http_status"
+          ],
+          "type": "values",
+          "config": {
+            "limit": 15,
+            "skip_empty_values": true
+          }
+        }
+      ],
+      "column_pivots": [],
+      "series": [
+        {
+          "config": {},
+          "function": "count()"
+        }
+      ],
+      "sort": [
+        {
+          "type": "series",
+          "id": "count()",
+          "direction": "Descending"
+        }
+      ],
+      "visualization": "table",
+      "rollup": true,
+      "event_annotation": false
+    },
+    "description": "Distribution of values for field \\"http_status\\""
+  },
+  "position": {
+    "col": 1,
+    "row": 5,
+    "height": 4,
+    "width": 6
+  },
+  "searchType": {
+    "type": "pivot",
+    "id": "st-fixed-fvd",
+    "name": null,
+    "row_groups": [
+      {
+        "type": "values",
+        "fields": [
+          "http_status"
+        ],
+        "limit": 15,
+        "skip_empty_values": true
+      }
+    ],
+    "column_groups": [],
+    "series": [
+      {
+        "type": "count",
+        "id": "count()",
+        "field": null
+      }
+    ],
+    "sort": [
+      {
+        "type": "series",
+        "id": "count()",
+        "direction": "Descending"
+      }
+    ],
+    "rollup": true,
+    "filter": null,
+    "filters": [],
+    "query": {
+      "type": "elasticsearch",
+      "query_string": ""
+    },
+    "streams": [
+      "s-1"
+    ],
+    "stream_categories": []
+  }
+}
+`;
+
+exports[`snapshot: level_distribution builder emits pie-viz with skip_empty_values:false (DASH-08 F12) 1`] = `
+{
+  "widget": {
+    "id": "w-fixed-level-dist",
+    "type": "aggregation",
+    "filter": null,
+    "filters": [],
+    "query": {
+      "type": "elasticsearch",
+      "query_string": ""
+    },
+    "streams": [
+      "s-1"
+    ],
+    "stream_categories": [],
+    "config": {
+      "row_pivots": [
+        {
+          "fields": [
+            "level"
+          ],
+          "type": "values",
+          "config": {
+            "limit": 10,
+            "skip_empty_values": false
+          }
+        }
+      ],
+      "column_pivots": [],
+      "series": [
+        {
+          "config": {},
+          "function": "count()"
+        }
+      ],
+      "sort": [],
+      "visualization": "pie",
+      "rollup": true,
+      "event_annotation": false
+    },
+    "description": "Message distribution by level"
+  },
+  "position": {
+    "col": 1,
+    "row": 5,
+    "height": 4,
+    "width": 4
+  },
+  "searchType": {
+    "type": "pivot",
+    "id": "st-fixed-level-dist",
+    "name": null,
+    "row_groups": [
+      {
+        "type": "values",
+        "fields": [
+          "level"
+        ],
+        "limit": 10,
+        "skip_empty_values": false
+      }
+    ],
+    "column_groups": [],
+    "series": [
+      {
+        "type": "count",
+        "id": "count()",
+        "field": null
+      }
+    ],
+    "sort": [],
+    "rollup": true,
+    "filter": null,
+    "filters": [],
+    "query": {
+      "type": "elasticsearch",
+      "query_string": ""
+    },
+    "streams": [
+      "s-1"
+    ],
+    "stream_categories": []
+  }
+}
+`;
+
+exports[`snapshot: recent_events_table builder emits MessageList shape (DASH-08 F14) 1`] = `
+{
+  "widget": {
+    "id": "w-fixed-recent",
+    "type": "messages",
+    "filter": null,
+    "filters": [],
+    "query": {
+      "type": "elasticsearch",
+      "query_string": ""
+    },
+    "streams": [
+      "s-1"
+    ],
+    "stream_categories": [],
+    "config": {
+      "fields": [
+        "timestamp",
+        "source",
+        "level",
+        "message"
+      ],
+      "show_message_row": true,
+      "show_summary": false,
+      "decorators": [],
+      "sort": [
+        {
+          "field": "timestamp",
+          "order": "DESC"
+        }
+      ]
+    },
+    "description": "Recent messages (most-recent first)"
+  },
+  "position": {
+    "col": {
+      "type": "infinity"
+    },
+    "row": 9,
+    "height": 6,
+    "width": 12
+  },
+  "searchType": {
+    "type": "messages",
+    "id": "st-fixed-recent",
+    "name": null,
+    "limit": 100,
+    "offset": 0,
+    "sort": [
+      {
+        "field": "timestamp",
+        "order": "DESC"
+      }
+    ],
+    "decorators": [],
+    "filter": null,
+    "filters": [],
+    "query": {
+      "type": "elasticsearch",
+      "query_string": ""
+    },
+    "streams": [
+      "s-1"
+    ],
+    "stream_categories": [],
+    "fields": [
+      "timestamp",
+      "source",
+      "level",
+      "message"
+    ]
+  }
+}
+`;
+
+exports[`snapshot: request_rate_over_time builder emits line-viz time-bucket (DASH-08 F15) 1`] = `
+{
+  "widget": {
+    "id": "w-fixed-request-rate",
+    "type": "aggregation",
+    "filter": null,
+    "filters": [],
+    "query": {
+      "type": "elasticsearch",
+      "query_string": "http_method:GET"
+    },
+    "streams": [
+      "s-1"
+    ],
+    "stream_categories": [],
+    "config": {
+      "row_pivots": [
+        {
+          "fields": [
+            "timestamp"
+          ],
+          "type": "time",
+          "config": {
+            "interval": {
+              "type": "timeunit",
+              "value": 1,
+              "unit": "auto"
+            }
+          }
+        }
+      ],
+      "column_pivots": [],
+      "series": [
+        {
+          "config": {},
+          "function": "count()"
+        }
+      ],
+      "sort": [],
+      "visualization": "line",
+      "rollup": true,
+      "event_annotation": false
+    },
+    "description": "Request rate over time (filter: http_method:GET)"
+  },
+  "position": {
+    "col": 1,
+    "row": 1,
+    "height": 4,
+    "width": 6
+  },
+  "searchType": {
+    "type": "pivot",
+    "id": "st-fixed-request-rate",
+    "name": null,
+    "row_groups": [
+      {
+        "type": "time",
+        "fields": [
+          "timestamp"
+        ],
+        "interval": {
+          "type": "timeunit",
+          "value": 1,
+          "unit": "auto"
+        }
+      }
+    ],
+    "column_groups": [],
+    "series": [
+      {
+        "type": "count",
+        "id": "count()",
+        "field": null
+      }
+    ],
+    "sort": [],
+    "rollup": true,
+    "filter": null,
+    "filters": [],
+    "query": {
+      "type": "elasticsearch",
+      "query_string": "http_method:GET"
+    },
+    "streams": [
+      "s-1"
+    ],
+    "stream_categories": []
+  }
+}
+`;
+
+exports[`snapshot: stream_activity_overview builder emits 2-bucket pivot (time × streams) area-viz (DASH-08 F17) 1`] = `
+{
+  "widget": {
+    "id": "w-fixed-stream-activity",
+    "type": "aggregation",
+    "filter": null,
+    "filters": [],
+    "query": {
+      "type": "elasticsearch",
+      "query_string": ""
+    },
+    "streams": [
+      "s-1",
+      "s-2"
+    ],
+    "stream_categories": [],
+    "config": {
+      "row_pivots": [
+        {
+          "fields": [
+            "timestamp"
+          ],
+          "type": "time",
+          "config": {
+            "interval": {
+              "type": "timeunit",
+              "value": 5,
+              "unit": "minutes"
+            }
+          }
+        },
+        {
+          "fields": [
+            "streams"
+          ],
+          "type": "values",
+          "config": {
+            "limit": 10,
+            "skip_empty_values": true
+          }
+        }
+      ],
+      "column_pivots": [],
+      "series": [
+        {
+          "config": {},
+          "function": "count()"
+        }
+      ],
+      "sort": [],
+      "visualization": "area",
+      "rollup": true,
+      "event_annotation": false
+    },
+    "description": "Stream activity overview (stacked by stream)"
+  },
+  "position": {
+    "col": 1,
+    "row": 1,
+    "height": 4,
+    "width": 12
+  },
+  "searchType": {
+    "type": "pivot",
+    "id": "st-fixed-stream-activity",
+    "name": null,
+    "row_groups": [
+      {
+        "type": "time",
+        "fields": [
+          "timestamp"
+        ],
+        "interval": {
+          "type": "timeunit",
+          "value": 5,
+          "unit": "minutes"
+        }
+      },
+      {
+        "type": "values",
+        "fields": [
+          "streams"
+        ],
+        "limit": 10,
+        "skip_empty_values": true
+      }
+    ],
+    "column_groups": [],
+    "series": [
+      {
+        "type": "count",
+        "id": "count()",
+        "field": null
+      }
+    ],
+    "sort": [],
+    "rollup": true,
+    "filter": null,
+    "filters": [],
+    "query": {
+      "type": "elasticsearch",
+      "query_string": ""
+    },
+    "streams": [
+      "s-1",
+      "s-2"
+    ],
+    "stream_categories": []
+  }
+}
+`;
+
+exports[`snapshot: top_error_clusters builder emits TextWidget placeholder with searchType:null (DASH-08 F13) 1`] = `
+{
+  "widget": {
+    "id": "w-fixed-clusters",
+    "type": "text",
+    "filter": null,
+    "filters": [],
+    "query": {
+      "type": "elasticsearch",
+      "query_string": ""
+    },
+    "streams": [
+      "s-1"
+    ],
+    "stream_categories": [],
+    "config": {
+      "text": "Top 10 error clusters (placeholder — populate via cluster_log_messages tool)."
+    },
+    "description": "Top 10 error clusters"
+  },
+  "position": {
+    "col": 1,
+    "row": 9,
+    "height": 4,
+    "width": 6
+  },
+  "searchType": null
+}
+`;
+
+exports[`snapshot: top_sources_by_volume builder emits table-viz values-bucket on source (DASH-08 F11) 1`] = `
+{
+  "widget": {
+    "id": "w-fixed-top-sources",
+    "type": "aggregation",
+    "filter": null,
+    "filters": [],
+    "query": {
+      "type": "elasticsearch",
+      "query_string": ""
+    },
+    "streams": [
+      "s-1"
+    ],
+    "stream_categories": [],
+    "config": {
+      "row_pivots": [
+        {
+          "fields": [
+            "source"
+          ],
+          "type": "values",
+          "config": {
+            "limit": 15,
+            "skip_empty_values": true
+          }
+        }
+      ],
+      "column_pivots": [],
+      "series": [
+        {
+          "config": {},
+          "function": "count()"
+        }
+      ],
+      "sort": [
+        {
+          "type": "series",
+          "id": "count()",
+          "direction": "Descending"
+        }
+      ],
+      "visualization": "table",
+      "rollup": true,
+      "event_annotation": false
+    },
+    "description": "Top 15 sources by message volume"
+  },
+  "position": {
+    "col": 7,
+    "row": 1,
+    "height": 4,
+    "width": 6
+  },
+  "searchType": {
+    "type": "pivot",
+    "id": "st-fixed-top-sources",
+    "name": null,
+    "row_groups": [
+      {
+        "type": "values",
+        "fields": [
+          "source"
+        ],
+        "limit": 15,
+        "skip_empty_values": true
+      }
+    ],
+    "column_groups": [],
+    "series": [
+      {
+        "type": "count",
+        "id": "count()",
+        "field": null
+      }
+    ],
+    "sort": [
+      {
+        "type": "series",
+        "id": "count()",
+        "direction": "Descending"
+      }
+    ],
+    "rollup": true,
+    "filter": null,
+    "filters": [],
+    "query": {
+      "type": "elasticsearch",
+      "query_string": ""
+    },
+    "streams": [
+      "s-1"
+    ],
+    "stream_categories": []
+  }
+}
+`;

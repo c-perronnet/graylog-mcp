@@ -1,0 +1,1051 @@
+exports[`snapshot: add_widget_from_template M7 ACCEPTANCE GATE — closed-set zod refusal (DASH-06 F8) 1`] = `
+{
+  "isError": true,
+  "content": [
+    {
+      "type": "text",
+      "text": "templateName: Invalid enum value. Expected 'error_rate_over_time' | 'top_sources_by_volume' | 'level_distribution' | 'top_error_clusters' | 'request_rate_over_time' | 'field_value_distribution' | 'recent_events_table' | 'stream_activity_overview', received 'bogus'"
+    }
+  ]
+}
+`;
+
+exports[`snapshot: add_widget_from_template error_rate_over_time 2-step PUT chain (DASH-06 F7) 1`] = `
+{
+  "dryRun": true,
+  "tool": "add_widget_from_template",
+  "connection": "fixture_conn",
+  "idempotencyKey": "cdf6dfae1f1508ff148dcb9821be6257",
+  "summary": "Add widget from template \\"error_rate_over_time\\" to dashboard v-fixed-2 (symmetric Search+View atomic chain)",
+  "preview": {
+    "method": "PUT",
+    "path": "/api/views/v-fixed-2",
+    "body": {
+      "entity": {
+        "id": "v-fixed-2",
+        "type": "DASHBOARD",
+        "title": "Payment Service Health",
+        "summary": "4 widgets",
+        "description": "Auto-generated dashboard",
+        "search_id": "S-fixed-1",
+        "properties": [],
+        "requires": {},
+        "favorite": false,
+        "state": {
+          "q-1": {
+            "selected_fields": null,
+            "static_message_list_id": null,
+            "titles": {
+              "titles": {}
+            },
+            "widgets": [
+              {
+                "id": "w-existing",
+                "type": "aggregation"
+              },
+              {
+                "id": "w-new-fixed",
+                "type": "aggregation",
+                "filter": null,
+                "filters": [],
+                "query": {
+                  "type": "elasticsearch",
+                  "query_string": "level:>=4"
+                },
+                "streams": [
+                  "s-1"
+                ],
+                "stream_categories": [],
+                "config": {
+                  "row_pivots": [
+                    {
+                      "fields": [
+                        "timestamp"
+                      ],
+                      "type": "time",
+                      "config": {
+                        "interval": {
+                          "type": "timeunit",
+                          "value": 1,
+                          "unit": "auto"
+                        }
+                      }
+                    }
+                  ],
+                  "column_pivots": [],
+                  "series": [
+                    {
+                      "config": {},
+                      "function": "count()"
+                    }
+                  ],
+                  "sort": [],
+                  "visualization": "bar",
+                  "rollup": true,
+                  "event_annotation": false
+                },
+                "description": "Error rate over time (level >= 4)"
+              }
+            ],
+            "widget_mapping": {
+              "w-existing": [
+                "st-existing"
+              ],
+              "w-new-fixed": [
+                "st-new-fixed"
+              ]
+            },
+            "positions": {
+              "w-existing": {
+                "col": 1,
+                "row": 1,
+                "height": 2,
+                "width": 4
+              },
+              "w-new-fixed": {
+                "col": {
+                  "type": "infinity"
+                },
+                "row": 1,
+                "height": 4,
+                "width": 6
+              }
+            },
+            "formatting": null,
+            "display_mode_settings": {
+              "positions_inferred": false,
+              "show_summary": false,
+              "show_message_row": false
+            }
+          }
+        }
+      },
+      "share_request": null
+    }
+  },
+  "postApplyEstimate": {
+    "id": "v-fixed-2",
+    "widgetId": "w-new-fixed"
+  },
+  "existingMatches": [],
+  "chain": [
+    {
+      "step": 1,
+      "tool": "update_search",
+      "request": {
+        "method": "PUT",
+        "path": "/api/views/search/S-fixed-1",
+        "body": {
+          "id": "S-fixed-1",
+          "queries": [
+            {
+              "id": "q-1",
+              "timerange": {
+                "type": "relative",
+                "from": 300
+              },
+              "filter": null,
+              "filters": [],
+              "query": {
+                "type": "elasticsearch",
+                "query_string": ""
+              },
+              "search_types": [
+                {
+                  "id": "st-existing",
+                  "type": "pivot"
+                },
+                {
+                  "type": "pivot",
+                  "id": "st-new-fixed",
+                  "name": null,
+                  "row_groups": [
+                    {
+                      "type": "time",
+                      "fields": [
+                        "timestamp"
+                      ],
+                      "interval": {
+                        "type": "timeunit",
+                        "value": 1,
+                        "unit": "auto"
+                      }
+                    }
+                  ],
+                  "column_groups": [],
+                  "series": [
+                    {
+                      "type": "count",
+                      "id": "count()",
+                      "field": null
+                    }
+                  ],
+                  "sort": [],
+                  "rollup": true,
+                  "filter": null,
+                  "filters": [],
+                  "query": {
+                    "type": "elasticsearch",
+                    "query_string": "level:>=4"
+                  },
+                  "streams": [
+                    "s-1"
+                  ],
+                  "stream_categories": []
+                }
+              ]
+            }
+          ],
+          "parameters": [],
+          "skipNoStreamsCheck": false
+        }
+      }
+    },
+    {
+      "step": 2,
+      "tool": "update_view",
+      "request": {
+        "method": "PUT",
+        "path": "/api/views/v-fixed-2",
+        "body": {
+          "entity": {
+            "id": "v-fixed-2",
+            "type": "DASHBOARD",
+            "title": "Payment Service Health",
+            "summary": "4 widgets",
+            "description": "Auto-generated dashboard",
+            "search_id": "S-fixed-1",
+            "properties": [],
+            "requires": {},
+            "favorite": false,
+            "state": {
+              "q-1": {
+                "selected_fields": null,
+                "static_message_list_id": null,
+                "titles": {
+                  "titles": {}
+                },
+                "widgets": [
+                  {
+                    "id": "w-existing",
+                    "type": "aggregation"
+                  },
+                  {
+                    "id": "w-new-fixed",
+                    "type": "aggregation",
+                    "filter": null,
+                    "filters": [],
+                    "query": {
+                      "type": "elasticsearch",
+                      "query_string": "level:>=4"
+                    },
+                    "streams": [
+                      "s-1"
+                    ],
+                    "stream_categories": [],
+                    "config": {
+                      "row_pivots": [
+                        {
+                          "fields": [
+                            "timestamp"
+                          ],
+                          "type": "time",
+                          "config": {
+                            "interval": {
+                              "type": "timeunit",
+                              "value": 1,
+                              "unit": "auto"
+                            }
+                          }
+                        }
+                      ],
+                      "column_pivots": [],
+                      "series": [
+                        {
+                          "config": {},
+                          "function": "count()"
+                        }
+                      ],
+                      "sort": [],
+                      "visualization": "bar",
+                      "rollup": true,
+                      "event_annotation": false
+                    },
+                    "description": "Error rate over time (level >= 4)"
+                  }
+                ],
+                "widget_mapping": {
+                  "w-existing": [
+                    "st-existing"
+                  ],
+                  "w-new-fixed": [
+                    "st-new-fixed"
+                  ]
+                },
+                "positions": {
+                  "w-existing": {
+                    "col": 1,
+                    "row": 1,
+                    "height": 2,
+                    "width": 4
+                  },
+                  "w-new-fixed": {
+                    "col": {
+                      "type": "infinity"
+                    },
+                    "row": 1,
+                    "height": 4,
+                    "width": 6
+                  }
+                },
+                "formatting": null,
+                "display_mode_settings": {
+                  "positions_inferred": false,
+                  "show_summary": false,
+                  "show_message_row": false
+                }
+              }
+            }
+          },
+          "share_request": null
+        }
+      }
+    }
+  ],
+  "applyHint": "Re-call with dryRun: false to apply"
+}
+`;
+
+exports[`snapshot: create_dashboard D-03 widget-position integrity refusal BEFORE wire (DASH-03 F4) 1`] = `
+{
+  "isError": true,
+  "content": [
+    {
+      "type": "text",
+      "text": "[create_dashboard] Widget/position integrity violation: simulated for snapshot fixture [reason: widget_position_integrity_violation]"
+    }
+  ],
+  "reason": "widget_position_integrity_violation"
+}
+`;
+
+exports[`snapshot: create_dashboard dry-run C7 ACCEPTANCE GATE 2-step Search+View chain (DASH-03 F3) 1`] = `
+{
+  "dryRun": true,
+  "tool": "create_dashboard",
+  "connection": "fixture_conn",
+  "idempotencyKey": "e773945c503c93853a46b9489cdcef28",
+  "summary": "Create dashboard \\"Payment Service Health\\" with 4 widget(s) via internal Search+View 2-step chain",
+  "preview": {
+    "method": "POST",
+    "path": "/api/views",
+    "body": {
+      "entity": {
+        "type": "DASHBOARD",
+        "title": "Payment Service Health",
+        "summary": "4 widgets",
+        "description": "Auto-generated dashboard",
+        "search_id": "__SERVER_ASSIGNED__step1",
+        "properties": [],
+        "requires": {},
+        "state": {
+          "q-1": {
+            "selected_fields": null,
+            "static_message_list_id": null,
+            "titles": {
+              "titles": {}
+            },
+            "widgets": [
+              {
+                "type": "aggregation",
+                "id": "00000000-0000-4000-8000-000000000001"
+              },
+              {
+                "type": "aggregation",
+                "id": "00000000-0000-4000-8000-000000000003"
+              },
+              {
+                "type": "aggregation",
+                "id": "00000000-0000-4000-8000-000000000005"
+              },
+              {
+                "type": "messages",
+                "id": "00000000-0000-4000-8000-000000000007"
+              }
+            ],
+            "widget_mapping": {
+              "00000000-0000-4000-8000-000000000001": [
+                "00000000-0000-4000-8000-000000000002"
+              ],
+              "00000000-0000-4000-8000-000000000003": [
+                "00000000-0000-4000-8000-000000000004"
+              ],
+              "00000000-0000-4000-8000-000000000005": [
+                "00000000-0000-4000-8000-000000000006"
+              ],
+              "00000000-0000-4000-8000-000000000007": [
+                "00000000-0000-4000-8000-000000000008"
+              ]
+            },
+            "positions": {
+              "00000000-0000-4000-8000-000000000001": {
+                "col": 1,
+                "row": 1,
+                "height": 4,
+                "width": 6
+              },
+              "00000000-0000-4000-8000-000000000003": {
+                "col": 7,
+                "row": 1,
+                "height": 4,
+                "width": 6
+              },
+              "00000000-0000-4000-8000-000000000005": {
+                "col": 1,
+                "row": 5,
+                "height": 4,
+                "width": 4
+              },
+              "00000000-0000-4000-8000-000000000007": {
+                "col": 1,
+                "row": 9,
+                "height": 6,
+                "width": 12
+              }
+            },
+            "formatting": null,
+            "display_mode_settings": {
+              "positions_inferred": false,
+              "show_summary": false,
+              "show_message_row": false
+            }
+          }
+        },
+        "favorite": false
+      },
+      "share_request": null
+    }
+  },
+  "postApplyEstimate": {
+    "id": "__SERVER_ASSIGNED__"
+  },
+  "existingMatches": [],
+  "chain": [
+    {
+      "step": 1,
+      "tool": "create_search",
+      "request": {
+        "method": "POST",
+        "path": "/api/views/search",
+        "body": {
+          "queries": [
+            {
+              "id": "q-1",
+              "timerange": {
+                "type": "relative",
+                "from": 300
+              },
+              "filter": null,
+              "filters": [],
+              "query": {
+                "type": "elasticsearch",
+                "query_string": ""
+              },
+              "search_types": [
+                {
+                  "type": "pivot",
+                  "id": "00000000-0000-4000-8000-000000000002"
+                },
+                {
+                  "type": "pivot",
+                  "id": "00000000-0000-4000-8000-000000000004"
+                },
+                {
+                  "type": "pivot",
+                  "id": "00000000-0000-4000-8000-000000000006"
+                },
+                {
+                  "type": "messages",
+                  "id": "00000000-0000-4000-8000-000000000008"
+                }
+              ]
+            }
+          ],
+          "parameters": [],
+          "skipNoStreamsCheck": false
+        }
+      },
+      "postApplyEstimate": {
+        "id": "__SERVER_ASSIGNED__"
+      }
+    },
+    {
+      "step": 2,
+      "tool": "create_view",
+      "request": {
+        "method": "POST",
+        "path": "/api/views",
+        "body": {
+          "entity": {
+            "type": "DASHBOARD",
+            "title": "Payment Service Health",
+            "summary": "4 widgets",
+            "description": "Auto-generated dashboard",
+            "search_id": "__SERVER_ASSIGNED__step1",
+            "properties": [],
+            "requires": {},
+            "state": {
+              "q-1": {
+                "selected_fields": null,
+                "static_message_list_id": null,
+                "titles": {
+                  "titles": {}
+                },
+                "widgets": [
+                  {
+                    "type": "aggregation",
+                    "id": "00000000-0000-4000-8000-000000000001"
+                  },
+                  {
+                    "type": "aggregation",
+                    "id": "00000000-0000-4000-8000-000000000003"
+                  },
+                  {
+                    "type": "aggregation",
+                    "id": "00000000-0000-4000-8000-000000000005"
+                  },
+                  {
+                    "type": "messages",
+                    "id": "00000000-0000-4000-8000-000000000007"
+                  }
+                ],
+                "widget_mapping": {
+                  "00000000-0000-4000-8000-000000000001": [
+                    "00000000-0000-4000-8000-000000000002"
+                  ],
+                  "00000000-0000-4000-8000-000000000003": [
+                    "00000000-0000-4000-8000-000000000004"
+                  ],
+                  "00000000-0000-4000-8000-000000000005": [
+                    "00000000-0000-4000-8000-000000000006"
+                  ],
+                  "00000000-0000-4000-8000-000000000007": [
+                    "00000000-0000-4000-8000-000000000008"
+                  ]
+                },
+                "positions": {
+                  "00000000-0000-4000-8000-000000000001": {
+                    "col": 1,
+                    "row": 1,
+                    "height": 4,
+                    "width": 6
+                  },
+                  "00000000-0000-4000-8000-000000000003": {
+                    "col": 7,
+                    "row": 1,
+                    "height": 4,
+                    "width": 6
+                  },
+                  "00000000-0000-4000-8000-000000000005": {
+                    "col": 1,
+                    "row": 5,
+                    "height": 4,
+                    "width": 4
+                  },
+                  "00000000-0000-4000-8000-000000000007": {
+                    "col": 1,
+                    "row": 9,
+                    "height": 6,
+                    "width": 12
+                  }
+                },
+                "formatting": null,
+                "display_mode_settings": {
+                  "positions_inferred": false,
+                  "show_summary": false,
+                  "show_message_row": false
+                }
+              }
+            },
+            "favorite": false
+          },
+          "share_request": null
+        }
+      },
+      "dependsOn": {
+        "from": "step1.response.id",
+        "as": "searchId"
+      },
+      "postApplyEstimate": {
+        "id": "__SERVER_ASSIGNED__"
+      }
+    }
+  ],
+  "applyHint": "Re-call with dryRun: false to apply"
+}
+`;
+
+exports[`snapshot: delete_dashboard informational cascade.widgets.count from GET (DASH-05 F6) 1`] = `
+{
+  "dryRun": true,
+  "tool": "delete_dashboard",
+  "connection": "fixture_conn",
+  "idempotencyKey": "fee14f7a4c51d551e1c00a5a1ad48cb0",
+  "summary": "Delete dashboard v-fixed-2 (leaf delete — widgets vanish with view; bound Search becomes orphan per Graylog model)",
+  "preview": {
+    "method": "DELETE",
+    "path": "/api/views/v-fixed-2",
+    "body": null
+  },
+  "postApplyEstimate": {
+    "id": "v-fixed-2",
+    "deleted": true
+  },
+  "existingMatches": [],
+  "cascades": {
+    "widgets": {
+      "count": 4
+    }
+  },
+  "applyHint": "Re-call with dryRun: false to apply"
+}
+`;
+
+exports[`snapshot: get_dashboard full ViewDTO pass-through with 4 widgets (DASH-02 F2) 1`] = `
+{
+  "tool": "get_dashboard",
+  "connection": "fixture_conn",
+  "dashboard": {
+    "id": "v-fixed-2",
+    "type": "DASHBOARD",
+    "title": "Payment Service Health",
+    "summary": "4 widgets",
+    "description": "Auto-generated dashboard",
+    "search_id": "S-fixed-1",
+    "properties": [],
+    "requires": {},
+    "favorite": false,
+    "state": {
+      "q-1": {
+        "selected_fields": null,
+        "static_message_list_id": null,
+        "titles": {
+          "titles": {}
+        },
+        "widgets": [
+          {
+            "id": "w-A",
+            "type": "aggregation"
+          },
+          {
+            "id": "w-B",
+            "type": "aggregation"
+          },
+          {
+            "id": "w-C",
+            "type": "aggregation"
+          },
+          {
+            "id": "w-D",
+            "type": "messages"
+          }
+        ],
+        "widget_mapping": {
+          "w-A": [
+            "st-A"
+          ],
+          "w-B": [
+            "st-B"
+          ],
+          "w-C": [
+            "st-C"
+          ],
+          "w-D": [
+            "st-D"
+          ]
+        },
+        "positions": {
+          "w-A": {
+            "col": 1,
+            "row": 1,
+            "height": 4,
+            "width": 6
+          },
+          "w-B": {
+            "col": 7,
+            "row": 1,
+            "height": 4,
+            "width": 6
+          },
+          "w-C": {
+            "col": 1,
+            "row": 5,
+            "height": 4,
+            "width": 4
+          },
+          "w-D": {
+            "col": 1,
+            "row": 9,
+            "height": 6,
+            "width": 12
+          }
+        },
+        "formatting": null,
+        "display_mode_settings": {
+          "positions_inferred": false,
+          "show_summary": false,
+          "show_message_row": false
+        }
+      }
+    }
+  }
+}
+`;
+
+exports[`snapshot: list_dashboards narrow projection (DASH-01 F1) 1`] = `
+{
+  "tool": "list_dashboards",
+  "connection": "fixture_conn",
+  "count": 1,
+  "limit": 25,
+  "fields": [
+    "id",
+    "title",
+    "summary",
+    "description"
+  ],
+  "items": [
+    {
+      "id": "v-fixed-1",
+      "title": "Dashboard A",
+      "summary": "Summary A",
+      "description": "Description A"
+    }
+  ]
+}
+`;
+
+exports[`snapshot: remove_widget symmetric 2-step PUT chain strips widget from Search+View (DASH-07 F9) 1`] = `
+{
+  "dryRun": true,
+  "tool": "remove_widget",
+  "connection": "fixture_conn",
+  "idempotencyKey": "bd2ed3e49a037529f85752bb1223c64e",
+  "summary": "Remove widget w-A from dashboard v-fixed-2 (symmetric Search+View atomic two-step PUT chain)",
+  "preview": {
+    "method": "PUT",
+    "path": "/api/views/v-fixed-2",
+    "body": {
+      "entity": {
+        "id": "v-fixed-2",
+        "type": "DASHBOARD",
+        "title": "Payment Service Health",
+        "summary": "4 widgets",
+        "description": "Auto-generated dashboard",
+        "search_id": "S-fixed-1",
+        "properties": [],
+        "requires": {},
+        "favorite": false,
+        "state": {
+          "q-1": {
+            "selected_fields": null,
+            "static_message_list_id": null,
+            "titles": {
+              "titles": {}
+            },
+            "widgets": [
+              {
+                "id": "w-B",
+                "type": "aggregation"
+              },
+              {
+                "id": "w-C",
+                "type": "aggregation"
+              },
+              {
+                "id": "w-D",
+                "type": "messages"
+              }
+            ],
+            "widget_mapping": {
+              "w-B": [
+                "st-B"
+              ],
+              "w-C": [
+                "st-C"
+              ],
+              "w-D": [
+                "st-D"
+              ]
+            },
+            "positions": {
+              "w-B": {
+                "col": 7,
+                "row": 1,
+                "height": 4,
+                "width": 6
+              },
+              "w-C": {
+                "col": 1,
+                "row": 5,
+                "height": 4,
+                "width": 4
+              },
+              "w-D": {
+                "col": 1,
+                "row": 9,
+                "height": 6,
+                "width": 12
+              }
+            },
+            "formatting": null,
+            "display_mode_settings": {
+              "positions_inferred": false,
+              "show_summary": false,
+              "show_message_row": false
+            }
+          }
+        }
+      },
+      "share_request": null
+    }
+  },
+  "postApplyEstimate": {
+    "id": "v-fixed-2"
+  },
+  "existingMatches": [],
+  "chain": [
+    {
+      "step": 1,
+      "tool": "update_search",
+      "request": {
+        "method": "PUT",
+        "path": "/api/views/search/S-fixed-1",
+        "body": {
+          "id": "S-fixed-1",
+          "queries": [
+            {
+              "id": "q-1",
+              "timerange": {
+                "type": "relative",
+                "from": 300
+              },
+              "filter": null,
+              "filters": [],
+              "query": {
+                "type": "elasticsearch",
+                "query_string": ""
+              },
+              "search_types": [
+                {
+                  "id": "st-B",
+                  "type": "pivot"
+                },
+                {
+                  "id": "st-C",
+                  "type": "pivot"
+                },
+                {
+                  "id": "st-D",
+                  "type": "messages"
+                }
+              ]
+            }
+          ],
+          "parameters": [],
+          "skipNoStreamsCheck": false
+        }
+      }
+    },
+    {
+      "step": 2,
+      "tool": "update_view",
+      "request": {
+        "method": "PUT",
+        "path": "/api/views/v-fixed-2",
+        "body": {
+          "entity": {
+            "id": "v-fixed-2",
+            "type": "DASHBOARD",
+            "title": "Payment Service Health",
+            "summary": "4 widgets",
+            "description": "Auto-generated dashboard",
+            "search_id": "S-fixed-1",
+            "properties": [],
+            "requires": {},
+            "favorite": false,
+            "state": {
+              "q-1": {
+                "selected_fields": null,
+                "static_message_list_id": null,
+                "titles": {
+                  "titles": {}
+                },
+                "widgets": [
+                  {
+                    "id": "w-B",
+                    "type": "aggregation"
+                  },
+                  {
+                    "id": "w-C",
+                    "type": "aggregation"
+                  },
+                  {
+                    "id": "w-D",
+                    "type": "messages"
+                  }
+                ],
+                "widget_mapping": {
+                  "w-B": [
+                    "st-B"
+                  ],
+                  "w-C": [
+                    "st-C"
+                  ],
+                  "w-D": [
+                    "st-D"
+                  ]
+                },
+                "positions": {
+                  "w-B": {
+                    "col": 7,
+                    "row": 1,
+                    "height": 4,
+                    "width": 6
+                  },
+                  "w-C": {
+                    "col": 1,
+                    "row": 5,
+                    "height": 4,
+                    "width": 4
+                  },
+                  "w-D": {
+                    "col": 1,
+                    "row": 9,
+                    "height": 6,
+                    "width": 12
+                  }
+                },
+                "formatting": null,
+                "display_mode_settings": {
+                  "positions_inferred": false,
+                  "show_summary": false,
+                  "show_message_row": false
+                }
+              }
+            }
+          },
+          "share_request": null
+        }
+      }
+    }
+  ],
+  "applyHint": "Re-call with dryRun: false to apply"
+}
+`;
+
+exports[`snapshot: update_dashboard STRICT_NO_ECHO title-only overlay (DASH-04 F5) 1`] = `
+{
+  "dryRun": true,
+  "tool": "update_dashboard",
+  "connection": "fixture_conn",
+  "idempotencyKey": "f63804ed2b4f7357d529d335bbd25209",
+  "summary": "Update dashboard v-fixed-2 (title; STRICT_NO_ECHO + D-02 searchId-immutable)",
+  "preview": {
+    "method": "PUT",
+    "path": "/api/views/v-fixed-2",
+    "body": {
+      "entity": {
+        "id": "v-fixed-2",
+        "type": "DASHBOARD",
+        "title": "Payment Service Health (renamed)",
+        "summary": "4 widgets",
+        "description": "Auto-generated dashboard",
+        "search_id": "S-fixed-1",
+        "properties": [],
+        "requires": {},
+        "favorite": false,
+        "state": {
+          "q-1": {
+            "selected_fields": null,
+            "static_message_list_id": null,
+            "titles": {
+              "titles": {}
+            },
+            "widgets": [
+              {
+                "id": "w-A",
+                "type": "aggregation"
+              },
+              {
+                "id": "w-B",
+                "type": "aggregation"
+              },
+              {
+                "id": "w-C",
+                "type": "aggregation"
+              },
+              {
+                "id": "w-D",
+                "type": "messages"
+              }
+            ],
+            "widget_mapping": {
+              "w-A": [
+                "st-A"
+              ],
+              "w-B": [
+                "st-B"
+              ],
+              "w-C": [
+                "st-C"
+              ],
+              "w-D": [
+                "st-D"
+              ]
+            },
+            "positions": {
+              "w-A": {
+                "col": 1,
+                "row": 1,
+                "height": 4,
+                "width": 6
+              },
+              "w-B": {
+                "col": 7,
+                "row": 1,
+                "height": 4,
+                "width": 6
+              },
+              "w-C": {
+                "col": 1,
+                "row": 5,
+                "height": 4,
+                "width": 4
+              },
+              "w-D": {
+                "col": 1,
+                "row": 9,
+                "height": 6,
+                "width": 12
+              }
+            },
+            "formatting": null,
+            "display_mode_settings": {
+              "positions_inferred": false,
+              "show_summary": false,
+              "show_message_row": false
+            }
+          }
+        }
+      },
+      "share_request": null
+    }
+  },
+  "postApplyEstimate": {
+    "id": "v-fixed-2"
+  },
+  "existingMatches": [],
+  "applyHint": "Re-call with dryRun: false to apply"
+}
+`;
