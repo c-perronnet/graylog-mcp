@@ -45,6 +45,13 @@ import {
     _setWidgetPositionValidatorForTests as _setRemoveWidgetValidatorForTests,
     _clearWidgetPositionValidatorForTests as _clearRemoveWidgetValidatorForTests,
 } from "../src/tools/dashboards/remove-widget.js";
+// Plan 06-03 Task 2 — DASH-06 add_widget_from_template
+import {
+    handleAddWidgetFromTemplate,
+    _setWidgetPositionValidatorForTests as _setAddWidgetValidatorForTests,
+    _clearWidgetPositionValidatorForTests as _clearAddWidgetValidatorForTests,
+} from "../src/tools/dashboards/add-widget-from-template.js";
+import { TEMPLATE_NAMES } from "../src/widget-templates/index.js";
 
 import {
     ListDashboardsSchema,
@@ -53,6 +60,7 @@ import {
     UpdateDashboardSchema,
     DeleteDashboardSchema,
     RemoveWidgetSchema,
+    AddWidgetFromTemplateSchema,
 } from "../src/tools/dashboards/schemas.js";
 
 import {
@@ -77,6 +85,7 @@ afterEach(() => {
     _clearUUIDGeneratorForTests();
     _clearWidgetPositionValidatorForTests();
     _clearRemoveWidgetValidatorForTests();
+    _clearAddWidgetValidatorForTests();
 });
 
 // Seeded deterministic UUID generator for byte-stable snapshot fixtures.
@@ -1261,4 +1270,392 @@ test("RemoveWidgetSchema requires both dashboardId AND widgetId", () => {
         () => RemoveWidgetSchema.parse({ widgetId: "w-1" }),
         (err) => err?.name === "ZodError",
     );
+});
+
+// =====================================================================
+// DASH-06 add_widget_from_template — Plan 06-03 Task 2
+// =====================================================================
+//
+// add_widget_from_template consumes the WIDGET_TEMPLATES registry (Plan 03
+// Task 1) to drop a widget triplet onto an existing dashboard. Symmetric to
+// remove_widget — orchestrates a Search+View 2-step PUT chain (or 1-step for
+// the text-widget placeholder where searchType:null).
+//
+// Key contracts pinned below:
+//   - M7 ACCEPTANCE GATE: z.enum(TEMPLATE_NAMES) rejects invalid names at
+//     parse BEFORE any HTTP fires (Test 1).
+//   - Pre-flight GETs view + search in load-bearing order (Test 3).
+//   - 2-step chain for SearchType-bearing templates (Test 4); 1-step for
+//     text-widget placeholder (Test 5).
+//   - D-03 validator runs on the prospective post-add sets BEFORE wire
+//     emission (Test 8).
+//   - widget_mapping[newWidget.id] = [newSearchType.id] (or empty array for
+//     text-widget; Test 7).
+
+// Fixture: existing single-widget dashboard for add tests.
+const VIEW_FOR_ADD = {
+    id: "v-add",
+    type: "DASHBOARD",
+    title: "Dashboard For Adding",
+    search_id: "S-add",
+    properties: [],
+    requires: {},
+    favorite: false,
+    state: {
+        "q-1": {
+            selected_fields: null,
+            static_message_list_id: null,
+            titles: { titles: {} },
+            widgets: [
+                { id: "w-existing", type: "messages" },
+            ],
+            widget_mapping: {
+                "w-existing": ["st-existing-1"],
+            },
+            positions: {
+                "w-existing": { col: 1, row: 1, height: 2, width: 4 },
+            },
+            formatting: null,
+            display_mode_settings: {
+                positions_inferred: false,
+                show_summary: false,
+                show_message_row: false,
+            },
+        },
+    },
+};
+
+const SEARCH_FOR_ADD = {
+    id: "S-add",
+    queries: [{
+        id: "q-1",
+        timerange: { type: "relative", from: 300 },
+        filter: null,
+        filters: [],
+        query: { type: "elasticsearch", query_string: "" },
+        search_types: [
+            { id: "st-existing-1", type: "messages" },
+            { id: "st-extra-pre", type: "pivot" },  // 2 pre-existing — test 6 asserts append → 3
+        ],
+    }],
+    parameters: [],
+    skipNoStreamsCheck: false,
+};
+
+function addWidgetCapture(viewOverride, searchOverride) {
+    return dashboardsMultiCapture([
+        { method: "GET", pathPattern: "/api/views/v-add", response: viewOverride ?? VIEW_FOR_ADD },
+        { method: "GET", pathPattern: "/api/views/search/S-add", response: searchOverride ?? SEARCH_FOR_ADD },
+    ]);
+}
+
+// Test 1 — M7 ACCEPTANCE GATE: zod rejects invalid templateName
+test("add_widget_from_template ZOD REJECTS invalid templateName at parse (M7 ACCEPTANCE GATE)", async () => {
+    let httpFired = false;
+    _setCaptureRequest(() => {
+        httpFired = true;
+        return {};
+    });
+    const res = await handleAddWidgetFromTemplate({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                dashboardId: "v-add",
+                templateName: "bogus_template",
+            },
+        },
+    });
+    assert.equal(res.isError, true);
+    // Zod's enum error includes "Invalid enum value" or lists allowed values.
+    assert.match(res.content[0].text, /templateName|enum|invalid/i);
+    assert.equal(httpFired, false, "M7: NO HTTP fires when zod rejects invalid templateName");
+});
+
+// Schema parity — defense in depth at the schema layer.
+test("AddWidgetFromTemplateSchema parse-level rejects names outside the closed set (M7 contract)", () => {
+    assert.throws(
+        () => AddWidgetFromTemplateSchema.parse({
+            dashboardId: "v-1",
+            templateName: "not_a_template",
+        }),
+        (err) => err?.name === "ZodError",
+    );
+});
+
+// Test 2 — every name in TEMPLATE_NAMES is accepted at schema parse
+test("AddWidgetFromTemplateSchema accepts every name in the closed TEMPLATE_NAMES set", () => {
+    for (const name of TEMPLATE_NAMES) {
+        const parsed = AddWidgetFromTemplateSchema.parse({
+            dashboardId: "v-1",
+            templateName: name,
+        });
+        assert.equal(parsed.templateName, name);
+    }
+});
+
+// Test 3 — pre-flight GETs view AND search in load-bearing order
+test("add_widget_from_template pre-flights GET on view AND search (Search+View symmetric)", async () => {
+    const order = [];
+    _setCaptureRequest((req) => {
+        order.push(`${req.method} ${req.path}`);
+        if (req.path === "/api/views/v-add") return VIEW_FOR_ADD;
+        if (req.path === "/api/views/search/S-add") return SEARCH_FOR_ADD;
+        throw new Error(`unexpected ${req.method} ${req.path}`);
+    });
+    await handleAddWidgetFromTemplate({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                dashboardId: "v-add",
+                templateName: "error_rate_over_time",
+            },
+        },
+    });
+    // View first (we don't know searchId until we GET the view), then Search.
+    assert.equal(order[0], "GET /api/views/v-add");
+    assert.equal(order[1], "GET /api/views/search/S-add");
+});
+
+// Test 4 — dry-run for aggregation template emits 2-step chain
+test("add_widget_from_template dry-run for aggregation template emits 2-step chain (PUT search + PUT view)", async () => {
+    _setCaptureRequest(addWidgetCapture());
+    const res = await handleAddWidgetFromTemplate({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                dashboardId: "v-add",
+                templateName: "error_rate_over_time",
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.dryRun, true);
+    assert.ok(Array.isArray(payload.chain), "chain must be present in dry-run");
+    assert.equal(payload.chain.length, 2);
+    assert.equal(payload.chain[0].request.method, "PUT");
+    assert.equal(payload.chain[0].request.path, "/api/views/search/S-add");
+    assert.equal(payload.chain[1].request.method, "PUT");
+    assert.equal(payload.chain[1].request.path, "/api/views/v-add");
+});
+
+// Test 5 — top_error_clusters (text-widget placeholder) emits 1-step chain
+test("add_widget_from_template dry-run for top_error_clusters emits 1-step chain (searchType:null skips Search PUT)", async () => {
+    _setCaptureRequest(addWidgetCapture());
+    const res = await handleAddWidgetFromTemplate({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                dashboardId: "v-add",
+                templateName: "top_error_clusters",
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.dryRun, true);
+    assert.equal(payload.chain.length, 1, "text-widget placeholder MUST skip the Search PUT");
+    assert.equal(payload.chain[0].request.method, "PUT");
+    assert.equal(payload.chain[0].request.path, "/api/views/v-add");
+});
+
+// Test 6 — step 1 appends new searchType to existing Search.queries[0].search_types
+test("add_widget_from_template step 1 appends new searchType to existing Search.queries[0].search_types", async () => {
+    _setCaptureRequest(addWidgetCapture());
+    const res = await handleAddWidgetFromTemplate({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                dashboardId: "v-add",
+                templateName: "error_rate_over_time",
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    const step1Body = payload.chain[0].request.body;
+    // Original Search had 2 search_types — append → 3.
+    assert.equal(step1Body.queries[0].search_types.length, 3);
+    const stIds = step1Body.queries[0].search_types.map((st) => st.id);
+    // Pre-existing preserved at the front.
+    assert.equal(stIds[0], "st-existing-1");
+    assert.equal(stIds[1], "st-extra-pre");
+    // Newly added searchType — UUID-shaped or wrapper-supplied.
+    assert.ok(stIds[2], "new searchType id must be present");
+});
+
+// Test 7 — step 2 appends new widget + position + widget_mapping entry
+test("add_widget_from_template step 2 appends new widget + position + widget_mapping entry", async () => {
+    _setCaptureRequest(addWidgetCapture());
+    const res = await handleAddWidgetFromTemplate({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                dashboardId: "v-add",
+                templateName: "error_rate_over_time",
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    const step2Body = payload.chain[1].request.body;
+    assert.equal(step2Body.entity.id, "v-add");
+    assert.equal(step2Body.share_request, null);
+    const state = step2Body.entity.state["q-1"];
+    // 1 existing + 1 new = 2 widgets.
+    assert.equal(state.widgets.length, 2);
+    const newWidget = state.widgets[1];
+    // Position keyed by new widget id.
+    assert.ok(state.positions[newWidget.id], "position must be keyed by new widget id");
+    // widget_mapping[newWidgetId] = [newSearchTypeId]
+    assert.ok(Array.isArray(state.widget_mapping[newWidget.id]));
+    assert.equal(state.widget_mapping[newWidget.id].length, 1, "aggregation template maps to 1 SearchType");
+});
+
+// Test 7b — text-widget placeholder maps to EMPTY widget_mapping entry
+test("add_widget_from_template text-widget placeholder maps to empty widget_mapping entry (searchType:null)", async () => {
+    _setCaptureRequest(addWidgetCapture());
+    const res = await handleAddWidgetFromTemplate({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                dashboardId: "v-add",
+                templateName: "top_error_clusters",
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    // Only step 1 exists for text-widget — but it's the View update.
+    const step1Body = payload.chain[0].request.body;
+    const state = step1Body.entity.state["q-1"];
+    const newWidget = state.widgets[state.widgets.length - 1];
+    assert.equal(newWidget.type, "text");
+    // widget_mapping entry exists but is an empty array.
+    assert.deepEqual(state.widget_mapping[newWidget.id], []);
+});
+
+// Test 8 — D-03 validator runs on prospective post-add sets BEFORE wire emission
+test("add_widget_from_template D-03 validator runs on prospective post-add sets; refuses BEFORE any PUT", async () => {
+    let putFired = false;
+    _setCaptureRequest((req) => {
+        if (req.method === "GET" && req.path === "/api/views/v-add") return VIEW_FOR_ADD;
+        if (req.method === "GET" && req.path === "/api/views/search/S-add") return SEARCH_FOR_ADD;
+        if (req.method === "PUT") putFired = true;
+        throw new Error(`Unexpected ${req.method} ${req.path}`);
+    });
+    _setAddWidgetValidatorForTests(() => {
+        const err = new Error("Widget/position integrity violation: simulated orphan");
+        err.reason = "widget_position_integrity_violation";
+        err.isClientSide = true;
+        throw err;
+    });
+    const res = await handleAddWidgetFromTemplate({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                dashboardId: "v-add",
+                templateName: "error_rate_over_time",
+                dryRun: false,
+            },
+        },
+    });
+    assert.equal(res.isError, true);
+    assert.match(res.content[0].text, /widget_position_integrity_violation|integrity/i);
+    assert.equal(putFired, false, "D-03 refusal must happen BEFORE any PUT");
+});
+
+// Test 9 — apply walks the chain via executeChain in order
+test("add_widget_from_template apply walks the 2-step PUT chain in order (Search first, then View)", async () => {
+    const putOrder = [];
+    _setCaptureRequest((req) => {
+        if (req.method === "GET" && req.path === "/api/views/v-add") return VIEW_FOR_ADD;
+        if (req.method === "GET" && req.path === "/api/views/search/S-add") return SEARCH_FOR_ADD;
+        if (req.method === "PUT" && req.path === "/api/views/search/S-add") {
+            putOrder.push("PUT-search");
+            return { id: "S-add", queries: req.body.queries };
+        }
+        if (req.method === "PUT" && req.path === "/api/views/v-add") {
+            putOrder.push("PUT-view");
+            return { ...req.body.entity };
+        }
+        throw new Error(`unexpected ${req.method} ${req.path}`);
+    });
+    const res = await handleAddWidgetFromTemplate({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                dashboardId: "v-add",
+                templateName: "error_rate_over_time",
+                dryRun: false,
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    assert.equal(payload.applied, true);
+    // Search update fires FIRST so the View never references a SearchType
+    // that doesn't exist yet (symmetric inverse of remove_widget's ordering).
+    assert.deepEqual(putOrder, ["PUT-search", "PUT-view"]);
+});
+
+// Test 10 — empty-state dashboard refusal
+test("add_widget_from_template refuses with dashboard_empty_state when view.state is empty", async () => {
+    let putFired = false;
+    _setCaptureRequest((req) => {
+        if (req.method === "GET" && req.path === "/api/views/v-empty") {
+            return { ...VIEW_FOR_ADD, id: "v-empty", state: {} };
+        }
+        if (req.method === "GET" && req.path === "/api/views/search/S-add") return SEARCH_FOR_ADD;
+        if (req.method === "PUT") putFired = true;
+        throw new Error(`unexpected ${req.method} ${req.path}`);
+    });
+    const res = await handleAddWidgetFromTemplate({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                dashboardId: "v-empty",
+                templateName: "error_rate_over_time",
+                dryRun: false,
+            },
+        },
+    });
+    assert.equal(res.isError, true);
+    assert.match(res.content[0].text, /dashboard_empty_state|no state/i);
+    assert.equal(putFired, false);
+});
+
+// Test 11 — field_value_distribution builder error surfaces as MCP isError
+test("add_widget_from_template surfaces builder error when field_value_distribution called without field", async () => {
+    let putFired = false;
+    _setCaptureRequest((req) => {
+        if (req.method === "GET" && req.path === "/api/views/v-add") return VIEW_FOR_ADD;
+        if (req.method === "GET" && req.path === "/api/views/search/S-add") return SEARCH_FOR_ADD;
+        if (req.method === "PUT") putFired = true;
+        throw new Error(`unexpected ${req.method} ${req.path}`);
+    });
+    const res = await handleAddWidgetFromTemplate({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                dashboardId: "v-add",
+                templateName: "field_value_distribution",
+                options: {},  // <-- no `field`
+            },
+        },
+    });
+    assert.equal(res.isError, true);
+    assert.match(res.content[0].text, /field option required|field_value_distribution/i);
+    assert.equal(putFired, false, "builder-error refusal must happen BEFORE any PUT");
+});
+
+// =====================================================================
+// Final tool-count + dispatch wiring assertion (Plan 06-03 close)
+// =====================================================================
+//
+// Plan 06-02 left 83 tools (DASH-01..05 + DASH-07). Plan 06-03 adds DASH-06
+// add_widget_from_template → 84 final. The pipelines.test.js count assertion
+// pins the Plan 06-02 baseline at 83; this test pins the Plan 06-03 delta.
+
+test("assertAllToolsRegistered passes after Plan 06-03 (count = 84; +add_widget_from_template completes DASH-06)", async () => {
+    const { dispatch, assertAllToolsRegistered } = await import("../src/dispatch.js");
+    await import("../src/tools/_register.js");
+    const { toolDefinitions } = await import("../src/tools.js");
+    assertAllToolsRegistered(toolDefinitions);
+    assert.equal(typeof dispatch, "function");
+    assert.equal(toolDefinitions.length, 84, `Expected 84 tools after Plan 06-03 end (DASH-06 add_widget_from_template shipped); got ${toolDefinitions.length}`);
 });
