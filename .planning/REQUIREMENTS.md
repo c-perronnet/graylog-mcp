@@ -131,9 +131,9 @@ Composed entirely from services layers built in earlier phases. Compose at the s
 - [ ] **BLUE-01**: `setup_app_monitoring_stack(app_name, source_pattern)` — creates input → stream (matching source_pattern) → pipeline + 1–2 starter rules → dashboard with 4 default widgets. **Headline use-case and the milestone's E2E integration test.**
 - [ ] **BLUE-02**: `setup_error_alerting(stream_id, notification_target)` — creates event definition + connects to existing notification
 - [ ] **BLUE-03**: `create_app_health_dashboard(stream_id)` — dashboard with the 4 most informative widgets pre-wired to a stream
-- [ ] **BLUE-04**: `setup_pipeline_for_stream(stream_id, transforms)` — pipeline + rule(s) + connection in one call from structured intent
-- [ ] **BLUE-05**: `setup_long_term_archival_index(name, retention_days)` — index set with rotation + delete-retention strategy bundled
-- [ ] **BLUE-06**: `setup_debug_log_dropping(stream_id, min_level)` — pipeline rule that drops sub-threshold messages; connection wired automatically
+- [x] **BLUE-04**: `setup_pipeline_for_stream(stream_id, transforms)` — pipeline + rule(s) + connection in one call from structured intent
+- [x] **BLUE-05**: `setup_long_term_archival_index(name, retention_days)` — index set with rotation + delete-retention strategy bundled
+- [x] **BLUE-06**: `setup_debug_log_dropping(stream_id, min_level)` — pipeline rule that drops sub-threshold messages; connection wired automatically
 
 ### Final Hardening (HARD)
 
@@ -282,9 +282,9 @@ Populated by the roadmapper on 2026-05-13. Every v1 requirement maps to exactly 
 | BLUE-01 | Phase 6 | Pending |
 | BLUE-02 | Phase 6 | Pending |
 | BLUE-03 | Phase 6 | Pending |
-| BLUE-04 | Phase 6 | Pending |
-| BLUE-05 | Phase 6 | Pending |
-| BLUE-06 | Phase 6 | Pending |
+| BLUE-04 | Phase 6 | Complete |
+| BLUE-05 | Phase 6 | Complete |
+| BLUE-06 | Phase 6 | Complete |
 | HARD-01 | Phase 7 | Pending |
 | HARD-02 | Phase 7 | Pending |
 | HARD-03 | Phase 7 | Pending |

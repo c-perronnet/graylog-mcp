@@ -3,18 +3,18 @@ gsd_state_version: 1.0
 milestone: v2.3
 milestone_name: milestone
 status: Ready to execute
-last_updated: "2026-05-16T02:30:05.974Z"
+last_updated: "2026-05-16T02:52:13.378Z"
 progress:
   total_phases: 8
   completed_phases: 6
   total_plans: 38
-  completed_plans: 35
-  percent: 92
+  completed_plans: 36
+  percent: 95
 ---
 
 # Project Memory: Graylog MCP — Full Admin Surface
 
-**Last updated:** 2026-05-16 (Plan 06-01 complete — Phase 6 foundation: 6 service modules + executeChain blueprint helper + D-03 widget-position-integrity validator + conflict.js views envelope amendment + widget-templates skeleton + 06-U1-SMOKE researcher AFK defaults; DASH-08 closed-set names landed; 26 net-new tests bring suite to 882; tool count unchanged at 77; src/graylog/errors.js NOT modified; no new npm deps)
+**Last updated:** 2026-05-16 (Plan 06-04 complete — Blueprints A: BLUE-04 setup_pipeline_for_stream (variable-length N+2 chain reusing Phase 4 emitRule) + BLUE-05 setup_long_term_archival_index (1-step chain with SizeBased rotation + Delete retention) + BLUE-06 setup_debug_log_dropping (3-step chain with syslog inversion); D-09 services-layer compose contract grep-pinned across all 3; 24 net-new tests bring suite to 980; tool count 84 → 87; src/graylog/errors.js NOT modified; no new npm deps)
 
 ## Project Reference
 
@@ -28,12 +28,12 @@ progress:
 ## Current Position
 
 Phase: 06 (dashboards-widgets-blueprints) — EXECUTING
-Plan: 4 of 6 (06-01/02/03 complete; 06-04 next)
+Plan: 5 of 6 (06-01/02/03/04 complete; 06-05 next)
 
-- **Phase**: 6 — Dashboards, Widget Templates & Blueprints (foundation landed Plan 06-01; Dashboard CRUD landed Plan 06-02 — DASH-01..05 + DASH-07 ship the C7 ACCEPTANCE GATE; widget-template library + DASH-06 add_widget_from_template landed Plan 06-03 — M7 ACCEPTANCE GATE + DASH-08 finalized + Q3 TEXT_WIDGET_PLACEHOLDER for top_error_clusters; Plans 06-04..06-06 unblocked)
+- **Phase**: 6 — Dashboards, Widget Templates & Blueprints (foundation landed Plan 06-01; Dashboard CRUD landed Plan 06-02 — DASH-01..05 + DASH-07 ship the C7 ACCEPTANCE GATE; widget-template library + DASH-06 add_widget_from_template landed Plan 06-03 — M7 ACCEPTANCE GATE + DASH-08 finalized + Q3 TEXT_WIDGET_PLACEHOLDER for top_error_clusters; Blueprints A landed Plan 06-04 — BLUE-04/05/06 ship setup_pipeline_for_stream (variable-length N+2 chain) + setup_long_term_archival_index (1-step chain) + setup_debug_log_dropping (3-step chain with syslog inversion); Plans 06-05..06-06 unblocked)
 - **Plan**: 2 of 6 complete (Plan 06-02 ships the 6 dashboard CRUD tools — DASH-01 list_dashboards (narrow projection [id, title, summary, description] + Q1 WRAPPER_SIDE_TYPE_FILTER drops saved-searches even if upstream ?query=type:DASHBOARD leaks + response.views envelope unwrap per Pitfall 1), DASH-02 get_dashboard (full ViewDTO via plain async handler; 404 via wrapGraylogError; load-bearing for remove_widget pre-flight + update_dashboard GET-current overlay), DASH-03 create_dashboard (THE C7 ACCEPTANCE GATE — internal Search+View 2-step chain via executeChain; agent NEVER sees the intermediate Search ID; D-01 chain transcript surfaced via handler.js req.chain spread amendment; D-02 .strict() schema rejects agent-supplied searchId at zod parse; D-03 widget-position validator runs BEFORE the FOUND-11 existingMatches probe — orphan widget/position refuses with widget_position_integrity_violation and NO HTTP fires; wrapper-generated UUID widget IDs via randomUUID() + leading-underscore _setUUIDGeneratorForTests test seam; FOUND-11 existingMatches probe filters on view.type==="DASHBOARD" so saved-search title collisions don't count as duplicates), DASH-04 update_dashboard (STRICT_NO_ECHO partial-update with GET-current pre-flight + overlay covering title/description/summary only; UpdateDashboardSchema.changes is .strict() so searchId is rejected at parse — search-ID immutable post-creation; Pitfall 8 body.id matches URL; CreateEntityRequest envelope mirrors createDashboard), DASH-05 delete_dashboard (LEAF DELETE Phase 5 D-08 informational-cascade pattern — NO cascade-hash, NO confirmationToken, NO requireConfirm; informational cascades.widgets.count via best-effort GET pre-flight; 404/403/network failure falls through to count:0 and DELETE surfaces real error on apply), DASH-07 remove_widget (symmetric Search+View atomic two-step PUT chain — PUT /api/views/search/{searchId} FIRST stripping widget's search_types from queries[stateKey].search_types so View never references a removed search_type, then PUT /api/views/{id} stripping widget+position+widget_mapping entry; D-03 validator runs on prospective post-remove sets BEFORE wire emission; widget_not_found refusal + dashboard_missing_search_binding refusal before any PUT; Pitfall 9 acceptance — no transactional rollback; transcript surfaces failed_at_step). handler.js gained TWO amendments in Plan 06-02: req.chain spread onto dry-run preview JSON (reused by every BLUE-XX blueprint in Plans 06-04/05); _testConnection stripped from rawArgs BEFORE schema.parse so .strict() schemas don't reject the test seam (Rule 3 unblocker — landed inside Task 2 GREEN atomically). errors.js wrapGraylogError plain-Error reason surface (Rule 2 cross-cutting — surfaces [reason: <tag>] suffix + response.reason field for client-side plain Errors with structured reasons; widget_not_found, widget_position_integrity_violation, dashboard_missing_search_binding all get agent-programmatic identification parity with GraylogError instances). 42 net-new tests in test/dashboards.test.js covering all 6 tools including all C7/D-02/D-03 acceptance gates pinned by named tests. Closes DASH-01, DASH-02, DASH-03, DASH-04, DASH-05, DASH-07 (6 of 8 phase 6 dashboard requirements; DASH-06 add_widget_from_template lands in Plan 06-03; DASH-08 closed by Plan 06-01's widget-template skeleton).
-- **Status**: 956 tests / 18 suites green (+32 net-new over Plan 06-02 baseline of 924 — 18 in test/widget-templates.test.js + 14 in test/dashboards.test.js). All Phase 0/1/2/3/4/5 + Plan 06-01/02/03 contracts preserved. Tool count 83 → 84 (Plan 06-03 end; add_widget_from_template added). src/graylog/errors.js NOT modified in any Plan 06-03 commit. No new npm deps. M7 ACCEPTANCE GATE proven via Test 1 (zod rejects "bogus_template" with no HTTP fired) + schema parity test (closed-set z.enum at parse layer) + defense in depth via Object.freeze(WIDGET_TEMPLATES) (T-06-03-08; pinned by widget-templates Tests 15+16). D-04 frozen-triplet contract proven via Test 14 (every builder returns Object.isFrozen(result)===true). D-05 inherit-from-dashboard timerange default pinned for all 8 templates (Test 9). Pitfall 7 array-streams pinned for all 8 templates (Test 10). Q3 TEXT_WIDGET_PLACEHOLDER resolution pinned via Tests 4+5+7b (top_error_clusters → searchType:null + widget.type:"text" + 1-step chain + empty widget_mapping entry). D-03 widget-position integrity validator runs on prospective post-add sets BEFORE wire emission (Test 8 — refusal-before-PUT via _setWidgetPositionValidatorForTests seam). Symmetric INVERSE chain ordering pinned via Test 9 (Search FIRST, View SECOND) — mirrors remove_widget's Search-FIRST ordering for partial-failure consistency (Pitfall 9).
-- **Progress bar**: `[█████████░] 92%` (35 of 38 milestone plans complete after 06-03)
+- **Status**: 980 tests / 18 suites green (+24 net-new over Plan 06-03 baseline of 956 — all in test/blueprints.test.js: 8 BLUE-05 + 6 BLUE-06 + 9 BLUE-04 + 1 D-09 grep contract spanning all 3). All Phase 0/1/2/3/4/5 + Plan 06-01/02/03/04 contracts preserved. Tool count 84 → 87 (Plan 06-04 end; +setup_long_term_archival_index +setup_debug_log_dropping +setup_pipeline_for_stream). src/graylog/errors.js NOT modified in any Plan 06-04 commit. No new npm deps. D-09 services-layer compose contract pinned by grep test that asserts each blueprint file imports ONLY from src/services/* or src/tools/_shared/* (or src/pipeline-dsl/*) — zero imports from src/tools/<domain>/<handler>.js. Architectural-boundary `void serviceFn` markers preserve the import as a contract signal even when executeChain handles actual invocation. BLUE-04 reuses Phase 4 emitRule + RuleSpecSchema (single source of truth across phases). BLUE-04/06 route pipeline title + rule title literals through Phase 4 escapeString (T-06-04-03 mitigation; threat-model resolution applied inline as Rule 2 defense-in-depth deviation). BLUE-05 wires SizeBasedRotationStrategyConfig (1 GiB/index) + DeletionRetentionStrategyConfig (max_number_of_indices ≈ retentionDays); rejected Close + Archive (Enterprise-only) per Phase 2 D-04. BLUE-06 syslog inversion (higher number = less severe; `level > minLevel` drops sub-threshold) documented in tool description + pinned by Test 8 (`level > 6` literal match). BLUE-04 variable-length N+2 chain verified at N=1 (Test 13) AND N=3 (Test 14). 3 atomic per-task commits (be251f0 BLUE-05, 85e7812 BLUE-06, 7d7d80f BLUE-04) — each lands a fully-green suite with tool count assertions bumping at commit boundaries (84→85→86→87).
+- **Progress bar**: `[██████████] 95%` (36 of 38 milestone plans complete after 06-04)
 
 ## Performance Metrics
 
@@ -75,6 +75,7 @@ Plan: 4 of 6 (06-01/02/03 complete; 06-04 next)
 | Phase 06 P01 | 12min | 4 tasks | 15 files |
 | Phase 06 P02 | ~12min | 4 tasks | 14 files |
 | Phase 06 P03 | ~8 min | 2 tasks | 16 files |
+| Phase 06-dashboards-widgets-blueprints P04 | 15min | 3 tasks | 10 files |
 
 ## Accumulated Context
 
