@@ -70,7 +70,7 @@ export function buildErrorRateOverTime(options = {}) {
         description: "Error rate over time (level >= 4)",
     };
 
-    const position = options.position ?? { col: { type: "infinity" }, row: 1, height: 4, width: 6 };
+    const position = options.position ?? { col: 1, row: 1, height: 4, width: 6 };
 
     return Object.freeze({ widget, position, searchType });
 }

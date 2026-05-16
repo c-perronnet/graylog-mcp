@@ -152,16 +152,17 @@ export function buildSearchDTO({ queryId, widgets, timerange, query }) {
             search_types: widgets.map((t) => t.searchType).filter((s) => s != null),
         }],
         parameters: [],
-        skipNoStreamsCheck: false,
+        skip_no_streams_check: false,
     };
 }
 
 /**
  * Build a ViewDTO for POST /api/views.
  *
- * Per RESEARCH §"C7 Mitigation Anatomy" step 2. Emits `titles` and
- * `display_mode_settings` EXPLICITLY (06-U1-SMOKE Q2 default
- * `EMIT_BOTH_EXPLICIT` — Pitfall 6). The `searchId` is either a real
+ * Per RESEARCH §"C7 Mitigation Anatomy" step 2. Emits `titles` EXPLICITLY
+ * (06-U1-SMOKE Q2). The `display_mode_settings` block is intentionally
+ * OMITTED — Graylog 7.x rejects the view-state `positions_inferred` field
+ * (MT4-BUG7). The `searchId` is either a real
  * Search ID from step 1's response OR the sentinel
  * "__SERVER_ASSIGNED__step1" during a dry-run preview (resolved by
  * `executeChain`'s placeholder substitution at apply time).
@@ -202,11 +203,6 @@ export function buildViewDTO({ title, description, summary, searchId, queryId, w
                 widget_mapping: widgetMapping,
                 positions: widgetPositions,
                 formatting: null,
-                display_mode_settings: {
-                    positions_inferred: false,
-                    show_summary: false,
-                    show_message_row: false,
-                },
             },
         },
         favorite: false,

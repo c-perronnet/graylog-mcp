@@ -18,7 +18,7 @@ export function buildTopSourcesByVolume(options = {}) {
 
     // Count desc sort is shared between widget and searchType so both the
     // UI rendering AND the server-side aggregation produce the same ordering.
-    const sortByCountDesc = [{ type: "series", id: "count()", direction: "Descending" }];
+    const sortByCountDesc = [{ type: "series", field: "count()", direction: "Descending" }];
 
     const searchType = {
         type: "pivot",

@@ -25,7 +25,7 @@ export function buildFieldValueDistribution(options = {}) {
     const limit = options.limit ?? 15;
     const queryString = options.queryString ?? "";
 
-    const sortByCountDesc = [{ type: "series", id: "count()", direction: "Descending" }];
+    const sortByCountDesc = [{ type: "series", field: "count()", direction: "Descending" }];
 
     const searchType = {
         type: "pivot",
