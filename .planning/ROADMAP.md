@@ -29,7 +29,7 @@ Full phase-by-phase narrative archived to `.planning/milestones/v3.0.0-ROADMAP.m
 
 The journey is strictly dependency-ordered. A correct GRN and the *corrected* endpoint (`POST /api/authz/shares/entities/{entityGRN}`, not the brief's wrong `PUT`) underpin everything, so Phase 8 builds the GRN helper and verifies the live 7.0.6 surface before any handler exists. The non-mutating read path (Phase 9) ships next — it de-risks `prepare`-response parsing at zero blast radius before that parsing becomes load-bearing inside the write path. Phase 10 is the headline: `share_entity` as a mandatory read-merge-write with the full v3.0.0 safety stack (dry-run, confirmation token, drift refusal). Role management (Phase 11) trails as an independent track — roles share no code path with entity grants.
 
-- [ ] **Phase 8: AuthZ Foundation — GRN Helper & Live API Recon** - Build the GRN abstraction, capture live 7.0.6 endpoint/response fixtures, and scaffold the `authz` domain
+- [x] **Phase 8: AuthZ Foundation — GRN Helper & Live API Recon** - Build the GRN abstraction, capture live 7.0.6 endpoint/response fixtures, and scaffold the `authz` domain (completed 2026-05-19)
 - [ ] **Phase 9: Entity Shares Read Path** - `get_entity_shares` and `list_grantees` — see an entity's current grants and resolvable grantees at zero blast radius
 - [ ] **Phase 10: Entity Sharing Write Path** - `share_entity` (streams, dashboards, saved searches) with read-merge-write, dry-run, confirmation token, drift refusal, and revoke
 - [ ] **Phase 11: Role Management** - `list_roles` / `create_role` / `update_role` / `delete_role` / `assign_role` / `unassign_role` with built-in-role protection
@@ -50,7 +50,7 @@ The journey is strictly dependency-ordered. A correct GRN and the *corrected* en
 Plans:
 - [x] 08-01-PLAN.md — GRN helper + Capability enum + empty authz barrel wired into `_register.js`, unit-tested (Wave 1)
 - [x] 08-02-PLAN.md — `computeShareGrantHash` standalone canonical-form hash added to `cascade-hash.js`, byte-identity pinned (Wave 1)
-- [ ] 08-03-PLAN.md — live 7.0.6 `/prepare` recon probe + captured fixture + `08-TEST-STRATEGY.md` (Wave 2)
+- [x] 08-03-PLAN.md — live 7.0.6 `/prepare` recon probe + captured fixture + `08-TEST-STRATEGY.md` (Wave 2)
 
 ### Phase 9: Entity Shares Read Path
 **Goal**: An agent can read an entity's current grant set and discover who it can be shared with — a non-mutating, immediately live-testable capability that de-risks `prepare`-response parsing before that parsing becomes load-bearing in the write path.
@@ -102,7 +102,7 @@ Phases execute in numeric order: 8 → 9 → 10 → 11
 | 5. Events & Notifications | v3.0.0 | 5/5 | Complete | 2026-05-15 |
 | 6. Dashboards & Blueprints | v3.0.0 | 6/6 | Complete | 2026-05-16 |
 | 7. Final Hardening | v3.0.0 | 3/3 | Complete | 2026-05-16 |
-| 8. AuthZ Foundation | v3.1.0 | 2/3 | In Progress|  |
+| 8. AuthZ Foundation | v3.1.0 | 3/3 | Complete   | 2026-05-19 |
 | 9. Entity Shares Read Path | v3.1.0 | 0/TBD | Not started | - |
 | 10. Entity Sharing Write Path | v3.1.0 | 0/TBD | Not started | - |
 | 11. Role Management | v3.1.0 | 0/TBD | Not started | - |
