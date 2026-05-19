@@ -250,3 +250,69 @@ export function computeNotificationCascadeHash({ notificationId, eventDefIds }) 
         eventDefIds,
     });
 }
+
+// =====================================================================
+// Phase 8 — computeShareGrantHash (entity-share confirmation token)
+// =====================================================================
+//
+// KEY DEVIATION — this wrapper does NOT forward into computeCascadeHash.
+//
+// computeRuleCascadeHash (Phase 4) and computeNotificationCascadeHash
+// (Phase 5) both forward into computeCascadeHash's keyed-bucket canonical
+// shape ({ streamId, cascades: { rules, pipeline_connections,
+// event_definitions } }). That shape exists to disambiguate ID-collision
+// ACROSS cascade types on a single destructive delete.
+//
+// An entity-share grant set is a different beast: a flat list of
+// {grantee, capability} pairs against one entity GRN. There are no
+// cross-type buckets to disambiguate, and the keyed-bucket shape simply
+// does not fit. So computeShareGrantHash builds its OWN canonical JSON and
+// calls createHash("sha256") DIRECTLY (reusing the line-25 import) — it is
+// a standalone canonical-form hash, NOT a thin forward.
+//
+// Rationale source: 08-RESEARCH §"Pattern 3" + Open Question Q1,
+// ARCHITECTURE.md §"Token shape" — the keyed-bucket shape is
+// stream-cascade-specific; a flat sorted [{grantee,capability}] list is
+// cleaner as a dedicated wrapper.
+//
+// Canonical JSON shape (LOCKED — drift = drift-refusal false-fire in the
+// Phase 10 share_entity TOCTOU gate):
+//   { "entityGrn": "<grn>", "grants": [ {grantee,capability}, ...sorted by grantee ] }
+// Byte-identity is pinned in test/cascade-hash.test.js so any change to
+// this canonical form (key order, sort key, field selection) fails loudly.
+
+/**
+ * Compute the deterministic confirmation token for share_entity (Phase 10).
+ *
+ * Standalone canonical-form sha-256 hash over the merged grant set — does
+ * NOT forward into computeCascadeHash (see the section banner above for the
+ * deviation rationale). The grants array is normalized to {grantee,
+ * capability} pairs (extra keys dropped) and sorted by grantee ascending so
+ * a re-ordered-but-equivalent grant set produces the identical token —
+ * preventing a false grants_changed_since_preview refusal in Phase 10.
+ *
+ * @param {object}   inputs
+ * @param {string}   inputs.entityGrn  target entity GRN (non-empty string),
+ *                                     e.g. "grn::::stream:000000000001"
+ * @param {Array<{grantee:string,capability:string}>} inputs.grants  grant set
+ * @returns {string} 64-char lowercase hex sha-256 digest
+ * @throws  {Error}  when entityGrn is not a non-empty string
+ * @throws  {Error}  when grants is not an array
+ */
+export function computeShareGrantHash({ entityGrn, grants }) {
+    if (typeof entityGrn !== "string" || entityGrn.length === 0) {
+        throw new Error("computeShareGrantHash: entityGrn is required");
+    }
+    if (!Array.isArray(grants)) {
+        throw new Error(
+            "computeShareGrantHash: grants must be an array of {grantee,capability}",
+        );
+    }
+    // Normalize to exactly {grantee,capability} (drop any extra keys) and
+    // sort by grantee so grant-array re-ordering yields the identical hash.
+    const sorted = [...grants]
+        .map((g) => ({ grantee: g.grantee, capability: g.capability }))
+        .sort((a, b) => (a.grantee < b.grantee ? -1 : a.grantee > b.grantee ? 1 : 0));
+    const canonical = JSON.stringify({ entityGrn, grants: sorted });
+    return createHash("sha256").update(canonical).digest("hex");
+}
