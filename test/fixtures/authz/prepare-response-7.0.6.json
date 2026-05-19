@@ -1,0 +1,65 @@
+{
+  "_provenance": {
+    "captured_by": "scripts/capture-authz-prepare-fixture.js",
+    "instance": "http://<graylog-host>",
+    "connection": "test",
+    "graylog_version": "7.0.6+711d207",
+    "source_entity_grn": "grn::::stream:6a0899bc670fc246e77ca54e",
+    "endpoint": "POST /api/authz/shares/entities/grn%3A%3A%3A%3Astream%3A6a0899bc670fc246e77ca54e/prepare",
+    "request_body": {},
+    "captured_at": "2026-05-19T14:27:50.892Z",
+    "note": "Verbatim live 7.0.6 EntityShareResponse from a @NoAuditEvent /prepare probe."
+  },
+  "entity": "grn::::stream:6a0899bc670fc246e77ca54e",
+  "sharing_user": "grn::::user:6a04acef670fc246e77a5091",
+  "available_grantees": [
+    {
+      "id": "grn::::user:69f9a9f179a73e0661e0a9c6",
+      "type": "user",
+      "title": "Sidecar System User (built-in)"
+    },
+    {
+      "id": "grn::::user:6a02ebea4076fbb743b4848e",
+      "type": "user",
+      "title": "User A"
+    },
+    {
+      "id": "grn::::user:6a02eca54076fbb743b48793",
+      "type": "user",
+      "title": "User C"
+    },
+    {
+      "id": "grn::::user:6a02ecd24076fbb743b48821",
+      "type": "user",
+      "title": "User B"
+    },
+    {
+      "id": "grn::::builtin-team:everyone",
+      "type": "global",
+      "title": "Everyone"
+    }
+  ],
+  "available_capabilities": [
+    {
+      "id": "view",
+      "title": "Viewer"
+    },
+    {
+      "id": "manage",
+      "title": "Manager"
+    },
+    {
+      "id": "own",
+      "title": "Owner"
+    }
+  ],
+  "active_shares": [],
+  "selected_grantee_capabilities": {},
+  "missing_permissions_on_dependencies": {},
+  "synced_entities": [],
+  "validation_result": {
+    "errors": {},
+    "error_context": {},
+    "failed": false
+  }
+}
