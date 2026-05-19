@@ -2,16 +2,19 @@
 // Imported once by src/tools/_register.js so the central registration
 // barrel stays the single source of truth for tool→handler wiring.
 //
-// Plan 08-01 — empty stub. Phase 8 is foundation + reconnaissance: it ships
-// the GRN helper (grn-helpers.js) and the Capability enum (schemas.js) but
-// ZERO agent-facing handlers. This barrel therefore registers nothing.
+// Plan 08-01 — Phase 8 shipped this barrel empty (foundation + reconnaissance:
+// the GRN helper and Capability enum, ZERO agent-facing handlers).
 //
-// Phase 9 populates it with the entity-shares READ path
-//   (get_entity_shares, list_grantees);
-// Phase 10 adds the WRITE path (share_entity).
+// Plan 09-01 — Phase 9 entity-shares READ path: get_entity_shares (SHARE-02)
+//   + list_grantees (SHARE-09), both built on POST .../entities/{grn}/prepare.
+// Phase 10 will add the WRITE path (share_entity).
 //
-// Precedent: src/tools/events/index.js shipped empty in Plan 05-01.
+// Precedent: src/tools/pipelines/index.js — import handler then register().
 
 import { register } from "../../dispatch.js";
 
-// (no register() calls — handlers land in Phase 9+)
+import { handleGetEntityShares } from "./get-entity-shares.js";
+import { handleListGrantees } from "./list-grantees.js";
+
+register("get_entity_shares", handleGetEntityShares);
+register("list_grantees", handleListGrantees);

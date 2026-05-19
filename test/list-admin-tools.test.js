@@ -23,6 +23,7 @@ import {
 } from "../src/config.js";
 
 const KNOWN_DOMAINS = [
+    "authz",
     "blueprints",
     "dashboards",
     "events",
@@ -44,14 +45,14 @@ afterEach(() => {
     setActiveConnection(null);
 });
 
-test("list_admin_tools with no args returns all 91 tools grouped by domain", async () => {
+test("list_admin_tools with no args returns all 93 tools grouped by domain", async () => {
     const res = await dispatch({
         params: { name: "list_admin_tools", arguments: {} },
     });
     assert.ok(!res.isError, `expected non-error response, got ${JSON.stringify(res)}`);
     const payload = JSON.parse(res.content[0].text);
     assert.equal(payload.tool, "list_admin_tools");
-    assert.equal(payload.count, 91, `expected 91 tools (90 pre-existing + list_admin_tools), got ${payload.count}`);
+    assert.equal(payload.count, 93, `expected 93 tools (91 v3.0.0 + get_entity_shares + list_grantees), got ${payload.count}`);
     assert.ok(payload.domains, "payload.domains must be present");
     const domainKeys = Object.keys(payload.domains).sort();
     for (const dom of KNOWN_DOMAINS) {
@@ -139,5 +140,5 @@ test("list_admin_tools is pure-static — no Graylog connection required", async
     });
     assert.ok(!res.isError, `meta-tool must NOT require a connection; got ${JSON.stringify(res)}`);
     const payload = JSON.parse(res.content[0].text);
-    assert.equal(payload.count, 91);
+    assert.equal(payload.count, 93);
 });

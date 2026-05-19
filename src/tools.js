@@ -1913,6 +1913,32 @@ export const toolDefinitions = [
         },
     },
     {
+        name: "get_entity_shares",
+        description: "Read an entity's grants (active_shares) plus shareable grantees/capabilities. Non-mutating. Accepts entityGrn OR (entityType,entityId). Note: active_shares excludes your own grant; empty is normal.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                connectionName: { type: "string" },
+                entityGrn: { type: "string", description: "Full GRN, e.g. grn::::stream:<id>. Either this OR entityType+entityId." },
+                entityType: { type: "string", enum: ["stream", "dashboard", "search"], description: "Entity type. Use with entityId." },
+                entityId: { type: "string", description: "Entity id (from list_streams / list_dashboards). Use with entityType." },
+            },
+        },
+    },
+    {
+        name: "list_grantees",
+        description: "List the users/teams an entity can be shared with (resolves a username to the user-GRN that share_entity needs). Non-mutating. Accepts entityGrn OR (entityType,entityId).",
+        inputSchema: {
+            type: "object",
+            properties: {
+                connectionName: { type: "string" },
+                entityGrn: { type: "string", description: "Full GRN, e.g. grn::::stream:<id>. Either this OR entityType+entityId." },
+                entityType: { type: "string", enum: ["stream", "dashboard", "search"], description: "Entity type. Use with entityId." },
+                entityId: { type: "string", description: "Entity id (from list_streams / list_dashboards). Use with entityType." },
+            },
+        },
+    },
+    {
         name: "list_admin_tools",
         description: "List every MCP tool grouped by domain (inputs/streams/pipelines/etc.) with a one-line summary. Use this vs. dumping the full /tools list when you need to orient at session start.",
         inputSchema: {

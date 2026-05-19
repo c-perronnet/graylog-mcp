@@ -1729,15 +1729,16 @@ test("add_widget_from_template places widget at row 1 when positions map is empt
 //   Task 1 → 88 (+BLUE-01 setup_app_monitoring_stack)
 //   Task 2 → 89 (+BLUE-02 setup_error_alerting)
 //   Task 3 → 90 (+BLUE-03 create_app_health_dashboard)
-// Plan 07-02 adds HARD-02 list_admin_tools → 91 (final milestone count).
+// Plan 07-02 adds HARD-02 list_admin_tools → 91 (v3.0.0 milestone count).
+// Plan 09-01 adds the authz READ path (get_entity_shares + list_grantees) → 93.
 // The pipelines.test.js count assertion pins the cumulative count; this
 // test mirrors it.
 
-test("assertAllToolsRegistered passes after Plan 07-02 end (count = 91; +HARD-02 list_admin_tools)", async () => {
+test("assertAllToolsRegistered passes after Plan 09-01 end (count = 93; +authz read path)", async () => {
     const { dispatch, assertAllToolsRegistered } = await import("../src/dispatch.js");
     await import("../src/tools/_register.js");
     const { toolDefinitions } = await import("../src/tools.js");
     assertAllToolsRegistered(toolDefinitions);
     assert.equal(typeof dispatch, "function");
-    assert.equal(toolDefinitions.length, 91, `Expected 91 tools after Plan 07-02 end (HARD-02 list_admin_tools shipped); got ${toolDefinitions.length}`);
+    assert.equal(toolDefinitions.length, 93, `Expected 93 tools after Plan 09-01 end (get_entity_shares + list_grantees shipped); got ${toolDefinitions.length}`);
 });

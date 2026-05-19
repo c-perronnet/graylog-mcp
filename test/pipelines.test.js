@@ -393,7 +393,7 @@ test("dispatch resolves list_pipelines/get_pipeline/delete_pipeline via the new 
     assert.ok(Array.isArray(payload.items));
 });
 
-test("assertAllToolsRegistered passes after Plan 07-02 end (count = 91; +HARD-02 list_admin_tools)", async () => {
+test("assertAllToolsRegistered passes after Plan 09-01 end (count = 93; +authz read path)", async () => {
     const { dispatch, assertAllToolsRegistered } = await import("../src/dispatch.js");
     await import("../src/tools/_register.js");
     const { toolDefinitions } = await import("../src/tools.js");
@@ -423,9 +423,9 @@ test("assertAllToolsRegistered passes after Plan 07-02 end (count = 91; +HARD-02
     // Plan 06-05 Task 1 adds BLUE-01 setup_app_monitoring_stack → 88.
     // Plan 06-05 Task 2 adds BLUE-02 setup_error_alerting → 89.
     // Plan 06-05 Task 3 adds BLUE-03 create_app_health_dashboard → 90.
-    // Plan 07-02 Task 1 adds HARD-02 list_admin_tools → 91 (final count
-    // for the milestone — the +1 net-new tool for Phase 7 per CONTEXT D-12).
-    assert.equal(toolDefinitions.length, 91, `Expected 91 tools after Plan 07-02 end (Phase 7 Plan 02 complete: HARD-02 list_admin_tools shipped); got ${toolDefinitions.length}`);
+    // Plan 07-02 Task 1 adds HARD-02 list_admin_tools → 91 (v3.0.0 milestone count).
+    // Plan 09-01 adds the authz READ path: get_entity_shares + list_grantees → 93.
+    assert.equal(toolDefinitions.length, 93, `Expected 93 tools after Plan 09-01 end (Phase 9 Plan 01 complete: get_entity_shares + list_grantees shipped); got ${toolDefinitions.length}`);
 });
 
 // =====================================================================
