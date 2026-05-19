@@ -2,7 +2,7 @@
 phase: 8
 slug: authz-foundation-grn-helper-live-api-recon
 status: draft
-nyquist_compliant: false
+nyquist_compliant: true
 wave_0_complete: false
 created: 2026-05-19
 ---
@@ -39,10 +39,17 @@ created: 2026-05-19
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| _TBD — populated during planning_ | — | — | AUTHZ-02 | — | — | unit | `node --test test/authz-grn.test.js` | ❌ W0 | ⬜ pending |
+| 08-01-01 | 08-01 | 1 | AUTHZ-02 | see 08-01 `<threat_model>` | Malformed GRN rejected client-side before any request reaches Graylog | unit (tdd) | `node --test test/authz-grn.test.js` | ❌ W0 | ⬜ pending |
+| 08-01-02 | 08-01 | 1 | AUTHZ-02 | see 08-01 `<threat_model>` | `Capability` enum pinned to exactly `view`/`manage`/`own`; other strings rejected | unit (tdd) | `node --test test/authz-grn.test.js` | ❌ W0 | ⬜ pending |
+| 08-01-03 | 08-01 | 1 | AUTHZ-02 | see 08-01 `<threat_model>` | `authz` barrel wired with zero handlers registered; full suite stays green | integration | `npm test` | ✅ existing | ⬜ pending |
+| 08-02-01 | 08-02 | 1 | AUTHZ-02 | see 08-02 `<threat_model>` | `computeShareGrantHash` standalone canonical-form sha-256 (not forwarded) | unit (tdd) | `node --test test/cascade-hash.test.js` | ✅ extend | ⬜ pending |
+| 08-02-02 | 08-02 | 1 | AUTHZ-02 | see 08-02 `<threat_model>` | Byte-identity pinned — canonical-form drift fails loudly | unit (tdd) | `node --test test/cascade-hash.test.js` | ✅ extend | ⬜ pending |
+| 08-03-01 | 08-03 | 2 | AUTHZ-02 | see 08-03 `<threat_model>` | Probe calls only `@NoAuditEvent .../prepare`; commit endpoint grep-absent | unit (syntax + content) | `node -c scripts/capture-authz-prepare-fixture.js` | ❌ W0 | ⬜ pending |
+| 08-03-02 | 08-03 | 2 | AUTHZ-02 | see 08-03 `<threat_model>` | Read-only live `/prepare` against the `test` instance — human-verified | manual / live-gated | checkpoint:human-verify (N/A) | ❌ W0 | ⬜ pending |
+| 08-03-03 | 08-03 | 2 | AUTHZ-02 | see 08-03 `<threat_model>` | Captured fixture has the expected `EntityShareResponse` keys | unit (fixture-shape) | `node --test test/authz-grn.test.js` | ❌ W0 | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
-*The planner fills concrete Task IDs; this map is the contract every task's `<automated>` verify must satisfy.*
+*Backfilled 2026-05-19 after planning (3 plans, 8 tasks). Per-task threat detail lives in each PLAN.md `<threat_model>` block (threats T-08-01..09 + T-08-SC).*
 
 ---
 
@@ -73,4 +80,4 @@ created: 2026-05-19
 - [ ] Feedback latency < 5s
 - [ ] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** approved 2026-05-19

@@ -414,7 +414,9 @@ test("computeShareGrantHash is grant-order independent", () => {
 | A4 | `computeShareGrantHash` is a standalone canonical form, NOT a forward into `computeCascadeHash`. | Pattern 3 / Open Q1 | MEDIUM — ARCHITECTURE.md recommends standalone; but Phase 10 (the consumer) is what truly locks the canonical shape. If Phase 10 needs a different grant representation, the pinned byte-identity must change. Flag for plan-time confirmation. |
 | A5 | Role-endpoint live verification is deferred to Phase 11; Phase 8's AUTHZ-02 scope is the entity-shares surface + GRN format only. | Phase Requirements | LOW — REQUIREMENTS.md cross-cutting note explicitly splits AUTHZ-02 verification across phases; Phase 8 success criteria mention only the `prepare`/entity endpoint. |
 
-## Open Questions
+## Open Questions (RESOLVED)
+
+**All four resolved during Phase 8 planning:** Q1 → plan 08-02 (standalone canonical-form sha-256 hash; the deviation from the forwarding wrappers is documented in the `cascade-hash.js` file comment). Q2 → plan 08-01 (6-token `grn::::<type>:<id>` locked; round-trip + lowercasing are unit-tested acceptance gates). Q3 → plan 08-03 (one-shot `scripts/capture-authz-prepare-fixture.js` probe, output committed, offline fixture-shape test). Q4 → plan 08-03 Task 3 (a dedicated `08-TEST-STRATEGY.md` in the phase folder).
 
 1. **`computeShareGrantHash` — standalone canonical form vs forward into `computeCascadeHash`?**
    - What we know: ARCHITECTURE.md §"Token shape" recommends a dedicated canonical form because the keyed-bucket shape is stream-cascade-specific. Phases 4/5 wrappers (`computeRuleCascadeHash`, `computeNotificationCascadeHash`) all *forward* — this one would break that uniformity.
