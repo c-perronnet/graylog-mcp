@@ -39,14 +39,22 @@ export const GRN_TYPES = new Set([
  * Both the type token and the entity id are lowercased so the result
  * round-trips through `parseGrn` (which lowercases the whole string).
  *
- * @param {string} type  GRN entity type — MUST be a member of GRN_TYPES
+ * @param {string} type  GRN entity type — a non-empty string in GRN_TYPES
  * @param {string} id    entity id — a non-empty string
  * @returns {string} the 6-token form `grn::::<type>:<id>`
+ * @throws when `type` is not a non-empty string
  * @throws when `type` is not in GRN_TYPES (message lists the valid set)
  * @throws when `id` is not a non-empty string
  */
 export function buildGrn(type, id) {
-    const t = String(type).toLowerCase();
+    // Reject a non-string `type` explicitly rather than masking it via
+    // String() coercion — a numeric/null `type` would otherwise surface as
+    // a confusing "Unknown GRN type" instead of a clear type-error, and the
+    // sibling `id` check below already rejects non-strings outright.
+    if (typeof type !== "string" || type.length === 0) {
+        throw new Error("buildGrn: type must be a non-empty string");
+    }
+    const t = type.toLowerCase();
     if (!GRN_TYPES.has(t)) {
         throw new Error(
             `Unknown GRN type "${type}". Valid types: ${[...GRN_TYPES].join(", ")}`,
