@@ -62,30 +62,39 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| SHARE-01 | TBD | Pending |
-| SHARE-02 | TBD | Pending |
-| SHARE-03 | TBD | Pending |
-| SHARE-04 | TBD | Pending |
-| SHARE-05 | TBD | Pending |
-| SHARE-06 | TBD | Pending |
-| SHARE-07 | TBD | Pending |
-| SHARE-08 | TBD | Pending |
-| SHARE-09 | TBD | Pending |
-| ROLE-01 | TBD | Pending |
-| ROLE-02 | TBD | Pending |
-| ROLE-03 | TBD | Pending |
-| ROLE-04 | TBD | Pending |
-| ROLE-05 | TBD | Pending |
-| ROLE-06 | TBD | Pending |
-| ROLE-07 | TBD | Pending |
-| AUTHZ-01 | TBD | Pending |
-| AUTHZ-02 | TBD | Pending |
+| SHARE-01 | Phase 10 | Pending |
+| SHARE-02 | Phase 9 | Pending |
+| SHARE-03 | Phase 10 | Pending |
+| SHARE-04 | Phase 10 | Pending |
+| SHARE-05 | Phase 10 | Pending |
+| SHARE-06 | Phase 10 | Pending |
+| SHARE-07 | Phase 10 | Pending |
+| SHARE-08 | Phase 10 | Pending |
+| SHARE-09 | Phase 9 | Pending |
+| ROLE-01 | Phase 11 | Pending |
+| ROLE-02 | Phase 11 | Pending |
+| ROLE-03 | Phase 11 | Pending |
+| ROLE-04 | Phase 11 | Pending |
+| ROLE-05 | Phase 11 | Pending |
+| ROLE-06 | Phase 11 | Pending |
+| ROLE-07 | Phase 11 | Pending |
+| AUTHZ-01 | Phase 10 | Pending |
+| AUTHZ-02 | Phase 8 | Pending |
 
 **Coverage:**
 - v1 requirements: 18 total
-- Mapped to phases: 0 (roadmap not yet created)
-- Unmapped: 18 ⚠️
+- Mapped to phases: 18 ✓
+- Unmapped: 0
+
+**Per-phase rollup:**
+- Phase 8 (AuthZ Foundation): AUTHZ-02 — 1 requirement
+- Phase 9 (Entity Shares Read Path): SHARE-02, SHARE-09 — 2 requirements
+- Phase 10 (Entity Sharing Write Path): SHARE-01, SHARE-03, SHARE-04, SHARE-05, SHARE-06, SHARE-07, SHARE-08, AUTHZ-01 — 8 requirements
+- Phase 11 (Role Management): ROLE-01, ROLE-02, ROLE-03, ROLE-04, ROLE-05, ROLE-06, ROLE-07 — 7 requirements
+
+**Cross-cutting note:** AUTHZ-01 (dry-run + token + drift refusal for all mutating authz tools) and AUTHZ-02 (live-instance verification) span the milestone. Each is assigned to a single owning phase for traceability — AUTHZ-01 to Phase 10 where the safety stack is built and proven, AUTHZ-02 to Phase 8 where the live-recon discipline is established — and is re-asserted as a verification gate in Phase 11 (AUTHZ-01: role-tool safety stack) and at milestone close (AUTHZ-02: full-surface live verification).
 
 ---
 *Requirements defined: 2026-05-19*
-*Last updated: 2026-05-19 after initial definition for milestone v3.1.0*
+*Last updated: 2026-05-19 — traceability mapped during roadmap creation (4 phases, 100% coverage)*
+</content>
