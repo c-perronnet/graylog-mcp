@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v3.1.0
 milestone_name: AuthZ & Sharing
-status: ready_to_plan
-stopped_at: Phase 08 complete (3/3) — ready to discuss Phase 9
-last_updated: 2026-05-19T14:38:40.596Z
+status: executing
+stopped_at: ROADMAP.md created for v3.1.0 — 4 phases (8-11), all 18 requirements mapped, 100% coverage
+last_updated: "2026-05-19T16:24:50.244Z"
 last_activity: 2026-05-19
 progress:
   total_phases: 4
   completed_phases: 1
-  total_plans: 3
-  completed_plans: 3
+  total_plans: 5
+  completed_plans: 4
   percent: 25
 ---
 
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-19)
 
 **Core value:** An AI agent can configure Graylog from intent alone, safely, without touching the web UI.
-**Current focus:** Phase 9 — entity shares read path
+**Current focus:** Phase 09 — entity-shares-read-path
 
 ## Current Position
 
-Phase: 9
-Plan: Not started
-Status: Ready to plan
+Phase: 09 (entity-shares-read-path) — EXECUTING
+Plan: 2 of 2
+Status: Ready to execute
 Last activity: 2026-05-19
 
-Progress: [██████████] 100%
+Progress: [████████░░] 80%
 
 ## Performance Metrics
 
@@ -52,6 +52,7 @@ Progress: [██████████] 100%
 
 *v3.0.0 metrics archived — 41 plans / 8 phases shipped 2026-05-16. See MILESTONES.md.*
 | Phase 08 P01 | 14min | 3 tasks | 5 files |
+| Phase 09 P01 | 6min | 4 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -66,6 +67,7 @@ Recent decisions affecting current work:
 - Role management is an independent track from entity sharing (roles ≠ grants, no shared code path) — separate phase (11).
 - Zero new dependencies; new code under `src/tools/authz/`; v2.3 contracts unchanged.
 - [Phase ?]: Phase 8 Plan 01: GRN canonical form locked to 6-token grn::::<type>:<id>; GRN_TYPES pinned to the 6-type milestone set; Capability enum exactly view/manage/own
+- [Phase ?]: Phase 9 Plan 01: entity-shares read path — get_entity_shares + list_grantees on POST .../prepare with empty {} body; authz barrel now non-empty
 
 ### Pending Todos
 
@@ -89,7 +91,7 @@ Items carried forward from the v3.0.0 milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-19T14:30:39.304Z
+Last session: 2026-05-19T16:24:45.211Z
 Stopped at: ROADMAP.md created for v3.1.0 — 4 phases (8-11), all 18 requirements mapped, 100% coverage
 Resume file: None
 </content>

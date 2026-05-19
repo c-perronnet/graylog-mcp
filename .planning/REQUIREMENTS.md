@@ -10,14 +10,14 @@ Requirements for the v3.1.0 milestone. Each maps to a roadmap phase.
 ### Entity Sharing
 
 - [ ] **SHARE-01**: Agent can grant a user view/manage/own access to a stream via `share_entity`
-- [ ] **SHARE-02**: Agent can read an entity's current grants (active shares) via `get_entity_shares`
+- [x] **SHARE-02**: Agent can read an entity's current grants (active shares) via `get_entity_shares`
 - [ ] **SHARE-03**: Agent can revoke a user's access to an entity
 - [ ] **SHARE-04**: `share_entity` accepts a username and resolves it to the user-GRN the Graylog API requires
 - [ ] **SHARE-05**: `share_entity` is read-merge-write — adding a grantee never silently revokes other grantees' existing grants
 - [ ] **SHARE-06**: `share_entity` surfaces Graylog's `validation_result` and `missing_permissions_on_dependencies` as structured output, not raw errors
 - [ ] **SHARE-07**: Agent can share a dashboard via `share_entity`
 - [ ] **SHARE-08**: Agent can share a saved search via `share_entity`
-- [ ] **SHARE-09**: Agent can list the grantees available for sharing an entity via `list_grantees`
+- [x] **SHARE-09**: Agent can list the grantees available for sharing an entity via `list_grantees`
 
 ### Role Management
 
@@ -63,14 +63,14 @@ Which phases cover which requirements. Updated during roadmap creation.
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | SHARE-01 | Phase 10 | Pending |
-| SHARE-02 | Phase 9 | Pending |
+| SHARE-02 | Phase 9 | Complete |
 | SHARE-03 | Phase 10 | Pending |
 | SHARE-04 | Phase 10 | Pending |
 | SHARE-05 | Phase 10 | Pending |
 | SHARE-06 | Phase 10 | Pending |
 | SHARE-07 | Phase 10 | Pending |
 | SHARE-08 | Phase 10 | Pending |
-| SHARE-09 | Phase 9 | Pending |
+| SHARE-09 | Phase 9 | Complete |
 | ROLE-01 | Phase 11 | Pending |
 | ROLE-02 | Phase 11 | Pending |
 | ROLE-03 | Phase 11 | Pending |

@@ -63,7 +63,7 @@ Plans:
   4. Both tools are smoke-tested non-mutatingly against the live `test` instance and verified against the Phase 8 fixtures offline
 **Plans**: 2 plans
 Plans:
-- [ ] 09-01-PLAN.md — Wave 0 offline tests + zod schemas + shared fetch helper + `get_entity_shares` & `list_grantees` handlers + barrel/`tools.js` wiring (Wave 1)
+- [x] 09-01-PLAN.md — Wave 0 offline tests + zod schemas + shared fetch helper + `get_entity_shares` & `list_grantees` handlers + barrel/`tools.js` wiring (Wave 1)
 - [ ] 09-02-PLAN.md — live non-mutating `/prepare`-only smoke check against the production `test` connection (Wave 2)
 
 ### Phase 10: Entity Sharing Write Path
@@ -106,6 +106,6 @@ Phases execute in numeric order: 8 → 9 → 10 → 11
 | 6. Dashboards & Blueprints | v3.0.0 | 6/6 | Complete | 2026-05-16 |
 | 7. Final Hardening | v3.0.0 | 3/3 | Complete | 2026-05-16 |
 | 8. AuthZ Foundation | v3.1.0 | 3/3 | Complete   | 2026-05-19 |
-| 9. Entity Shares Read Path | v3.1.0 | 0/2 | Not started | - |
+| 9. Entity Shares Read Path | v3.1.0 | 1/2 | In Progress|  |
 | 10. Entity Sharing Write Path | v3.1.0 | 0/TBD | Not started | - |
 | 11. Role Management | v3.1.0 | 0/TBD | Not started | - |
