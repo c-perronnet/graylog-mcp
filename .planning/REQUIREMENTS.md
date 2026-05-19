@@ -32,7 +32,7 @@ Requirements for the v3.1.0 milestone. Each maps to a roadmap phase.
 ### Safety & Verification
 
 - [ ] **AUTHZ-01**: Every mutating authz tool (`share_entity`, `create_role`, `update_role`, `delete_role`, `assign_role`, `unassign_role`) defaults to `dryRun: true`, returns a sha-256 confirmation token, and refuses apply on drift between preview and apply
-- [ ] **AUTHZ-02**: The authz tool surface is verified against the live Graylog 7.0.6 instance before milestone close — correct `POST /api/authz/shares/entities/{entityGRN}` endpoint, GRN URL-encoding, and role endpoints
+- [x] **AUTHZ-02**: The authz tool surface is verified against the live Graylog 7.0.6 instance before milestone close — correct `POST /api/authz/shares/entities/{entityGRN}` endpoint, GRN URL-encoding, and role endpoints
 
 ## v2 Requirements
 
@@ -79,7 +79,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | ROLE-06 | Phase 11 | Pending |
 | ROLE-07 | Phase 11 | Pending |
 | AUTHZ-01 | Phase 10 | Pending |
-| AUTHZ-02 | Phase 8 | Pending |
+| AUTHZ-02 | Phase 8 | Complete |
 
 **Coverage:**
 - v1 requirements: 18 total

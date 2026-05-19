@@ -2,14 +2,15 @@
 gsd_state_version: 1.0
 milestone: v3.1.0
 milestone_name: AuthZ & Sharing
-status: ready_to_plan
-last_updated: "2026-05-19T14:00:00.000Z"
+status: executing
+stopped_at: ROADMAP.md created for v3.1.0 — 4 phases (8-11), all 18 requirements mapped, 100% coverage
+last_updated: "2026-05-19T14:20:00.211Z"
 last_activity: 2026-05-19
 progress:
   total_phases: 4
   completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
+  total_plans: 3
+  completed_plans: 1
   percent: 0
 ---
 
@@ -20,20 +21,21 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-19)
 
 **Core value:** An AI agent can configure Graylog from intent alone, safely, without touching the web UI.
-**Current focus:** Phase 8 — AuthZ Foundation (GRN Helper & Live API Recon)
+**Current focus:** Phase 08 — authz-foundation-grn-helper-live-api-recon
 
 ## Current Position
 
-Phase: 8 of 11 (AuthZ Foundation — GRN Helper & Live API Recon)
-Plan: — (not yet planned)
-Status: Ready to plan
-Last activity: 2026-05-19 — Roadmap created for milestone v3.1.0 (4 phases, 18 requirements, 100% coverage)
+Phase: 08 (authz-foundation-grn-helper-live-api-recon) — EXECUTING
+Plan: 2 of 3
+Status: Ready to execute
+Last activity: 2026-05-19
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [███░░░░░░░] 33%
 
 ## Performance Metrics
 
 **Velocity:**
+
 - Total plans completed (v3.1.0): 0
 - Average duration: —
 - Total execution time: —
@@ -48,6 +50,7 @@ Progress: [░░░░░░░░░░] 0%
 | 11. Role Management | 0/TBD | - | - |
 
 *v3.0.0 metrics archived — 41 plans / 8 phases shipped 2026-05-16. See MILESTONES.md.*
+| Phase 08 P01 | 14min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -61,6 +64,7 @@ Recent decisions affecting current work:
 - Graylog `/prepare` and the local sha-256 token are complementary: `/prepare` gives feasibility/validation, the local token gives TOCTOU drift refusal. Both required.
 - Role management is an independent track from entity sharing (roles ≠ grants, no shared code path) — separate phase (11).
 - Zero new dependencies; new code under `src/tools/authz/`; v2.3 contracts unchanged.
+- [Phase ?]: Phase 8 Plan 01: GRN canonical form locked to 6-token grn::::<type>:<id>; GRN_TYPES pinned to the 6-type milestone set; Capability enum exactly view/manage/own
 
 ### Pending Todos
 
@@ -84,7 +88,7 @@ Items carried forward from the v3.0.0 milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-19 14:00
+Last session: 2026-05-19T14:19:49.924Z
 Stopped at: ROADMAP.md created for v3.1.0 — 4 phases (8-11), all 18 requirements mapped, 100% coverage
 Resume file: None
 </content>
