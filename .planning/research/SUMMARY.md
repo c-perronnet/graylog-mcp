@@ -1,233 +1,205 @@
-# Research Summary — Graylog MCP Admin Surface (v3 milestone)
+# Project Research Summary
 
-**Synthesized:** 2026-05-13
-**Scope:** Adds ~64 tools (58 CRUD primitives + 6 blueprints) across 6 Graylog admin domains to the existing v2.3 codebase (~27 read/analyze tools). Total projected MCP surface: ~91 tools.
-**Research files:** STACK.md · FEATURES.md · ARCHITECTURE.md · PITFALLS.md
-**Confidence:** HIGH on phase order and critical design decisions; MEDIUM on exact version pins and some Graylog endpoint shapes.
-
-> **⚠ Version retarget (2026-05-13, post-synthesis):** The research in this folder was conducted against the local `source-code/graylog2-server/` clone (Graylog 7.2.0-SNAPSHOT). The milestone has since been **retargeted to Graylog 7.0.6** — the live test instance the user provisioned at `<graylog-host>`. See PROJECT.md "Graylog test environment" and the relevant Key Decision. The phase order, architecture, features, and pitfalls below are still load-bearing — most are version-stable within v7 — but **endpoint shapes, payload schemas, and changelog citations (especially in PITFALLS.md backward-compat tables) must be re-verified against 7.0.6 during Phase 1+ planning**, with the live instance as authoritative. Treat any 7.0↔7.2 divergence as a known-future-issue, not in scope this milestone.
-
----
+**Project:** Graylog MCP — v3.1.0 AuthZ & Sharing
+**Domain:** Authorization & entity-sharing tool surface (additive on v3.0.0 admin surface)
+**Researched:** 2026-05-19
+**Confidence:** HIGH
 
 ## Executive Summary
 
-This milestone converts the Graylog MCP from a read/analyze tool into a full admin surface. The central design tension is safety: an LLM caller that can mutate a production Graylog cluster must be structurally prevented from doing so accidentally. All four research files converge on the same answer — **dry-run-by-default is the safety primitive, but it only works if the foundation is built first and built correctly**. The `defineMutatingHandler` factory, the `runOrPreview` helper, per-domain zod schemas, the dispatch Map refactor, and the idempotency-key mechanism are all cross-cutting concerns that every subsequent domain phase depends on. Attempting to ship the first domain (Streams) without that foundation produces a codebase where each of 50+ tools hand-rolls its own dry-run check — the single most expensive class of silent bug this milestone can produce.
+The v3.1.0 milestone adds the authorization layer to the Graylog MCP: letting an agent grant users access to entities (streams, dashboards, saved searches) and manage roles. The research converged on one structural insight that must propagate everywhere in the plan: **the milestone brief's endpoint `PUT /api/authz/shares/{grn}` is wrong.** The real surface, confirmed by reading `EntitySharesResource.java` directly, is `POST /api/authz/shares/entities/{entityGRN}` (apply) and `POST /api/authz/shares/entities/{entityGRN}/prepare` (dry-run preview). Every route, test, and tool-description in the plan must use these corrected paths, and must verify them against the live 7.0.6 instance before any handler is written.
 
-The feature scope is well-defined and sourced directly from Graylog 7.2's Java REST resources. The dependency graph across domains is clear: Index Sets must exist before Streams; Streams before Pipelines and Events; all primitives before Blueprints. Dashboards are the most complex domain due to Graylog's two-entity (Search + View) creation model and widget-position integrity constraint — they belong in the penultimate phase, not earlier.
+The headline design challenge is **grant-set replacement semantics**: the apply endpoint is a full replace, not an additive merge. Posting `{newUser: view}` silently deletes every other user's grant. `share_entity` is therefore mandatory read-merge-write — a precedent the codebase already ships for pipeline-to-stream connections (`connect_pipelines_to_stream`'s GET-merge-POST pattern). The natural dry-run vehicle is Graylog's own `/prepare` endpoint (`@NoAuditEvent`, returns `active_shares` + `validation_result` + `missing_permissions_on_dependencies` without mutating). The existing local sha-256 confirmation token (`cascade-hash.js`) is complementary, not replaced by `/prepare`: Graylog provides feasibility and current state; the local token provides TOCTOU drift refusal. Both are required and serve different jobs.
 
-The total tool count (~91 after this milestone) triggers an agent-loop risk: at that scale, tool descriptions degrade the agent's ability to select the right tool. A tool-description hygiene pass is not optional cleanup — it must be the final gate before the milestone ships. This is Phase 7 (Final Hardening), not a post-milestone nicety.
-
----
+The stack needs zero new dependencies. `axios` + `zod` + `node:crypto` + `node:test`/`c8` cover everything. New code lands in `src/tools/authz/` following the identical per-domain pattern of `src/tools/pipelines/`. The recommended build order — GRN helper, `get_entity_shares` (read), `share_entity` (write, streams), generalize to dashboards/searches, role tools — reflects hard dependency ordering and blast-radius sequencing. The entity-sharing surface changes who can read production logs; the `test` connection is live production UNESCO infrastructure; no automated test may apply a grant to a real stream or real user.
 
 ## Key Findings
 
-### From STACK.md
+### Recommended Stack
 
-- **No new production dependencies.** `zod ^3.25.76` already declared but unused; adopt it. `axios ^1.12.2` covers all admin endpoints (no multipart upload in scope). No DSL parser library — hand-roll `src/pipeline-dsl/` with ~200 lines of structural validation.
-- **One new devDependency: `c8 ^10.1.3`.** Node's built-in `node:test` replaces the broken standalone-script pattern.
-- **Node version bump is a Phase 0 decision.** `t.snapshot()` stable in Node 22, experimental in Node 20.6+. Recommended: bump `engines.node` to `>= 20.6.0` (minimum) or `>= 22.3.0` (preferred) in Phase 0.
-- **Do not upgrade zod to v4.** Pin stays at `^3.25.76`. MCP SDK uses zod internally; dual-major-in-tree risk is not worth it.
+Zero new dependencies for v3.1.0. All required capability is already installed. The existing `@modelcontextprotocol/sdk`, `axios`, `zod`, `node:crypto`, and `node:test`/`c8` stack fully covers GRN string work (a plain `split(":")`/`join(":")` with `zod` validation), the authz/shares and roles REST surface (plain JSON over HTTP Basic), test interception (the `_setCaptureRequest` seam in `src/graylog/client.js`), and confirmation-token hashing (reuse `computeCascadeHash` from `src/tools/_shared/cascade-hash.js`). If a PR adds a dependency, treat it as a red flag.
 
-### From FEATURES.md
+**Core technologies:**
+- `axios` ^1.12.2: HTTP client for all authz/roles calls — covers JSON, HTTP Basic, error classification (403 to `GraylogPermissionError`). Route every call through `makeClient(conn).request()`.
+- `zod` ^3.25.76: GRN string validation (`.regex()`/`.refine()`), `Capability` enum (`z.enum(["view","manage","own"])`), grantee-map and role-payload schemas, extending the existing `mutatingBase` in `src/tools/_shared/schemas.js`.
+- `node:crypto` (built-in): sha-256 confirmation token over the dry-run grant set. Reuse `computeCascadeHash` / `computeC1Hash` from `src/tools/_shared/cascade-hash.js`; add a thin `computeShareGrantHash` wrapper following the `computeRuleCascadeHash` pattern.
+- `node:test` + `_setCaptureRequest`: network-free request assertions over outbound `POST /api/authz/shares/entities/...` calls.
 
-- **~64 net-new tools in 6 domains.** Total combined surface: ~91 tools.
+### Expected Features
 
-| Domain | Tools | Key constraint |
-|--------|-------|----------------|
-| Streams + rules | 11 | `test_stream_match` is the agent's rule-validation anchor |
-| Pipelines + rules + connections | 12 | At ceiling; `simulate_pipeline_rule` is non-negotiable |
-| Dashboards + widget templates | 7 | Two-entity create (Search then View); 8 curated widget templates |
-| Inputs + extractors | 11 | Encrypted-field partial-update; `list_input_types` is dynamic |
-| Indices + retention | 8 | `deleteIndices` default must be **inverted** from Graylog's server default |
-| Events + notifications | 9 | `schedule: false` default; aggregation syntax is v7-only |
-| Blueprints | 6 | All compose from services layer, not other tool handlers |
+**Must have (table stakes):**
+- `share_entity` — grant a user a capability on a stream (or dashboard/search). `dryRun:true` calls `/prepare`; `dryRun:false` calls `/entities/{grn}`. Body is the full merged `selected_grantee_capabilities` map, never just the new grant.
+- GRN builder/parser util (`src/tools/authz/grn-helpers.js`) — 6-token colon-split, `grn` prefix, lowercase normalization, type validated against the registered set. Prerequisite for every other authz tool; build and unit-test first.
+- Username to user-GRN resolution — agents speak usernames; the API needs `grn::::user:<mongoId>`. Resolve by matching `available_grantees[].title` from the `/prepare` response (preferred) or `GET /api/users/{username}`.
+- `get_entity_shares` — read current grants for an entity. Call `POST .../prepare` with an empty body, return `active_shares`. Plain async handler, not `defineMutatingHandler` or `defineListHandler`.
+- Capability enum validation — exactly `view` / `manage` / `own` (lowercase). `zod` enum at schema-definition time. Default to `view` (least privilege).
+- `validation_result` + `missing_permissions_on_dependencies` surfacing — both visible in dry-run and apply output. HTTP 400 on apply carries the full `EntityShareResponse` body; parse it rather than throwing on non-2xx.
+- Drift refusal — hash the full current grant set at dry-run; re-prepare and re-hash on apply; refuse with `grants_changed_since_preview` if they diverge.
 
-- **Dependency graph drives phase order unambiguously:** `create_index_set` → `create_stream` → `create_pipeline_rule/pipeline` → `connect_pipelines_to_stream` → `create_event_notification` → `create_event_definition`. Dashboards depend on all of the above.
-- **Blueprint 1 (`setup_app_monitoring_stack`) is the headline use-case** and the integration proof-of-concept.
+**Should have (differentiators):**
+- Generalize `share_entity` to dashboards and saved searches — only the GRN `type` token changes; the API path is identical. Near-free once the GRN helper is parameterized.
+- `create_role` / `assign_role` / `unassign_role` — role CRUD (`POST /api/roles`, `PUT/DELETE /api/roles/{rolename}/members/{username}`). Independent of the entity-share path.
+- `list_roles` / `get_role` — read side of role management.
+- Revoke path — "unshare alice" = prepare current `active_shares`, drop alice, commit the remainder. Either a `revoke: true` flag on `share_entity` or a sibling `revoke_entity_share` tool.
+- Explicit removed-grants diff in dry-run output — "grants that WOULD BE REMOVED" section required for safe human/agent review.
 
-### From ARCHITECTURE.md
+**Defer (v2+):**
+- User account CRUD (`create_user`/`delete_user`) — out of scope; account lifecycle is a separate high-risk surface.
+- API-token minting — explicitly out of scope; minting long-lived secrets from an agent is a security anti-pattern.
+- Team-based grants — Enterprise feature; build the GRN path generically but do not depend on teams existing on the OSS test instance.
+- Share-on-create blueprint chaining — chain `share_entity` after `create_stream` in a future blueprint update.
+- Lookup tables / content packs / sidecars sharing — out of scope per PROJECT.md.
 
-- **8-phase build order** (Phase 0 + 6 domain phases + Phase 7 hardening). ARCHITECTURE.md and FEATURES.md agree on all dependency edges.
-- **Three new structural layers in Phase 0:** `src/dispatch.js` (Map-based dispatch replacing the `if` chain), `src/graylog/client.js` (single HTTP client), `src/services/<domain>.js` (pure domain operations).
-- **`defineMutatingHandler` factory** is the single most important design decision in Phase 0. Centralizes `dryRun: true` enforcement; a missed per-handler check is the most dangerous class of bug.
-- **Blueprints call `services/`, never other tool handlers.** Handler-to-handler cross-imports cause double-validation, double-dry-run, opaque errors.
-- **`connectionName` per-call arg with singleton fallback.** All mutating tools include `connectionName: z.string().optional()` in their zod schema.
+### Architecture Approach
 
-### From PITFALLS.md
+The authz domain slots into the existing architecture as a new per-domain folder `src/tools/authz/`, identical in structure to `src/tools/pipelines/` and the other 7 admin domains shipped in v3.0.0. Wiring requires exactly four mechanical edits: append tool definitions to `src/tools.js`, add `import "./authz/index.js"` to `src/tools/_register.js`, create the domain barrel `src/tools/authz/index.js`, and add a thin `computeShareGrantHash` wrapper to `src/tools/_shared/cascade-hash.js`. No changes to `src/graylog/client.js`, `src/dispatch.js`, `handler.js`, or any v2.3 read tool.
 
-**Critical pitfalls (data loss / silent divergence):**
+**Major components:**
+1. `src/tools/authz/grn-helpers.js` — pure `buildGrn(type, id)` / `parseGrn(grn)` / `isGrn(value)` functions; `GRN_TYPES` set. Zero I/O; hard prerequisite for all other authz files.
+2. `src/tools/authz/get-entity-shares.js` — plain async handler; copy `get-pipeline.js` pattern; calls `POST .../prepare` with empty body, returns `EntityShareResponse`.
+3. `src/tools/authz/share-entity.js` — `defineMutatingHandler` with async `build()`: prepare, read `active_shares`, merge, `computeShareGrantHash`, `_confirmationToken`; `requireConfirm` gate; apply with `validation_result` inspection. The `connect_pipelines_to_stream` GET-merge-POST precedent is the direct model.
+4. `src/tools/authz/create-role.js` + `assign-role.js` — independent role management tools; `defineMutatingHandler`; `POST /api/roles` and `PUT /api/roles/{rolename}/members/{username}` (send `{}` body on PUT — server requires a non-empty body but ignores content).
+5. `src/tools/_shared/cascade-hash.js` (modified) — add `computeShareGrantHash({ entityGrn, grants })` thin wrapper; sha-256 over sorted `[{grantee, capability}]` array; byte-identity pinned in `test/cascade-hash.test.js`.
 
-| ID | Pitfall | Prevention |
-|----|---------|-----------|
-| C1 | `DELETE /index_sets/{id}` defaults `delete_indices=true` server-side, destroys ES data async | Invert default; second-guardrail confirmation token if data present |
-| C2 | Stream delete cascades silently to rules; pipeline connections orphaned | Pre-delete cascade preview; stale-world check on apply |
-| C3 | Input update zeroes encrypted config fields if caller echoes full config | Partial-update shape only; wrapper fetches current config and merges |
-| C4 | Agent invents pipeline function names (`uppercase` instead of `to_upper`) | `POST /pipelines/rule/parse` pre-flight on every dry-run; cache function registry |
-| C5 | Event aggregation v6 syntax (`count(source)`) saves but never fires on v7 | Pin to v7 shape; `_convert_v6_event_aggregation` helper with warning |
-| C6 | Dry-run previews contain `__SERVER_ASSIGNED__` IDs; agent reuses them | Explicit sentinel; blueprint chaining transcript on apply |
-| C7 | Dashboard create requires pre-saved Search; widget-position IDs must match widget IDs | `create_dashboard` chains Search creation then View creation internally |
+### Critical Pitfalls
 
-**Agent-loop pitfalls:**
-- **M4:** Retried creates produce duplicates — every create tool takes `idempotencyKey`; dispatch auto-generates from `hash(connection, toolName, args)`.
-- **M5:** List-before-create skipped under context pressure — create tools internally report `existingMatches` in dry-run output.
-- **M6:** List responses balloon context — all list tools default to narrow projection (`id, title, description`); default `limit: 25`.
-- **M7:** Tool discovery degrades at 91 tools — `<verb>_<domain>_<noun>` naming convention; `list_admin_tools(domain?)` meta-tool; ≤200 char descriptions; Phase 7 audit.
+1. **Grant-set replacement silently revokes access** — `POST .../entities/{grn}` is full-replace confirmed by `EntitySharesService.updatePrimaryEntityShares()` source. Naive `{newUser: view}` deletes every other grantee's grant. Avoid by mandatory read-merge-write. Mandate the three-grantee acceptance-gate test (A + B pre-exist, add C, assert all three in POST body).
 
----
+2. **GRN malformation — wrong type, username vs userId, grantee/target confusion** — Saved-search GRN type is `search` not `saved_search`; event-notification is `notification` not `event_notification`; "Everyone" is `grn::::builtin-team:everyone`. A user grantee GRN uses the Mongo `_id`, not the login name. Avoid by enforcing type set in `buildGrn`; resolve username to userId before building the GRN; keep entity target and grantee structurally distinct in the tool signature.
+
+3. **Self-lockout and ownerless-entity trap** — `checkOwnership` requires `own` on the target (not just `manage`). A request that drops the last `own` grant is refused with HTTP 400 + `validation_result`. Pre-check in dry-run that at least one `own` grant survives. Map 403 to an ownership-specific message, not a generic permission error.
+
+4. **Skipping prepare-response feasibility notices** — `missing_permissions_on_dependencies` and `synced_entities` are easy to drop. Grantee may see an entity but not its backing index set. Apply may mutate more entities than the URL target. Always surface both fields in dry-run and apply output.
+
+5. **TOCTOU drift between prepare and apply** — replacement semantics turn a stale read into a destructive write. Re-call `prepare` on the apply path, recompute `computeShareGrantHash`, refuse with `grants_changed_since_preview` if the hash differs.
+
+6. **Testing apply paths against live production Graylog** — the `test` connection is live UNESCO production. Default every test to `dryRun: true`. Live apply tests use only throwaway entities and a dedicated non-human test user. Never grant to `builtin-team:everyone` in any automated test. All real apply-against-production is gated HUMAN-UAT.
+
+7. **7.0.6 vs 7.2 source divergence** — local source clone is two minors ahead. `synced_entities` field presence, GRN type set size, and `/authz/roles` vs `/roles` surface completeness are unverified on live 7.0.6. Capture a real `prepare` response as a fixture before writing any handler. Treat all `EntityShareResponse` fields as `zod` `.optional()`.
 
 ## Implications for Roadmap
 
-### Definitive Phase Order
+### Phase 0: Foundation — Live API Reconnaissance + GRN Scaffold
 
-All three ordering sources (FEATURES.md dependency graph, ARCHITECTURE.md §9, PITFALLS.md phase mapping) agree. One note: ARCHITECTURE.md puts Inputs/Extractors before Index sets because it is a simpler validation target for the new architecture — FEATURES.md confirms no dependency between them. **Keep this ordering: Inputs first, then Index sets.**
+**Rationale:** Two hard prerequisites must be satisfied before any handler exists: (1) the correct 7.0.6 endpoint shapes must be captured as fixtures — Pitfall 7 means the 7.2 source paths cannot be trusted without live confirmation; and (2) `grn-helpers.js` must be built and unit-tested because it is a hard prerequisite for every subsequent authz file.
 
-```
-Phase 0 — Foundation
-Phase 1 — Inputs + Extractors
-Phase 2 — Index Sets
-Phase 3 — Streams + Stream Rules
-Phase 4 — Pipelines + Pipeline Rules + Connections
-Phase 5 — Events + Notifications
-Phase 6 — Dashboards + Widget Templates + Blueprints
-Phase 7 — Final Hardening
-```
+**Delivers:**
+- Captured 7.0.6 `prepare` + apply response fixtures
+- `src/tools/authz/grn-helpers.js` with `buildGrn`, `parseGrn`, `isGrn`, `GRN_TYPES`
+- `src/tools/authz/schemas.js` skeleton (zod `Capability` enum, base GRN schema)
+- `src/tools/authz/index.js` register barrel + `_register.js` one-line import
+- `computeShareGrantHash` wrapper in `src/tools/_shared/cascade-hash.js`
+- Unit tests for all of the above (pure functions, zero network)
 
-### Phase 0 — Foundation (Cannot Be Folded Into Phase 1)
+**Addresses:** GRN helper (table stakes), Capability enum (table stakes)
+**Avoids:** Pitfall 2 (GRN malformation), Pitfall 6 (7.0.6 divergence), Pitfall 8 (live-production test strategy established before any apply handler)
 
-Seven cross-cutting concerns, all prerequisites for every domain phase:
+### Phase 1: Entity Shares Read Path — `get_entity_shares`
 
-1. **Dispatch Map refactor** — replace `src/index.js` `if (name === ...)` chain with `src/dispatch.js` Map. Add startup assertion. Migrate existing read tools (no behavior change).
-2. **`src/graylog/client.js`** — single axios HTTP client with auth, `X-Requested-By`, typed error mapping (400/403/404).
-3. **`defineMutatingHandler` factory** — enforces `dryRun: true` default once; calls `build()` for preview or `apply()` for mutation.
-4. **Node version bump** — `engines.node` to `>= 20.6.0` (minimum) or `>= 22.3.0` (preferred); fix `npm test`.
-5. **Snapshot test infrastructure** — prove `t.snapshot()` works with 5-10 fixture tests before Phase 1.
-6. **Cross-cutting response normalizer** — returns `{ id, body }` regardless of Graylog's inconsistent create response shapes (200 full DTO, 201 `{ stream_id }`, 201 + Location header).
-7. **Idempotency-key mechanism** (M4) + **create-conflict check** (M5) + **list-projection helper** (M6).
+**Rationale:** The read tool is non-mutating (`@NoAuditEvent`), can be smoke-tested against live 7.0.6 immediately, and de-risks `prepare`-response parsing before that same parsing is load-bearing inside `share_entity`'s write path.
 
-The `dryRun` helper establishes the `__SERVER_ASSIGNED__` ID sentinel pattern (C6) that Blueprint chaining in Phase 6 depends on.
+**Delivers:**
+- `get_entity_shares` tool (`src/tools/authz/get-entity-shares.js`)
+- Tool definition in `src/tools.js`, registered in `src/tools/authz/index.js`
+- Offline tests using the Phase 0 fixtures
+- Live smoke test against the `test` connection (non-mutating)
 
-### Phase 1 — Inputs + Extractors
+**Addresses:** Read current grants for an entity (table stakes)
+**Avoids:** Anti-pattern of running the grant set through `defineListHandler` (`get-pipeline.js` is the correct precedent)
 
-- `update_input` MUST be partial-update only (C3).
-- `list_input_types` calls `GET /system/inputs/types/all` (dynamic discovery, not static enum).
-- `test_extractor` feasibility gated on Graylog endpoint availability — flag for requirements phase.
-- Establishes the partial-update pattern reused by Index sets and Events.
+### Phase 2: Entity Shares Write Path — `share_entity` (Streams)
 
-### Phase 2 — Index Sets
+**Rationale:** The headline tool. Must be built after the read tool because its `build()` calls the same `prepare` endpoint the read tool wraps. The full safety stack must ship with the first commit — read-merge-write, drift refusal, capability validation, dependency notices, removed-grants diff cannot be retrofitted.
 
-- **Invert `deleteIndices` default** (C1 — highest-severity pitfall). MCP default: `false`; Graylog server default: `true`.
-- `delete_index_set` with `deleteIndices: true` requires a second-guardrail confirmation token if the index set contains messages.
-- Async system-job pattern established here: `{ async: true, job_id_observable_at: "/system/jobs" }` + `await_system_job` tool (m5).
-- `set_default_index_set` documents `regular: true` constraint (m2).
+**Delivers:**
+- `share_entity` tool (`src/tools/authz/share-entity.js`) for entity type `stream`
+- Mandatory three-grantee merge acceptance-gate test
+- Dry-run output: added grants, unchanged grants, removed grants, `missing_permissions_on_dependencies` warning, `synced_entities` list
+- `grants_changed_since_preview` drift-refusal path
+- HTTP 400 + `validation_result` body parsing on apply failure
+- 403 to ownership-specific error message
+- Test that dropping the last `own` grant is refused
+- Generalization to `dashboard` and `search` entity types (GRN type token parameterized)
 
-### Phase 3 — Streams + Stream Rules
+**Addresses:** `share_entity` (table stakes), drift refusal (table stakes), revoke path (should-have), generalize to dashboards/searches (table stakes per PROJECT.md)
+**Avoids:** Pitfall 1 (grant-set replacement), Pitfall 3 (self-lockout), Pitfall 4 (dependency notices), Pitfall 5 (capability enum), Pitfall 7 (TOCTOU drift), Pitfall 8 (throwaway-entity harness)
+**Uses:** `defineMutatingHandler`, async `build()`, `computeShareGrantHash` — all established by v3.0.0. Direct precedent: `connect_pipelines_to_stream.js` and `delete_index_set.js`.
 
-- Pre-delete cascade preview for rules, pipeline connections, event definitions (C2).
-- `list_streams` returns `mutable: boolean` per stream (m1 — built-in stream protection).
-- `test_stream_match` is the agent's rule-verification anchor.
-- `create_stream` internally checks existing titles (M5) and reports `existingMatches` in dry-run.
+### Phase 3: Role Management — `create_role`, `assign_role`
 
-### Phase 4 — Pipelines + Pipeline Rules + Connections
+**Rationale:** Independent of the entity-share path — roles share no code path with grants, use different endpoints (`/api/roles` vs `/api/authz/shares`), and are username-keyed rather than GRN-keyed. Lower blast radius than entity sharing. Two coexisting role surfaces on 7.0.6 (`/authz/roles` and legacy `/roles`) must be verified on the live instance before coding.
 
-- **`src/pipeline-dsl/` subsystem** delivered in full: `emit()`, `validate()`, `escape.js`, `builtins.js` (~100 entries hand-curated from `pipelineprocessor/functions/`).
-- `POST /system/pipelines/rule/parse` pre-flight on every dry-run (C4).
-- `simulate_pipeline_rule` MCP tool is non-negotiable (M3 — catches semantic bugs the parser cannot).
-- `list_pipeline_functions` cached at connection-init, injected into `create_pipeline_rule` description.
+**Delivers:**
+- `list_roles` + `get_role` (read path)
+- `create_role` (`POST /api/roles`) with `read_only` pre-check (reject mutation of built-in `Admin`/`Reader` client-side)
+- `assign_role` / `unassign_role` (`PUT/DELETE /api/roles/{rolename}/members/{username}`, send `{}` body on PUT)
+- Tool descriptions distinguishing "grant = per-entity fine-grained" from "role = global coarse-grained"
 
-### Phase 5 — Events + Notifications
+**Addresses:** Role management (should-have per PROJECT.md)
+**Avoids:** `/authz/roles` vs legacy `/roles` confusion (list/assign vs create); `PUT .../members/{username}` placeholder-body quirk
 
-- `create_event_definition` defaults `schedule: false` (M1 — not Graylog's `true` default).
-- v7 aggregation syntax only (`count_source`); `_convert_v6_event_aggregation` helper with migration warning in dry-run output (C5).
-- `validate_event_definition` called internally as a precondition (parallel to `parse_pipeline_rule` pattern from Phase 4).
-- Enable/disable endpoints use `WILDCARD` body — wrapper sends empty body (m4).
+### Phase Ordering Rationale
 
-### Phase 6 — Dashboards + Widget Templates + Blueprints
+- Foundation before everything: live fixture capture and the GRN helper are hard prerequisites for every other tool.
+- Read before write: `get_entity_shares` de-risks `prepare`-response parsing at zero blast radius before that parsing is load-bearing in `share_entity`.
+- Entity-sharing before roles: sharing is the milestone's headline value and higher blast radius; it stays on the critical path.
+- Roles trail: fully independent, lower blast radius, two-surface ambiguity requires a targeted live probe.
 
-Dashboards (C7):
-- `create_dashboard` internally chains: `POST /views/search` then `POST /views`. Agent never sees the intermediate Search ID.
-- Widget templates are `{widget, position, searchType}` triplets — mismatched sets are structurally impossible.
-- Client-side pre-validation before emitting: `widgetPositions.keys() == widgets.map(id)`.
+### Research Flags
 
-Blueprints in the same phase:
-- Entirely composed from services layers built in Phases 1–6.
-- Blueprint 1 (`setup_app_monitoring_stack`) implemented first — it is the end-to-end integration test.
-- Blueprint dry-run returns a list of planned requests with explicit `dependsOn` annotations (C6).
+**Needs live-instance probe before coding:**
+- Phase 0: verify `POST /api/authz/shares/entities/{entityGRN}` path against 7.0.6 (the brief's `PUT` is confirmed wrong by source); capture `prepare` + apply response fixtures; verify `synced_entities` field presence.
+- Phase 3: `/authz/roles` vs legacy `/roles` surface completeness on 7.0.6; `PUT .../members/{username}` placeholder-body behaviour.
 
-### Phase 7 — Final Hardening
-
-- Tool-description audit (M7): every tool ≤200 chars, discrimination sentence, `<verb>_<domain>_<noun>` naming. Automated diff check as merge gate.
-- `list_admin_tools(domain?)` meta-tool if not already landed.
-- v7-vs-v6 read-tool smoke tests: deprecated `GET /api/streams` path, histogram fallback chain, event definition list path.
-- Coverage report via c8.
-- Document `/api/streams` deprecation; plan migration to `/api/streams/paginated` for next milestone.
-
----
-
-## Engine / Runtime Decision
-
-**Node version bump: Phase 0, not optional.**
-
-Without `t.snapshot()` there is no way to verify dry-run previews are deterministic — the entire safety model for 50+ mutating tools. Keeping `>= 18` defers snapshot tests or requires the experimental flag in perpetuity.
-
-**Recommended:** bump `engines.node` to `>= 22.3.0` in Phase 0. If deployment environment is constrained to Node 20, bump to `>= 20.6.0` and pass `--experimental-test-snapshots`.
-
----
-
-## High-Risk Endpoints Requiring Explicit Requirements-Phase Planning
-
-| Endpoint | Risk | Design requirement |
-|----------|------|--------------------|
-| `DELETE /system/indices/index_sets/{id}?delete_indices=true` | Data destruction, async, no undo | Inverted default; second-guardrail confirmation token; async job transcript |
-| `DELETE /streams/{id}` | Silent cascade to rules + orphaned pipeline connections | Pre-delete cascade preview; stale-world check on apply |
-| `PUT /system/inputs/{inputId}` | Encrypted field zero-out on full-config echo-back | Partial-update shape only; wrapper merges non-encrypted fields |
-| `POST /system/pipelines/rule` (apply) | Agent-invented function names cause silent runtime failures | `parse` pre-flight on every dry-run; `simulate` before apply |
-| `POST /views` (dashboard create) | Search-link + widget-position integrity failures | Two-step internal chain; widget-template triplet generator |
-| `POST /events/definitions?schedule=true` | Live event fires immediately on create | Default `schedule=false`; explicit enable tool |
-
----
-
-## Tooling Budget Reality
-
-No separate "tool catalog phase" needed. Mitigations are development constraints enforced per-phase:
-1. Naming convention `<verb>_<domain>_<noun>` from Phase 0 onward.
-2. Description budget: ≤200 chars, discrimination sentence required.
-3. `list_admin_tools(domain?)` meta-tool in Phase 6 or 7.
-4. Blueprint catalogue separate from CRUD primitives.
-5. Phase 7 description audit as the pre-ship gate.
-
----
+**Standard patterns — no research phase needed:**
+- Phase 1: plain read handler, `get-pipeline.js` precedent, no unknowns.
+- Phase 2: `defineMutatingHandler` + async `build()` + `computeCascadeHash` — all v3.0.0-established patterns with direct file precedents.
 
 ## Confidence Assessment
 
 | Area | Confidence | Notes |
 |------|------------|-------|
-| Phase order | HIGH | Three research files independently derive the same dependency graph |
-| Foundation design | HIGH | Grounded in concrete in-tree precedent |
-| Feature scope per domain | HIGH | Java REST resource classes in local Graylog 7.2 source tree |
-| Critical pitfall identification (C1–C7) | HIGH | Each traced to specific Java file:line citation |
-| Exact Graylog endpoint paths | MEDIUM | Some inferred from class naming; verify during implementation |
-| Node version pin (`>= 22.3.0`) | MEDIUM | Verify actual deployment environment |
-| Pipeline DSL builtins count (~100) | MEDIUM | Order-of-magnitude; verify by reading `pipelineprocessor/functions/` |
-| `list_input_types` endpoint path | MEDIUM | Inferred from `AbstractInputsResource.java`; confirm in requirements phase |
+| Stack | HIGH | All source verified: `package.json`, existing client, schemas, hash primitives. Zero new deps confirmed. |
+| Features | HIGH | Endpoint shapes and DTO fields read directly from Graylog Java source; `7.0.6` git tag diff confirms parity with 7.2 on all authz/shares/roles paths. |
+| Architecture | HIGH | Integration points confirmed against real files in `src/tools/`. Precedents (`connect_pipelines_to_stream`, `get-pipeline.js`, `cascade-hash.js`) all exist and are verified. |
+| Pitfalls | HIGH | Grant-set replacement semantics confirmed from `EntitySharesService.updatePrimaryEntityShares()` source code, not inferred. `@NoAuditEvent` on prepare confirmed. `checkOwnership` gate confirmed. |
 
-**Gaps to address in requirements/planning:**
-- Confirm `POST /system/pipelines/rule/parse` is the exact server-side validation path.
-- Confirm `GET /system/inputs/types/all` is the canonical `list_input_types` endpoint.
-- Confirm `create_event_notification` wire-format discriminator strings by reading `@JsonTypeName` annotations.
-- Determine whether `test_extractor` has a server-side endpoint in v7.2.
-- Decide on exact `engines.node` floor based on actual deployment environment.
+**Overall confidence:** HIGH — with one bounded gap (7.0.6 vs 7.2 wire shapes) that Phase 0 closes before any handler is written.
+
+### Gaps to Address
+
+- **7.0.6 live endpoint shape verification:** The brief's endpoint is wrong; even the corrected 7.2-source path must be confirmed against the live `test` instance (`http://<graylog-host>`) before Phase 1 coding begins. Specifically: exact path of the apply endpoint, `synced_entities` field presence, the two-role-surface disambiguation (`/authz/roles` vs `/roles`), and the `PUT .../members/{username}` placeholder-body behaviour. Mitigation: Phase 0 makes this an explicit acceptance criterion.
+
+- **GRN path-encoding for URL path segments:** GRNs contain literal `:` characters; JAX-RS path parameter handling of unencoded colons varies by server version and config. The `grn-helpers.js` should percent-encode `:` as `%3A` in URL path segments. Verify against the live instance in Phase 1.
+
+- **`synced_entities` on apply:** If absent in 7.0.6, the tool must not crash on undefined access. Treat as `zod` `.optional().default([])` in the response parser.
+
+- **`/authz/roles` vs `/roles` disambiguation:** Two coexisting role resource paths exist in 7.2 source; which paths 7.0.6 exposes for each operation is unverified. Phase 3 deferred start allows the Phase 0 live probe to resolve this.
+
+## Sources
+
+### Primary (HIGH confidence)
+- `source-code/graylog2-server/.../security/rest/EntitySharesResource.java` (7.2 working tree + `git show 7.0.6:` diff) — endpoint paths/methods corrected, `@NoAuditEvent`, `checkOwnership`, 400-with-body behaviour
+- `source-code/graylog2-server/.../security/shares/EntitySharesService.java` — full-replace semantics confirmed (`updatePrimaryEntityShares`), ownerless guard, synced-entity propagation
+- `source-code/graylog2-server/.../security/shares/EntityShareRequest.java` / `EntityShareResponse.java` — request/response DTO shapes
+- `source-code/graylog2-server/.../security/Capability.java` — `view`/`manage`/`own` enum, priority
+- `source-code/graylog2-server/.../grn/GRN.java`, `GRNTypes.java`, `GRNRegistry.java` — 6-token GRN format, registered type set, `GLOBAL_USER_GRN`
+- `source-code/graylog2-server/.../rest/resources/roles/RolesResource.java` — role CRUD + placeholder-body annotation on members PUT
+- `source-code/graylog2-server/.../rest/resources/users/UsersResource.java` — user lookup endpoints
+- `source-code/graylog2-server/.../users/RoleServiceImpl.java` — `Admin`/`Reader` built-in roles, `read_only` flag
+- `src/tools/pipelines/connect-pipelines-to-stream.js` — GET-merge-POST precedent and Pitfall-2 acceptance gate
+- `src/tools/_shared/cascade-hash.js`, `handler.js`, `dry-run.js` — existing safety primitives confirmed reusable
+- `src/tools/pipelines/get-pipeline.js` — read-handler pattern for non-list single-DTO responses
+- `.planning/PROJECT.md` — constraints, out-of-scope boundaries, live-7.0.6-wins-on-divergence key decision
+
+### Secondary (MEDIUM confidence)
+- 7.2-SNAPSHOT source as forward-compat reference — confirmed byte-identical on authz/shares/roles endpoints against the 7.0.6 git tag; LOW risk of divergence on core paths but unverified on `synced_entities` and role-surface completeness
+
+### Tertiary (needs live verification before use)
+- Brief's `PUT /api/authz/shares/{grn}` — confirmed WRONG by source; corrected to `POST /api/authz/shares/entities/{entityGRN}`. Must be verified against live 7.0.6 before any handler is written.
+- `synced_entities` field in `EntityShareResponse` — present in 7.2 source, unverified in 7.0.6 response shape
+- `/authz/roles` vs legacy `/roles` surface completeness on 7.0.6 — unverified; Phase 3 probe required
 
 ---
-
-## Research Flags
-
-| Phase | Research needed? | Reason |
-|-------|-----------------|--------|
-| Phase 0 — Foundation | No | All decisions settled from in-tree precedent |
-| Phase 1 — Inputs/Extractors | Maybe | `test_extractor` endpoint existence unconfirmed |
-| Phase 2 — Index Sets | No | C1 prevention clear; retention/rotation shapes are direct-source |
-| Phase 3 — Streams | No | Cascade prevention pattern fully specified |
-| Phase 4 — Pipelines | Yes | `pipeline-dsl/` builtins catalogue requires a focused pass over ~100 Java function classes |
-| Phase 5 — Events | No | v7 shape documented; v6-to-v7 migration helper specified |
-| Phase 6 — Dashboards + Blueprints | Maybe | Dashboard DTO shape complexity may benefit from focused `ViewsResource.java` + `WidgetDTO` read |
-| Phase 7 — Final Hardening | No | Audit + smoke tests; no new unknowns |
+*Research completed: 2026-05-19*
+*Ready for roadmap: yes*
