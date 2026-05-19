@@ -2,7 +2,7 @@
 phase: 9
 slug: entity-shares-read-path
 status: draft
-nyquist_compliant: false
+nyquist_compliant: true
 wave_0_complete: false
 created: 2026-05-19
 ---
@@ -39,9 +39,15 @@ created: 2026-05-19
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| _TBD — backfilled after planning, before plan-checker_ | — | — | SHARE-02 / SHARE-09 | — | — | unit | `node --test test/authz-entity-shares.test.js` | ❌ W0 | ⬜ pending |
+| 09-01-01 | 09-01 | 1 | SHARE-02, SHARE-09 | see 09-01 `<threat_model>` | zod schemas reject malformed GRN / bad entity type before any HTTP call | unit | `node --test test/authz-entity-shares.test.js` | ❌ W0 | ⬜ pending |
+| 09-01-02 | 09-01 | 1 | SHARE-02 | see 09-01 `<threat_model>` | `get_entity_shares` returns the full nested `EntityShareResponse` via `/prepare`, unflattened | unit (tdd) | `node --test test/authz-entity-shares.test.js` | ❌ W0 | ⬜ pending |
+| 09-01-03 | 09-01 | 1 | SHARE-09 | see 09-01 `<threat_model>` | `list_grantees` projects `available_grantees` from the `/prepare` response | unit (tdd) | `node --test test/authz-entity-shares.test.js` | ❌ W0 | ⬜ pending |
+| 09-01-04 | 09-01 | 1 | SHARE-02, SHARE-09 | see 09-01 `<threat_model>` | both tools registered in the authz barrel + `tools.js`; full suite stays green | integration | `npm test` | ✅ existing | ⬜ pending |
+| 09-02-01 | 09-02 | 2 | SHARE-02, SHARE-09 | see 09-02 `<threat_model>` | live smoke calls only `/prepare`; commit endpoint grep-absent | smoke (live-gated) | `node --test test/authz-entity-shares-live.smoke.js` | ❌ W0 | ⬜ pending |
+| 09-02-02 | 09-02 | 2 | SHARE-02, SHARE-09 | see 09-02 `<threat_model>` | human-verified non-mutating live run against the production `test` instance | manual / human-verify | checkpoint:human-verify (N/A) | ❌ W0 | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
+*Backfilled 2026-05-19 after planning (2 plans, 6 tasks). Per-task threat detail lives in each PLAN.md `<threat_model>` block.*
 
 ---
 
@@ -71,4 +77,4 @@ created: 2026-05-19
 - [ ] Feedback latency < 5s
 - [ ] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** approved 2026-05-19
