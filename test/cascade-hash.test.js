@@ -25,6 +25,7 @@ import {
     collectIndexNames,
     computeRuleCascadeHash,
     computeNotificationCascadeHash,
+    computeShareGrantHash,
 } from "../src/tools/_shared/cascade-hash.js";
 
 // Phase 2 back-compat: the original c1-hash.js path is preserved as a thin
@@ -429,5 +430,106 @@ test("computeNotificationCascadeHash rejects malformed inputs", () => {
             eventDefIds: "not-an-array",
         }),
         /eventDefIds/,
+    );
+});
+
+// =====================================================================
+// Phase 8 — computeShareGrantHash (entity-share confirmation token)
+// =====================================================================
+//
+// Plan 08-02 Task 1 adds a STANDALONE canonical-form sha-256 hash for the
+// Phase 10 share_entity confirmation token. UNLIKE computeRuleCascadeHash /
+// computeNotificationCascadeHash, computeShareGrantHash does NOT forward
+// into computeCascadeHash — it builds its own canonical JSON over the flat
+// grant set { entityGrn, grants: [...sorted by grantee] }.
+//
+// The frozen 64-hex literal below pins that canonical form: any drift in
+// key order, sort key, or field selection breaks the byte-identity test
+// loudly, so Phase 10's drift-refusal token cannot be silently weakened
+// (threat T-08-04). The order-independence test pins T-08-05.
+
+// =====================================================================
+// computeShareGrantHash — frozen-fixture byte-identity
+// =====================================================================
+
+test("computeShareGrantHash returns the pinned hash for the frozen fixture", () => {
+    // Frozen literal pinned after Task 1 landed; drift = canonical-form
+    // drift = drift-refusal false-fire in Phase 10's share_entity.
+    // Recompute via:
+    //   node -e 'import("./src/tools/_shared/cascade-hash.js").then(m =>
+    //     console.log(m.computeShareGrantHash({
+    //       entityGrn:"grn::::stream:000000000001",
+    //       grants:[{grantee:"grn::::user:b",capability:"view"},
+    //               {grantee:"grn::::user:a",capability:"own"}]
+    //     })))'
+    const hash = computeShareGrantHash({
+        entityGrn: "grn::::stream:000000000001",
+        grants: [
+            { grantee: "grn::::user:b", capability: "view" },
+            { grantee: "grn::::user:a", capability: "own" },
+        ],
+    });
+    assert.match(hash, /^[0-9a-f]{64}$/);
+    assert.equal(
+        hash,
+        "3a410b0a3f88d967b1586a6193248baa6652a2ab5beef16f6b785e125872ca41",
+    );
+});
+
+// =====================================================================
+// computeShareGrantHash — grant-order independence
+// =====================================================================
+
+test("computeShareGrantHash is grant-order independent", () => {
+    // Re-ordering the grants array MUST hash identically — proves the
+    // sort-by-grantee happens inside the helper, not at the call site.
+    const a = computeShareGrantHash({
+        entityGrn: "grn::::stream:s1",
+        grants: [
+            { grantee: "g2", capability: "view" },
+            { grantee: "g1", capability: "own" },
+        ],
+    });
+    const b = computeShareGrantHash({
+        entityGrn: "grn::::stream:s1",
+        grants: [
+            { grantee: "g1", capability: "own" },
+            { grantee: "g2", capability: "view" },
+        ],
+    });
+    assert.equal(a, b);
+});
+
+// =====================================================================
+// computeShareGrantHash — entityGrn participates in the hash
+// =====================================================================
+
+test("computeShareGrantHash differs when entityGrn differs (identical grants)", () => {
+    const grants = [
+        { grantee: "grn::::user:a", capability: "view" },
+    ];
+    const h1 = computeShareGrantHash({ entityGrn: "grn::::stream:s1", grants });
+    const h2 = computeShareGrantHash({ entityGrn: "grn::::stream:s2", grants });
+    assert.notEqual(h1, h2);
+});
+
+// =====================================================================
+// computeShareGrantHash — malformed-input rejection
+// =====================================================================
+
+test("computeShareGrantHash rejects malformed inputs", () => {
+    // Missing / empty entityGrn
+    assert.throws(
+        () => computeShareGrantHash({ entityGrn: "", grants: [] }),
+        /entityGrn/,
+    );
+    assert.throws(
+        () => computeShareGrantHash({ grants: [] }),
+        /entityGrn/,
+    );
+    // grants not an array
+    assert.throws(
+        () => computeShareGrantHash({ entityGrn: "grn::::stream:s1", grants: "nope" }),
+        /grants/,
     );
 });
