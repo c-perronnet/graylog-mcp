@@ -99,6 +99,7 @@ logs
 .claude/
 scripts/*
 !scripts/audit-tool-descriptions.js
+!scripts/capture-authz-prepare-fixture.js
 
 # Read-only Graylog server reference clone (used by researchers for API shape)
 source-code/
