@@ -113,6 +113,17 @@ async function captureFixture() {
         // Non-fatal — provenance version stays "unknown" if /api/system fails.
     }
 
+    // Surface a provenance-degradation signal: the probe exists to record an
+    // accurate graylog_version. If it could not be resolved, warn the operator
+    // so they know the fixture's "verbatim live 7.0.6" authority is incomplete
+    // rather than letting it silently degrade to "unknown".
+    if (graylogVersion === "unknown") {
+        console.error(
+            "[capture-authz-prepare] WARNING: could not resolve Graylog "
+                + "version — provenance.graylog_version will be 'unknown'.",
+        );
+    }
+
     const fixture = {
         _provenance: {
             captured_by: "scripts/capture-authz-prepare-fixture.js",
