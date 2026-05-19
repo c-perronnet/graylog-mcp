@@ -298,6 +298,7 @@ export function computeNotificationCascadeHash({ notificationId, eventDefIds }) 
  * @returns {string} 64-char lowercase hex sha-256 digest
  * @throws  {Error}  when entityGrn is not a non-empty string
  * @throws  {Error}  when grants is not an array
+ * @throws  {Error}  when any grant entry is not {grantee:string, capability:string}
  */
 export function computeShareGrantHash({ entityGrn, grants }) {
     if (typeof entityGrn !== "string" || entityGrn.length === 0) {
@@ -310,8 +311,28 @@ export function computeShareGrantHash({ entityGrn, grants }) {
     }
     // Normalize to exactly {grantee,capability} (drop any extra keys) and
     // sort by grantee so grant-array re-ordering yields the identical hash.
+    // Each entry's shape is validated up front: a grant missing/misspelling
+    // `grantee` would otherwise hash `{grantee:undefined}` (JSON.stringify
+    // drops the key), letting distinct grant sets collide and leaving the
+    // sort comparator unstable — a real correctness hole for the Phase 10
+    // drift-refusal token.
     const sorted = [...grants]
-        .map((g) => ({ grantee: g.grantee, capability: g.capability }))
+        .map((g, i) => {
+            if (
+                !g
+                || typeof g !== "object"
+                || Array.isArray(g)
+                || typeof g.grantee !== "string"
+                || g.grantee.length === 0
+                || typeof g.capability !== "string"
+                || g.capability.length === 0
+            ) {
+                throw new Error(
+                    `computeShareGrantHash: grants[${i}] must be {grantee:string, capability:string}`,
+                );
+            }
+            return { grantee: g.grantee, capability: g.capability };
+        })
         .sort((a, b) => (a.grantee < b.grantee ? -1 : a.grantee > b.grantee ? 1 : 0));
     const canonical = JSON.stringify({ entityGrn, grants: sorted });
     return createHash("sha256").update(canonical).digest("hex");
