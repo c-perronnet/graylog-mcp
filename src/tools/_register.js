@@ -89,6 +89,10 @@ import "./blueprints/index.js";
 // Graylog connection); the agent calls this at session start to orient on
 // the 91-tool admin surface without paying for every full description.
 import "./meta/index.js";
+// Phase 8 domain barrel — Plan 08-01 ships this EMPTY (no handlers; GRN
+// helper + Capability enum scaffolding only). Phase 9/10 populate it with
+// get_entity_shares / list_grantees / share_entity.
+import "./authz/index.js";
 
 // Names that already fit `<verb>_<domain>_<noun>` (10 of 23 — list_streams
 // displaced; the new Phase 3 handler is registered via ./streams/index.js
