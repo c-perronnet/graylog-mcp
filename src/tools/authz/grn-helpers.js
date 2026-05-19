@@ -80,6 +80,7 @@ export function buildGrn(type, id) {
  * @throws when `grn` is not a string
  * @throws when the string is not exactly 6 colon-tokens with a "grn" prefix
  * @throws when the type token is not in GRN_TYPES
+ * @throws when the entity token is empty
  */
 export function parseGrn(grn) {
     if (typeof grn !== "string") {
@@ -97,6 +98,13 @@ export function parseGrn(grn) {
         throw new Error(
             `GRN type "${type}" not in valid set: ${[...GRN_TYPES].join(", ")}`,
         );
+    }
+    // Symmetry with buildGrn (which rejects an empty `id`): an entity-less
+    // GRN like `grn::::stream:` is not a real Graylog resource and would
+    // never round-trip from buildGrn — reject it so isGrn() does not mask
+    // a malformed agent input.
+    if (entity.length === 0) {
+        throw new Error(`"${grn}" is not a valid GRN string (empty entity token)`);
     }
     return { cluster, tenant, scope, type, entity };
 }
