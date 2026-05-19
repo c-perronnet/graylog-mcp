@@ -15,3 +15,43 @@ import { z } from "zod";
 // "admin" string as "own"). Downstream entity-share tools default to the
 // least-privilege capability, `view`.
 export const Capability = z.enum(["view", "manage", "own"]);
+
+// Phase 9 Plan 09-01 — entity-shares READ schemas (SHARE-02 / SHARE-09).
+//
+// These are READ tools: a plain `z.object`, explicitly NOT extending
+// `mutatingBase`. A `dryRun` / `idempotencyKey` field would be meaningless on
+// a non-mutating @NoAuditEvent /prepare probe (mirrors pipelines/schemas.js
+// GetPipelineSchema, which deliberately skips mutatingBase).
+//
+// The `entityType` enum is the SHAREABLE subset of GRN_TYPES — stream /
+// dashboard / search. Grantee types (user, builtin-team, role) are never
+// valid as a share TARGET, so they are intentionally excluded here.
+const ENTITY_TYPES = z.enum(["stream", "dashboard", "search"]);
+
+// GetEntitySharesSchema — input for get_entity_shares.
+//
+// The caller must identify the entity exactly one of two ways:
+//   - `entityGrn`: a full GRN string, OR
+//   - `entityType` + `entityId`: the pieces buildGrn assembles.
+// The `.refine` enforces an exclusive-or: `Boolean(entityGrn)` must differ
+// from `Boolean(entityType && entityId)`. Supplying both, or neither, throws.
+// The XOR `.refine` has direct precedent in pipelines/schemas.js
+// CreatePipelineRuleSchema (`Boolean(a) !== Boolean(b)`).
+export const GetEntitySharesSchema = z
+    .object({
+        connectionName: z.string().optional(),
+        entityGrn: z.string().optional(),
+        entityType: ENTITY_TYPES.optional(),
+        entityId: z.string().min(1).optional(),
+    })
+    .refine(
+        (a) => Boolean(a.entityGrn) !== Boolean(a.entityType && a.entityId),
+        {
+            message:
+                "Provide either entityGrn, or both entityType and entityId (not both, not neither).",
+        },
+    );
+
+// ListGranteesSchema — list_grantees takes the identical input surface; it is
+// the same /prepare probe, only the response projection differs.
+export const ListGranteesSchema = GetEntitySharesSchema;
