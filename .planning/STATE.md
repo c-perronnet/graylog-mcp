@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: v3.1.0
 milestone_name: AuthZ & Sharing
-status: verifying
-stopped_at: ROADMAP.md created for v3.1.0 — 4 phases (8-11), all 18 requirements mapped, 100% coverage
-last_updated: "2026-05-19T16:30:12.911Z"
+status: ready_to_plan
+stopped_at: Phase 09 complete (2/2) — ready to discuss Phase 10
+last_updated: 2026-05-19T16:35:32.376Z
 last_activity: 2026-05-19
 progress:
   total_phases: 4
@@ -21,13 +21,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-19)
 
 **Core value:** An AI agent can configure Graylog from intent alone, safely, without touching the web UI.
-**Current focus:** Phase 09 — entity-shares-read-path
+**Current focus:** Phase 10 — entity sharing write path
 
 ## Current Position
 
-Phase: 09 (entity-shares-read-path) — EXECUTING
-Plan: 2 of 2
-Status: Phase complete — ready for verification
+Phase: 10
+Plan: Not started
+Status: Ready to plan
 Last activity: 2026-05-19
 
 Progress: [██████████] 100%
@@ -49,6 +49,7 @@ Progress: [██████████] 100%
 | 10. Entity Sharing Write Path | 0/TBD | - | - |
 | 11. Role Management | 0/TBD | - | - |
 | 08 | 3 | - | - |
+| 09 | 2 | - | - |
 
 *v3.0.0 metrics archived — 41 plans / 8 phases shipped 2026-05-16. See MILESTONES.md.*
 | Phase 08 P01 | 14min | 3 tasks | 5 files |
