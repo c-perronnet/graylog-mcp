@@ -13,6 +13,9 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import {
     buildGrn,
@@ -21,6 +24,8 @@ import {
     GRN_TYPES,
 } from "../src/tools/authz/grn-helpers.js";
 import { Capability } from "../src/tools/authz/schemas.js";
+
+const FIXTURE_DIR = join(dirname(fileURLToPath(import.meta.url)), "fixtures", "authz");
 
 // =====================================================================
 // GRN_TYPES — the restricted 6-type milestone set
@@ -143,6 +148,46 @@ test("Capability rejects strings outside view/manage/own", () => {
         assert.throws(
             () => Capability.parse(bad),
             `Capability should reject "${bad}"`,
+        );
+    }
+});
+
+// =====================================================================
+// EntityShareResponse fixture shape — the verbatim live 7.0.6 capture
+// (test/fixtures/authz/prepare-response-7.0.6.json). Offline: no network
+// call. Phase 9/10 parse this DTO; this group pins the verified wire shape.
+// =====================================================================
+
+const PREPARE_FIXTURE = JSON.parse(
+    readFileSync(join(FIXTURE_DIR, "prepare-response-7.0.6.json"), "utf8"),
+);
+
+test("prepare-response-7.0.6 fixture has the required EntityShareResponse top-level keys", () => {
+    for (const key of [
+        "entity",
+        "available_grantees",
+        "available_capabilities",
+        "active_shares",
+        "validation_result",
+    ]) {
+        assert.ok(key in PREPARE_FIXTURE, `EntityShareResponse must have "${key}"`);
+    }
+});
+
+test("prepare-response-7.0.6 fixture carries a _provenance block (verbatim live capture)", () => {
+    assert.ok("_provenance" in PREPARE_FIXTURE, "fixture must record its provenance");
+    const p = PREPARE_FIXTURE._provenance;
+    assert.equal(typeof p.instance, "string", "_provenance.instance records the captured instance");
+    assert.equal(typeof p.graylog_version, "string", "_provenance.graylog_version records the version");
+});
+
+test("prepare-response-7.0.6 fixture treats synced_entities as OPTIONAL (Pitfall 5)", () => {
+    // synced_entities may be absent on some 7.0.6 builds — do not fail if missing.
+    // On the captured live 7.0.6 instance it IS present (an empty array).
+    if ("synced_entities" in PREPARE_FIXTURE) {
+        assert.ok(
+            Array.isArray(PREPARE_FIXTURE.synced_entities),
+            "when present, synced_entities is an array",
         );
     }
 });
