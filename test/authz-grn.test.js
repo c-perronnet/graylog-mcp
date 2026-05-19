@@ -181,13 +181,38 @@ test("prepare-response-7.0.6 fixture carries a _provenance block (verbatim live 
     assert.equal(typeof p.graylog_version, "string", "_provenance.graylog_version records the version");
 });
 
-test("prepare-response-7.0.6 fixture treats synced_entities as OPTIONAL (Pitfall 5)", () => {
-    // synced_entities may be absent on some 7.0.6 builds — do not fail if missing.
-    // On the captured live 7.0.6 instance it IS present (an empty array).
-    if ("synced_entities" in PREPARE_FIXTURE) {
-        assert.ok(
-            Array.isArray(PREPARE_FIXTURE.synced_entities),
-            "when present, synced_entities is an array",
-        );
-    }
+test("prepare-response-7.0.6 fixture carries synced_entities as an array", () => {
+    // The committed fixture is the verified verbatim live 7.0.6 capture, which
+    // DOES contain synced_entities — pin it unconditionally so a future
+    // re-capture or hand-edit that silently drops the key fails loudly (the
+    // Pitfall-5 wire-shape drift this test exists to catch). Cross-build note:
+    // some 7.0.6 builds may omit synced_entities; if a fixture from such a
+    // build is committed, this assertion is the intended place to relax.
+    assert.ok(
+        "synced_entities" in PREPARE_FIXTURE,
+        "the committed 7.0.6 capture includes synced_entities",
+    );
+    assert.ok(
+        Array.isArray(PREPARE_FIXTURE.synced_entities),
+        "synced_entities is an array",
+    );
+});
+
+test("prepare-response-7.0.6 fixture pins the present-but-untested EntityShareResponse keys", () => {
+    // sharing_user / selected_grantee_capabilities / missing_permissions_on_dependencies
+    // are present in the verified live capture but not covered by the
+    // top-level-keys test above — pin them so DTO drift in those fields is
+    // also guarded before Phase 9/10 parse them.
+    assert.ok(
+        "sharing_user" in PREPARE_FIXTURE,
+        "the committed 7.0.6 capture includes sharing_user",
+    );
+    assert.ok(
+        "selected_grantee_capabilities" in PREPARE_FIXTURE,
+        "the committed 7.0.6 capture includes selected_grantee_capabilities",
+    );
+    assert.ok(
+        "missing_permissions_on_dependencies" in PREPARE_FIXTURE,
+        "the committed 7.0.6 capture includes missing_permissions_on_dependencies",
+    );
 });
