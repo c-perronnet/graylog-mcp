@@ -46,7 +46,11 @@ The journey is strictly dependency-ordered. A correct GRN and the *corrected* en
   3. A captured real 7.0.6 `prepare` response fixture exists, and the corrected endpoint `POST /api/authz/shares/entities/{entityGRN}` (apply) + `.../prepare` (dry-run) is verified against the live `test` instance — the brief's `PUT /api/authz/shares/{grn}` is confirmed wrong and recorded as such
   4. `computeShareGrantHash({ entityGrn, grants })` is added to `src/tools/_shared/cascade-hash.js` with its byte-identity pinned in `test/cascade-hash.test.js`
   5. The live-production test strategy is documented — `dryRun: true` default, throwaway-entity + dedicated test-user harness, never `builtin-team:everyone` — before any apply handler is written
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] 08-01-PLAN.md — GRN helper + Capability enum + empty authz barrel wired into `_register.js`, unit-tested (Wave 1)
+- [ ] 08-02-PLAN.md — `computeShareGrantHash` standalone canonical-form hash added to `cascade-hash.js`, byte-identity pinned (Wave 1)
+- [ ] 08-03-PLAN.md — live 7.0.6 `/prepare` recon probe + captured fixture + `08-TEST-STRATEGY.md` (Wave 2)
 
 ### Phase 9: Entity Shares Read Path
 **Goal**: An agent can read an entity's current grant set and discover who it can be shared with — a non-mutating, immediately live-testable capability that de-risks `prepare`-response parsing before that parsing becomes load-bearing in the write path.
@@ -98,7 +102,7 @@ Phases execute in numeric order: 8 → 9 → 10 → 11
 | 5. Events & Notifications | v3.0.0 | 5/5 | Complete | 2026-05-15 |
 | 6. Dashboards & Blueprints | v3.0.0 | 6/6 | Complete | 2026-05-16 |
 | 7. Final Hardening | v3.0.0 | 3/3 | Complete | 2026-05-16 |
-| 8. AuthZ Foundation | v3.1.0 | 0/TBD | Not started | - |
+| 8. AuthZ Foundation | v3.1.0 | 0/3 | Not started | - |
 | 9. Entity Shares Read Path | v3.1.0 | 0/TBD | Not started | - |
 | 10. Entity Sharing Write Path | v3.1.0 | 0/TBD | Not started | - |
 | 11. Role Management | v3.1.0 | 0/TBD | Not started | - |
