@@ -1,524 +1,558 @@
-# Architecture Patterns
+# Architecture Research
 
-**Domain:** Node MCP server admin extension — Graylog 7.2 write/configure surface
-**Researched:** 2026-05-13
-**Scope:** ~50 new mutating tools across 6 admin domains (streams, pipelines, dashboards, inputs, indices, events) plus blueprints
-**Overall confidence:** HIGH (architectural recommendations are derived from in-tree precedent and concrete file evidence; no speculative library claims)
+**Domain:** Authz / entity-sharing tool surface for the Graylog MCP server (v3.1.0 milestone)
+**Researched:** 2026-05-19
+**Confidence:** HIGH — endpoint shapes and replace-vs-merge semantics confirmed by reading the Graylog server Java source (`EntitySharesResource.java`, `EntitySharesService.java`); integration points confirmed against real files in `src/tools/`.
 
----
+> Scope note: this is a SUBSEQUENT milestone — purely additive on top of v3.0.0's
+> 91-tool admin surface. Everything below describes how the NEW authz tools slot
+> into the EXISTING architecture (`defineMutatingHandler`, `src/dispatch.js`,
+> `src/tools/<domain>/`, `src/tools/_shared/`). The existing architecture is not
+> re-researched — the v3.0.0 architecture doc covered it.
 
-## Recommended Architecture
+## Standard Architecture
 
-```
-src/
-├── index.js                       # Entry + transport wiring only (target: shrink toward ~200 lines)
-├── tools.js                       # Existing read-side definitions
-│
-├── dispatch.js                    # NEW: Map<toolName, handler> registry + dispatch
-│
-├── graylog/                       # NEW: HTTP client layer (one client, many endpoints)
-│   ├── client.js                  #   graylogClient.request(method, path, body, { conn })
-│   ├── auth.js                    #   Basic-auth header builder (token-as-username pattern)
-│   └── errors.js                  #   Map 4xx/5xx → structured error objects
-│
-├── services/                      # NEW: Pure Graylog domain operations (no MCP coupling)
-│   ├── streams.js                 #   createStream/listStreams/.../attachRule/...
-│   ├── pipelines.js
-│   ├── pipeline-rules.js
-│   ├── dashboards.js
-│   ├── inputs.js
-│   ├── extractors.js
-│   ├── indices.js
-│   ├── event-definitions.js
-│   └── event-notifications.js
-│
-├── tools/                         # MCP-facing handlers (1 file = 1 tool, grouped by domain)
-│   ├── cluster-errors.js          # existing
-│   ├── template-mgmt.js           # existing
-│   ├── _shared/                   # NEW: cross-cutting handler helpers
-│   │   ├── handler.js             #   defineHandler({ schema, dryRun, run })
-│   │   ├── dry-run.js             #   withDryRun() wrapper
-│   │   ├── connection.js          #   resolveConnection(args) — DRY across handlers
-│   │   └── errors.js              #   errorResponse(text), wrapGraylogError(err)
-│   ├── streams/
-│   │   ├── index.js               #   re-exports for dispatch registration
-│   │   ├── schemas.js             #   zod schemas for stream tools
-│   │   ├── create.js              #   handleCreateStream
-│   │   ├── list.js
-│   │   ├── get.js
-│   │   ├── update.js
-│   │   ├── delete.js
-│   │   ├── attach-rule.js
-│   │   └── detach-rule.js
-│   ├── pipelines/                 # same shape
-│   ├── pipeline-rules/            # same shape
-│   ├── dashboards/                # same shape
-│   ├── inputs/                    # same shape
-│   ├── extractors/                # same shape
-│   ├── indices/                   # same shape
-│   ├── event-definitions/         # same shape (CRUD upgrade from read-only)
-│   ├── event-notifications/       # same shape
-│   └── blueprints/
-│       ├── index.js
-│       ├── schemas.js
-│       ├── setup-error-stream-for-app.js
-│       ├── create-app-health-dashboard.js
-│       └── ...
-│
-├── pipeline-dsl/                  # NEW: rule-language helpers (own subsystem, owned by pipeline-rules domain)
-│   ├── index.js                   #   emit() — intent → DSL string
-│   ├── grammar.js                 #   client-side parser/lexer for when…then…
-│   ├── escape.js                  #   string-literal escaping (the missing-escape problem from buildQueryString)
-│   ├── builtins.js                #   curated catalogue of known Graylog built-in functions
-│   └── validate.js                #   parens, unknown-function lint, type checks
-│
-└── (existing modules unchanged: config.js, query.js, timerange.js,
-   aggregations.js, saved-searches.js, events.js, clustering/)
-```
-
-### Component Boundaries
-
-| Component | Responsibility | Communicates With |
-|-----------|---------------|-------------------|
-| `src/index.js` | MCP transport, server lifecycle, single registration of dispatch | `dispatch.js` |
-| `src/dispatch.js` | `Map<string, handler>` registration + lookup; throws unknown-tool | All `tools/**/*.js` |
-| `src/tools/<domain>/*.js` | MCP-layer concerns: arg shape, dry-run, response formatting | `services/<domain>.js`, `_shared/*` |
-| `src/tools/_shared/handler.js` | `defineHandler` factory: validation, conn resolve, dry-run, error wrap | All handler files |
-| `src/services/<domain>.js` | Graylog domain operations as pure functions: `(client, payload) → result` | `graylog/client.js` |
-| `src/graylog/client.js` | Single axios-based HTTP client; method/path/body in, parsed JSON out | `graylog/auth.js`, `graylog/errors.js` |
-| `src/pipeline-dsl/*` | Generate + validate Graylog rule DSL client-side before round-trip | Used by `services/pipeline-rules.js` and `tools/pipeline-rules/*` |
-
-### Data Flow
-
-**Typical mutating tool flow:**
+### System Overview — where the authz domain plugs in
 
 ```
-1. MCP Client → call_tool { name: "create_stream", arguments: {..., dryRun: true } }
-2. index.js → dispatch.js → lookup handler in Map
-3. handler (tools/streams/create.js)
-   ├─ defineHandler wrapper runs:
-   │   ├─ zod validation (schemas.js)        — invalid → isError, no Graylog call
-   │   ├─ resolveConnection(args)            — no conn → isError
-   │   ├─ build Graylog request via service  — services/streams.js::buildCreateStreamRequest()
-   │   ├─ if dryRun: return preview payload + confirmation token (NO HTTP call)
-   │   └─ else: services/streams.js::createStream(client, payload)
-4. services/streams.js → graylog/client.js::request("POST", "/api/streams", body)
-5. graylog/client.js → axios → Graylog
-6. handler shapes response → { content: [{ type: "text", text: JSON.stringify(...) }] }
+┌─────────────────────────────────────────────────────────────────┐
+│  src/index.js  — stdio MCP server, ListTools + CallTool wiring    │
+├─────────────────────────────────────────────────────────────────┤
+│  src/tools.js  — flat array of tool definitions (+authz entries)  │
+│  src/dispatch.js — Map<name, handler>; register() / dispatch()    │
+├─────────────────────────────────────────────────────────────────┤
+│  src/tools/_register.js — side-effect barrel                      │
+│     import "./authz/index.js";   ◄── NEW one-line addition        │
+├─────────────────────────────────────────────────────────────────┤
+│                  src/tools/authz/   ◄── NEW DOMAIN MODULE         │
+│  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐              │
+│  │ index.js     │ │ schemas.js   │ │ get-entity-  │              │
+│  │ (register    │ │ (zod inputs) │ │  shares.js   │              │
+│  │  barrel)     │ │              │ │ (read path)  │              │
+│  └──────────────┘ └──────────────┘ └──────────────┘              │
+│  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐              │
+│  │ grn-helpers  │ │ share-entity │ │ create-role  │              │
+│  │   .js (pure) │ │   .js        │ │ assign-role  │              │
+│  └──────────────┘ └──────────────┘ └──────────────┘              │
+├─────────────────────────────────────────────────────────────────┤
+│  src/tools/_shared/   (reused unchanged; +1 thin wrapper only)    │
+│  handler.js · dry-run.js · cascade-hash.js · connection.js ...    │
+│     cascade-hash.js  ◄── +computeShareGrantHash thin wrapper      │
+├─────────────────────────────────────────────────────────────────┤
+│  src/graylog/client.js — makeClient(conn).request() — UNCHANGED   │
+└─────────────────────────────────────────────────────────────────┘
+        │
+        ▼  POST /api/authz/shares/entities/{grn}/prepare   (preview)
+        ▼  POST /api/authz/shares/entities/{grn}           (apply)
+        ▼  GET  /api/authz/shares/user/{userId}            (inverse read)
+   Graylog 7.0.6  EntitySharesResource / RolesResource
 ```
 
-The split is: handlers handle **MCP-shape and safety**; services handle **Graylog-shape and HTTP**; the client handles **transport**. Each layer is unit-testable without the layer below.
+### Component Responsibilities
 
----
+| Component | Responsibility | Implementation pattern (file precedent) |
+|-----------|----------------|------------------------------------------|
+| `src/tools/authz/index.js` | Side-effect `register()` barrel for the domain | Mirrors `src/tools/pipelines/index.js` — one `import` + one `register()` per tool |
+| `src/tools/authz/schemas.js` | zod input schemas for every authz tool | Mirrors `src/tools/pipelines/schemas.js`; mutating schemas extend `mutatingBase` (dryRun/idempotencyKey) |
+| `src/tools/authz/grn-helpers.js` | Parse / build / validate Graylog Resource Names | Pure functions — no I/O, trivially unit-testable |
+| `src/tools/authz/get-entity-shares.js` | Read path — current grants on an entity | Plain async handler — copy `src/tools/pipelines/get-pipeline.js` |
+| `src/tools/authz/share-entity.js` | Grant/revoke a user's capability on an entity | `defineMutatingHandler` with async `build()` doing prepare-merge |
+| `src/tools/authz/create-role.js` | Create a Graylog role | `defineMutatingHandler`, `POST /api/roles` |
+| `src/tools/authz/assign-role.js` | Add a user to a role | `defineMutatingHandler`, `PUT /api/roles/{rolename}/members/{username}` |
 
-## Answers to the Nine Architectural Questions
-
-### 1. Per-Domain Module Layout — **Nested directory per domain, one file per tool**
-
-**Recommendation:** `src/tools/<domain>/<verb>.js`, with `index.js` re-exporting and `schemas.js` co-located.
-
-**Why over flat:**
-- Flat (`src/tools/streams.js`) repeats the `src/index.js` problem at smaller scale: 6 files × 5–10 tools each = 30–60 handlers per file. At ~120 LOC per non-trivial mutating handler (validation + dry-run + service call + response shaping), a flat `streams.js` lands ~700–1000 LOC — exactly the bloat we're escaping.
-- Existing precedent (`src/tools/cluster-errors.js` at 174 lines for one logical tool; `src/tools/template-mgmt.js` at 120 lines for five small CRUD tools) shows that **one tool per file is fine when tools are non-trivial**, and **grouping by domain in one file is fine when tools are tiny**. Mutating admin tools have dry-run preview + zod schema + apply branch — they will not stay tiny.
-- Nested gives a stable navigation address (`tools/streams/create.js`) that maps 1:1 to a Graylog REST endpoint, which is how researchers will reason about coverage.
-
-**Hybrid `index.js`** re-exports the named handlers so `dispatch.js` registers from one import per domain — keeps the registration site terse.
-
-**Justification against precedent:** This is a **scaling extension** of the `src/tools/<feature>.js` precedent, not a departure. `cluster-errors.js` is one logical tool; admin domains are 5–10 tools each. The same "extract when it crosses ~80 lines or has private helpers" rule (STRUCTURE.md:94) applied per tool gives per-tool files.
-
----
-
-### 2. Dispatch Chain — **`Map<toolName, handler>` table, populated from per-domain index re-exports. Preliminary refactor phase.**
-
-**Recommendation:** Replace the `if (name === "...")` chain in `src/index.js:38-104` with:
-
-```js
-// src/dispatch.js
-const handlers = new Map();
-export function register(name, handler) { handlers.set(name, handler); }
-export function dispatch(request) {
-    const fn = handlers.get(request.params.name);
-    if (!fn) throw new Error(`Tool not found: ${request.params.name}`);
-    return fn(request);
-}
-
-// Domain modules self-register on import:
-// src/tools/streams/index.js
-import * as create from "./create.js";
-import { register } from "../../dispatch.js";
-register("create_stream", create.handleCreateStream);
-register("list_streams", list.handleListStreams);
-// ...
-```
-
-**Why over alternatives:**
-- **Per-domain sub-tables that federate:** more layering, no real benefit — the Map *is* a flat dispatch and a Map of Maps just hides lookups behind a name resolution step.
-- **Auto-derive from tool definitions in `src/tools.js`:** tempting, but it requires every tool definition to *also* export its handler reference, which forces the schema layer to know about handler identity. Cleaner separation is: tool definitions in `src/tools.js` describe the wire shape; dispatch registry names the handlers; they meet at the tool name string. The existing "no compile-time check that names match" hazard (CONCERNS.md:83) is **mitigated** by adding a startup assert in `index.js` that every name in `toolDefinitions` exists in the dispatch Map — a single 5-line check.
-
-**Phase placement: preliminary refactor (Phase 0).** Reasons:
-- Adding the first domain's ~7 tools to the existing if-chain stretches it to ~110+ branches and locks in the same pain.
-- The refactor is mechanical and small (replace 60 lines in `index.js` with one call; extract a `dispatch.js`). Doing it before the first domain phase keeps every subsequent phase's diff focused on the domain, not on dispatcher housekeeping.
-- The mismatch-check assert pays back immediately: it catches every "added to tools.js, forgot to register" mistake at server boot, which will happen often with 50 new tools.
-
-**Files to register existing read-side tools too** — keeps a single registration mechanism. Phase 0 also moves the existing `if (name === ...)` branches to `register("fetch_graylog_messages", fetchGraylogMessages)` etc. Read tools stay in `index.js` (no behavior change — per PROJECT.md constraint "existing v2.3 tool contracts unchanged").
-
----
-
-### 3. Dry-Run Primitive — **Shared `withDryRun(handler)` wrapper combined with a "request object first" service shape**
-
-**Recommendation:** Two complementary mechanisms.
-
-**(a) Services return a request descriptor; handlers decide what to do with it.**
-
-```js
-// src/services/streams.js
-export function buildCreateStreamRequest(args) {
-    return {
-        method: "POST",
-        path: "/api/streams",
-        body: { title: args.title, description: args.description, /* ... */ },
-        summary: `Create stream "${args.title}" with ${args.rules?.length ?? 0} rules`,
-    };
-}
-
-export async function createStream(client, args) {
-    const req = buildCreateStreamRequest(args);
-    return client.request(req.method, req.path, req.body);
-}
-```
-
-**(b) `defineHandler` factory wraps every mutating handler.**
-
-```js
-// src/tools/_shared/handler.js
-export function defineMutatingHandler({ name, schema, build, apply, summarize }) {
-    return async function handler(request) {
-        const args = schema.parse(request.params.arguments ?? {});
-        const { conn, error } = resolveConnection(args);
-        if (error) return error;
-
-        const dryRun = args.dryRun ?? true;  // default-true is enforced here, once
-        const req = build(args);
-
-        if (dryRun) {
-            return textResponse({
-                dryRun: true,
-                summary: summarize(args, req),
-                preview: { method: req.method, path: req.path, body: req.body },
-                applyHint: `Re-call with dryRun: false to apply`,
-                confirmationToken: hashRequest(req),  // optional: stable hash for clients to bind preview→apply
-            });
-        }
-        const result = await apply(conn, req);
-        return textResponse({ dryRun: false, applied: true, result });
-    };
-}
-```
-
-**Why this combination over the alternatives:**
-- **Manual `args.dryRun ?? true` per handler:** Default-true *must* be applied identically in 50+ handlers. One typo (`?? false` or omitted check) is a silent data-loss bug. Centralizing it in the wrapper makes "applying without explicit `dryRun: false`" structurally impossible — matches the PROJECT.md constraint as written ("Applying without an explicit `dryRun: false` is a bug").
-- **Wrapper-only without request-object split:** Wrapper alone forces every handler to compose the Graylog request inline, then duplicate the call site (one branch builds + returns preview, the other branch builds + applies). Splitting into `build()` (pure) + `apply()` (effectful) means the dry-run path uses the same payload the apply path would, by construction — preview and apply cannot drift.
-- **Request-object split without wrapper:** Possible, but every handler still has to remember to honour `dryRun: true` default. The wrapper is what enforces the default.
-
-**Justification against precedent:** This is genuinely new — existing read-side tools have no dry-run. But it slots cleanly into the existing handler shape (CONVENTIONS.md:70-88): `defineMutatingHandler` produces the same `async (request) => { content: [...] }` signature, just constructed by a factory instead of written by hand. Existing read handlers don't change.
-
----
-
-### 4. Validation Layer — **Per-domain `schemas.js`, applied inside `defineHandler` before any other handler logic**
-
-**Recommendation:** `src/tools/<domain>/schemas.js` holds all zod schemas for that domain; handlers import named exports.
-
-```js
-// src/tools/streams/schemas.js
-import { z } from "zod";
-
-export const StreamRuleSchema = z.object({
-    field: z.string().min(1),
-    type: z.enum(["EXACT", "REGEX", "GREATER", "SMALLER", "PRESENCE"]),
-    value: z.union([z.string(), z.number()]),
-    inverted: z.boolean().default(false),
-});
-
-export const CreateStreamSchema = z.object({
-    title: z.string().min(1),
-    description: z.string().optional(),
-    indexSetId: z.string().min(1),
-    matchingType: z.enum(["AND", "OR"]).default("AND"),
-    rules: z.array(StreamRuleSchema).default([]),
-    dryRun: z.boolean().default(true),
-});
-```
-
-**Why co-located `schemas.js` per domain (not per-file):**
-- Schemas reference each other within a domain (e.g. `CreateStreamSchema` and `UpdateStreamSchema` both embed `StreamRuleSchema`). Co-locating prevents an explosion of cross-file imports.
-- Cross-domain schema sharing is rare; when it happens (e.g. a `ConnectionRef` schema), promote to `src/tools/_shared/schemas.js`.
-- Tool definitions in `src/tools.js` already declare JSON-Schema for MCP clients (CONVENTIONS.md:50). We **keep** those (the MCP SDK uses them client-side) and use zod server-side as the actual enforcement. They are derived from the same intent but live separately because the JSON-Schema is wire spec, zod is runtime validation. A long-term cleanup is `zod-to-json-schema`, but this milestone does **not** require it — start with hand-kept parity.
-
-**Slot-in point:** `schema.parse(args)` is the first non-trivial line inside `defineMutatingHandler` (see Q3). Failure throws `ZodError`; an outer try/catch in the factory maps it to `errorResponse(formatZodError(err))`. This adopts the long-declared zod dependency (CONCERNS.md:17) at the natural moment.
-
-**Justification against precedent:** Existing handlers do ad-hoc `if (!args.foo) return errorResponse(...)`. zod replaces those checks. Existing read tools are not changed (per PROJECT.md "no refactors as part of this milestone"). Only new mutating handlers use zod.
-
----
-
-### 5. Pipeline Rule DSL Generation Module — **`src/pipeline-dsl/`, with a hand-curated builtins catalogue (auto-regen as a future improvement)**
-
-**Recommendation:** Top-level `src/pipeline-dsl/` (not nested under `src/tools/`). Concrete file layout:
+## Recommended Project Structure
 
 ```
-src/pipeline-dsl/
-├── index.js          # public surface: emit(intent), validate(source), lint(source)
-├── grammar.js        # tokenizer + parser for when…then… (does not need to be full PEG; recursive descent is enough)
-├── escape.js         # string-literal escaping for emitted DSL — addresses CONCERNS.md "no query escaping" recurrence risk
-├── builtins.js       # const FUNCTIONS = { has_field: { args: [...], returns: "bool" }, ... }
-└── validate.js       # checks: balanced parens, known function names, arg-count match, unescaped quotes
+src/tools/authz/                      # NEW domain module (mirror of pipelines/)
+├── index.js                          # register barrel — imported by _register.js
+├── schemas.js                        # zod schemas for all authz tools
+├── grn-helpers.js                    # GRN parse/build/validate (see placement note)
+├── get-entity-shares.js              # READ:  current grants for an entity
+├── share-entity.js                   # WRITE: prepare-merge-apply a capability grant
+├── create-role.js                    # WRITE: POST /api/roles
+└── assign-role.js                    # WRITE: PUT  /api/roles/{rolename}/members/{username}
+
+src/tools/_shared/
+└── cascade-hash.js                   # MODIFIED — add computeShareGrantHash wrapper
 ```
 
-**Why top-level (not under `src/tools/pipeline-rules/`):**
-- DSL helpers are used **by services and tools**: services (when building rule-create payloads) and tools (when offering an "emit DSL from intent" tool the agent calls). Both layers need it; placing it under `tools/` would force `services/` to import from `tools/` (wrong direction).
-- It's a peer subsystem like `src/clustering/`, which is the closest precedent — a self-contained algorithmic concern with multiple consumers.
+### Structure Rationale
 
-**Builtins catalogue: hand-curated this milestone, with a generator as future work.**
+- **`src/tools/authz/`** — one new per-domain folder, identical pattern to the 9
+  existing admin domains. The CLAUDE.md code-organization constraint ("new admin
+  tools extract into `src/tools/<domain>/`, not inline in `src/index.js`") is
+  satisfied by construction.
+- **GRN helper placement — keep it in `src/tools/authz/grn-helpers.js`, NOT `_shared/`.**
+  Decision and rationale: `_shared/` is reserved for primitives consumed across
+  MULTIPLE domains (`cascade-hash.js` is used by index-sets/streams/pipelines/events;
+  `handler.js` by all). For v3.1.0, GRN is an authz-only concern — `share_entity`
+  and `get_entity_shares` are its only callers. Co-locating it in `authz/` keeps the
+  shared surface minimal and the domain self-contained. **Promote to `_shared/grn.js`
+  later if a future milestone needs it elsewhere** (e.g. content-pack tooling or
+  blueprints) — that promotion has direct precedent: `cascade-hash.js` itself started
+  life as `src/tools/index-sets/c1-hash.js` and was promoted to `_shared/` in Phase 2
+  once a second domain needed it (the file's own header documents this). Premature
+  promotion adds a cross-cutting file with one consumer; the move is cheap and
+  mechanical when a second consumer actually appears.
 
-- **Source of truth:** `source-code/graylog2-server/.../plugin/pipelineprocessor/functions/` Java classes. Each `Function<T>` subclass declares its name, parameter list, and return type.
-- **Why hand-curated first:** Auto-generation from Java source needs either (a) running Graylog's own reflection-based function registration (heavy — requires Graylog runtime), or (b) parsing Java source files (brittle — annotation positions vary across versions). Hand-curation for ~80–120 built-ins (per the source tree's `functions/` directory size) is tractable as a one-time scrape; the result is a static `const FUNCTIONS = {...}` JS object with version-pinned-to-7.2 contents.
-- **Maintenance path:** A `scripts/regenerate-builtins.js` that reads the local Java source and emits `builtins.js` is a future-work item — explicitly flagged as out of scope for this milestone but cheap to add later. The hand-curated table includes a header comment `// regenerate with scripts/regenerate-builtins.js when implemented`.
-- **Confidence calibration:** Hand-curated lists drift. Mitigation: every PR that touches `builtins.js` should reference the Java class it mirrors; mismatches surface in code review. Drift risk is real but low-impact: an unknown function in user-emitted DSL becomes a Graylog 400 instead of a client-side lint — degrades gracefully.
+## Architectural Patterns
 
-**Validation discipline:** Mirrors CONCERNS.md "no query escaping for Graylog query string" lesson — `escape.js` is the **first** module written, with tests for every Lucene/DSL reserved character, *before* any rule-emit code uses it. Don't recreate the `buildQueryString` mistake at a new layer.
+### Pattern 1: GRN abstraction (the generalization seam)
 
----
+**What:** A Graylog Resource Name uniquely identifies any shareable entity. The
+authz API is keyed entirely on GRNs, so a single helper makes `share_entity` work
+for streams today and dashboards/saved-searches tomorrow with zero new tool code.
 
-### 6. Blueprint Composition — **Blueprints call `services/`, not other tool handlers**
+**GRN wire format (confirmed from `org/graylog/grn/GRN.java`):**
 
-**Recommendation:** Blueprints depend on the **services layer**, not on the tool handlers.
-
-```js
-// src/tools/blueprints/setup-error-stream-for-app.js
-import { createStream, createStreamRule, attachStreamToPipeline } from "../../services/streams.js";
-import { createPipeline } from "../../services/pipelines.js";
-
-export const handleSetupErrorStreamForApp = defineMutatingHandler({
-    name: "setup_error_stream_for_app",
-    schema: SetupErrorStreamForAppSchema,
-    build(args) {
-        // Returns a *plan*: list of {method, path, body, summary} for preview
-        return planSetupErrorStreamForApp(args);
-    },
-    async apply(conn, plan) {
-        const client = makeClient(conn);
-        const stream = await createStream(client, plan.stream);
-        const rule = await createStreamRule(client, stream.id, plan.rule);
-        const pipeline = await createPipeline(client, plan.pipeline);
-        return { stream, rule, pipeline };
-    },
-});
+```
+grn:<cluster>:<tenant>:<scope>:<type>:<entity>
 ```
 
-**Why services and not handlers:**
-- **Handler-to-handler cross-imports re-couple modules** at the MCP layer. A handler is "MCP-shaped" (takes `request`, returns `{content}`); calling one from another means parsing args twice and re-checking dry-run twice, both error-prone.
-- **Services are pure domain operations** with no MCP coupling. They take `(client, args)` and return Graylog responses. Blueprints compose them in apply()-phase, and the dry-run path returns the *plan* (list of would-be requests) without executing anything.
-- **Existing precedent:** the closest analogue is `src/aggregations.js` exposing `buildTimeHistogram` / `executeAggregation` / etc., which `index.js` orchestrates by composition. Services are that pattern applied per Graylog domain.
+- Exactly six colon-separated tokens; the literal `grn` prefix is mandatory.
+- `GRN.parse()` lower-cases the whole string and requires exactly 6 tokens, else
+  `IllegalArgumentException` ("not a valid GRN string").
+- `cluster`, `tenant`, `scope` are empty on single-cluster Graylog. A stream GRN is
+  commonly `grn:::::stream:000000000001` (the source javadoc also shows the
+  hand-written form `grn::::stream:000000000001` — both round-trip; emit the
+  canonical 6-token form with empty middle tokens).
+- Registered entity types relevant to this milestone (from `org/graylog/grn/GRNTypes.java`):
+  `stream`, `dashboard`, `search` (saved searches), `event_definition`,
+  `notification`, `user`, `role`, `output`, `report`.
 
-**Dry-run for blueprints:** The plan returned by `build()` is **a list of requests**, not a single request. The dry-run preview shows the agent every Graylog call the blueprint would make. This is more honest than showing a single combined payload and matches the "agent can reason about each mutation" decision in PROJECT.md.
+**Helper API to build (`src/tools/authz/grn-helpers.js`):**
 
----
+```javascript
+const GRN_TYPES = new Set([
+  "stream", "dashboard", "search", "event_definition",
+  "notification", "user", "role", "output", "report",
+]);
 
-### 7. Graylog API Client — **One generic `graylogClient.request(method, path, body)` with thin per-endpoint service functions on top**
+// ("stream","000000000001") -> "grn:::::stream:000000000001"
+export function buildGrn(type, id) { /* validate type ∈ GRN_TYPES, id non-empty */ }
 
-**Recommendation:** Single axios-backed HTTP client; services wrap it with endpoint-specific knowledge.
+// "grn:::::stream:abc" -> { cluster, tenant, scope, type, entity }; throws on malformed
+export function parseGrn(grn) { /* split ":", require 6 tokens + "grn" prefix */ }
 
-```js
-// src/graylog/client.js
-import axios from "axios";
-import { buildAuth } from "./auth.js";
-import { mapGraylogError } from "./errors.js";
-
-export function makeClient(conn) {
-    return {
-        async request(method, path, body) {
-            try {
-                const res = await axios({
-                    method,
-                    url: `${conn.baseUrl}${path}`,
-                    data: body,
-                    headers: {
-                        "Content-Type": "application/json",
-                        "X-Requested-By": "graylog-mcp",
-                        ...buildAuth(conn.apiToken),
-                    },
-                    validateStatus: () => true,
-                });
-                if (res.status >= 400) throw mapGraylogError(res);
-                return res.data;
-            } catch (err) {
-                if (err.isGraylogError) throw err;
-                throw new Error(`Graylog request failed: ${err.message}`);
-            }
-        },
-    };
-}
+// true if value is a syntactically valid GRN of an allowed type
+export function isGrn(value) { /* ... */ }
 ```
 
-**Why one generic client over alternatives:**
-- **Hand-roll per-endpoint clients:** 50+ endpoints × ~30 LOC of axios boilerplate each = ~1500 LOC of identical-shaped HTTP code. Services already provide the "this endpoint takes X, returns Y" specialization layer — adding a per-endpoint client just doubles that.
-- **OpenAPI-generated client:** The PROJECT.md explicitly notes `api-specs/` is sparse / single YAML. Generating a client from incomplete specs would mean either filling in the spec by hand (large unrelated effort) or generating partial coverage. Reading Java REST resources directly (decided in PROJECT.md Key Decisions) is incompatible with a spec-generated client.
-- **Generic `request()`:** Smallest surface, easiest to test (one mock point), and matches the existing `searchGraylog()` shape (`src/query.js`) generalized one level up. Migration path is clear: `searchGraylog` becomes a thin wrapper over `client.request("POST", "/api/views/search/sync", payload)` in a future cleanup, but this milestone doesn't touch it (read tools unchanged).
+**When to use:** `share_entity`'s zod schema should accept EITHER a raw `entityGrn`
+string OR a `(entityType, entityId)` pair, and normalize to a GRN inside `build()`.
+The `(type, id)` pair is friendlier to the agent (it already holds a stream id from
+`create_stream`); the raw GRN keeps the door open for entity kinds the MCP has no
+create tool for. The grantee (a user, for v3.1.0) is also a GRN — `buildGrn("user", userId)`.
 
-**Error mapping (`graylog/errors.js`):** Graylog returns 400 with structured JSON body for validation failures, 403 for permission denied, 404 for missing resources. Map these to typed errors (`GraylogValidationError`, `GraylogPermissionError`, `GraylogNotFoundError`) so handlers can produce useful messages without re-parsing axios responses. The PROJECT.md "insufficient permissions surface as Graylog's 403 response" constraint becomes a one-liner in this mapper.
+**Trade-offs:** A raw-GRN input is fully general but easy to mis-form; the
+`(type, id)` pair is safe but enumerated. Support both; validate the type token
+against `GRN_TYPES` at zod-parse time so a typo fails as a clean MCP validation
+error, not an opaque Graylog 400.
 
----
+### Pattern 2: prepare/commit mapped onto dryRun + confirmation token
 
-### 8. Connection State for Mutating Ops — **Add `connectionName` arg to mutating tools (per-call resolution); keep singleton for read tools**
+**What:** Graylog's entity-share API is genuinely two-step, and the two steps map
+cleanly onto the existing `dryRun` split. Confirmed from `EntitySharesResource.java`:
 
-**Definitive answer:** Per-call resolution for mutating tools. Singleton remains the **default fallback** when the arg is omitted, preserving the existing UX.
+| Graylog endpoint | Method | Purpose | MCP mapping |
+|---|---|---|---|
+| `/api/authz/shares/entities/{grn}/prepare` | **POST** | `@NoAuditEvent("This does not change any data")` — returns `available_grantees`, `available_capabilities`, **`active_shares` (current grants)**, the effective `selected_grantee_capabilities`, `missing_permissions_on_dependencies`, and a `validation_result` | Fired during **`dryRun: true`** AND inside `build()` on the apply path |
+| `/api/authz/shares/entities/{grn}` | **POST** | Persists grants; **full replace** of the modifiable grant set; returns `EntityShareResponse` | Fired only on **`dryRun: false`** apply |
 
-```js
-// src/tools/_shared/connection.js
-export function resolveConnection(args) {
-    if (args._testConnection) return { conn: TEST_CONN, name: args._testConnection };
-    const connections = getConnections();
-    if (args.connectionName) {
-        const conn = connections[args.connectionName];
-        if (!conn) return { error: errorResponse(`Connection "${args.connectionName}" not found`) };
-        return { conn, name: args.connectionName };
+> **Endpoint correction vs. the milestone brief:** the brief says `PUT /api/authz/shares/{grn}`.
+> The actual 7.x surface is **`POST /api/authz/shares/entities/{entityGRN}`** (apply)
+> and **`POST /api/authz/shares/entities/{entityGRN}/prepare`** (preview). Both are
+> POST, not PUT, and the path segment is `entities/`. The roadmap and tool
+> implementations must use the corrected paths.
+
+**Does Graylog's `/prepare` replace or COMPLEMENT the local sha-256 token? — They COMPLEMENT.**
+
+- Graylog's `/prepare` response is a **feasibility / dependency / validation
+  pre-flight**. It tells the agent: who can be granted, what capabilities exist,
+  what the grant set looks like *now* (`active_shares`), and — critically —
+  `missing_permissions_on_dependencies` (e.g. sharing a dashboard whose backing
+  stream the grantee cannot read) plus a `validation_result`. It is server-side
+  truth about *whether the share is valid*.
+- It is **NOT a drift guard.** `/prepare` is `@NoAuditEvent`, issues no token, and
+  carries no opaque handle that the subsequent apply must echo. Two `/prepare`
+  calls and one apply are three independent HTTP requests; nothing server-side
+  binds them. Another admin can mutate the grant set between preview and apply.
+- The existing **local sha-256 confirmation token** (`cascade-hash.js` +
+  `requireConfirm` gate in `handler.js`) is what supplies **drift refusal**.
+  `share_entity` should compute a token over the *current grant set observed at
+  dry-run time* so that if the entity's grants change between preview and apply,
+  the apply refuses instead of silently overwriting.
+
+**Conclusion:** use both. `/prepare` for `validation_result` +
+`missing_permissions_on_dependencies` (richer feasibility than any local check
+could produce); the local token for TOCTOU drift refusal (the `/prepare` response
+cannot provide this).
+
+**Recommended `share_entity` flow:**
+
+```
+dryRun: true  (preview)
+  build() [async — already supported by defineMutatingHandler]:
+    1. buildGrn(entityType, entityId) -> entityGrn ;  buildGrn("user", granteeId) -> granteeGrn
+    2. POST .../entities/{entityGrn}/prepare   body = { selected_grantee_capabilities: {} }
+    3. read active_shares  ->  current grant set { granteeGrn: capability }
+    4. merge: current ∪ { granteeGrn: requestedCapability }    (Pattern 3)
+    5. confirmationToken = computeShareGrantHash({ entityGrn, grants: merged })
+    6. surface in preview (via req._confirmationToken so handler.js emits it):
+       the prepare response's validation_result + missing_permissions_on_dependencies,
+       the merged grant set (the exact apply body), and the token
+  -> agent sees feasibility + exactly what will be written + a token to echo
+
+dryRun: false  (apply)
+  build():  (re-runs steps 1-5 against LIVE state — re-POST /prepare, re-merge,
+            RE-COMPUTE token)
+  requireConfirm gate (handler.js step 6b):
+    args.confirm === recomputed token  ?  proceed  :  refuse (confirmation_mismatch)
+  apply():
+    POST .../entities/{entityGrn}   body = { selected_grantee_capabilities: merged }
+    inspect response.validation_result.failed — Graylog returns HTTP 400 WITH the
+    EntityShareResponse body when validation fails; surface it as an MCP error
+```
+
+This is the exact `delete_index_set` shape: async `build()` does pre-flight GETs and
+sets `req._confirmationToken`; `handler.js` emits the token in the dry-run preview
+and enforces it via the `requireConfirm` gate on apply. No new wrapper machinery.
+
+**Token shape:** add a thin semantic wrapper to `src/tools/_shared/cascade-hash.js`:
+
+```javascript
+// computeShareGrantHash({ entityGrn, grants }) — grants is [{grantee, capability}]
+// canonical: sha256(JSON.stringify({ entityGrn, grants: [...].sort(by grantee) }))
+```
+
+This is the established `computeRuleCascadeHash` / `computeNotificationCascadeHash`
+precedent — thin wrappers over `computeCascadeHash`, single-sourced canonical form,
+byte-identity pinned in `test/cascade-hash.test.js`. (`computeCascadeHash`'s
+keyed-bucket shape is stream-cascade-specific; a grant set is a flat sorted list of
+`{grantee,capability}` pairs, so a dedicated small wrapper is cleaner than forcing
+it through the stream buckets.)
+
+**Why drift refusal matters MORE here:** entity sharing changes *who can read
+production logs*. Combined with Pattern 3's replace semantics, a TOCTOU race where
+admin B edits grants mid-flight would, under a naive apply, silently revoke B's
+change. The sha-256-over-current-grant-set token closes that window with the exact
+mechanism already proven by `delete_index_set` (C1) and `delete_stream` (C2).
+
+**Trade-offs:** the apply path costs an extra `/prepare` round-trip to re-read
+current grants for the token recompute. `connect_pipelines_to_stream` and the
+cascade-delete tools already pay this cost; it is the price of correctness.
+
+### Pattern 3: prepare-merge-POST — `share_entity` MUST read-merge-write (CRITICAL)
+
+**What:** The entity-share apply endpoint is a **full REPLACE of the modifiable
+grant set**, exactly like `POST /api/system/pipelines/connections/to_stream`.
+
+**This is confirmed — not assumed — from `EntitySharesService.updatePrimaryEntityShares()`:**
+
+```java
+// remove grants that are not present anymore
+existingGrants.forEach(g -> {
+    if (!selectedGranteeCapabilities.containsKey(g.grantee())) {
+        grantService.delete(g.id());          // <-- REVOKES the grant
+        updateEventBuilder.addDeletes(g.grantee(), g.capability());
     }
-    const activeName = getActiveConnection();
-    const conn = getActiveConnectionConfig();
-    if (!conn) return { error: errorResponse(`No active connection. Pass connectionName or call use_connection.`) };
-    return { conn, name: activeName };
-}
+});
 ```
 
-**Why this option (smallest blast radius that fixes the real risk):**
-- **Singleton-only (option A):** Leaves the documented concurrency bug (CONCERNS.md:33) in place for the exact tools where it matters most — mutating tools run against potentially the wrong Graylog cluster if the agent has been switching connections mid-conversation. With 50+ admin tools and an agent that may do `use_connection prod` then `create_stream` then `use_connection staging` then `create_stream` in rapid succession, the race is real.
-- **Request-scoped connection refactor (option C):** Deep change. Threading a connection context through every handler, service, and the dispatch layer is the right long-term answer but is a milestone-sized refactor on its own, and PROJECT.md's "Backward compat: existing v2.3 tool contracts unchanged" closes the door on changing read-tool signatures.
-- **Per-call arg with singleton fallback (option B, recommended):** Additive on every signature. Old behavior (`use_connection prod`, then mutate) still works unchanged. New, safer behavior (explicit `connectionName` per mutation) is available and **encouraged in tool descriptions**. Blueprints capture `connectionName` once at the top and pass it down through services. The singleton becomes a convenience for interactive single-target workflows, not a correctness assumption.
+Any grantee present in the entity's current grants but **absent** from the
+request's `selected_grantee_capabilities` map has its grant **deleted**. The Java
+doc comment on `getSelectedGranteeCapabilities()` is explicit: *"we expect the
+frontend to always submit the full selection not only added/removed grantees. If
+the grantee selection is empty, that means all shares should be removed."*
 
-**Smallest-blast-radius marker:** This is **the** smallest-blast-radius option that materially improves the situation. Documentation of the limitation (option A) does not satisfy the project's safety posture; deep refactor (option C) blows past scope.
+**Verdict — DEFINITIVE: `share_entity` MUST read current grants, merge the new
+grant in, then write the full merged set.** A naive `share_entity` that POSTs only
+`{ newUserGrn: "view" }` will **revoke every other user's access to the entity** —
+the precise foot-gun the v3.0.0 "Pitfall 2" acceptance gate was written to catch
+for `connect_pipelines_to_stream`.
 
-**Migration note for tool definitions:** Every mutating tool's zod schema includes `connectionName: z.string().optional()`. The tool definition's JSON-Schema in `src/tools.js` documents that omitting it falls back to active connection. The tool *description* (the LLM-facing text) explicitly says "pass `connectionName` to bind this mutation to a specific Graylog" — agents read this and use it.
+**The precedent to copy:** `src/tools/pipelines/connect-pipelines-to-stream.js`.
+Its `build()` does GET-current → union → POST-merged, and its Pitfall-2
+acceptance-gate test proves the merge fires (asserts the POST body contains BOTH
+the pre-existing and the new ids, not just the new one). `share_entity` is the same
+shape with two refinements:
 
----
+1. **Read source.** Instead of `GET /connections/{streamId}`, use
+   `POST .../entities/{grn}/prepare` (empty `selected_grantee_capabilities`) and
+   read `active_shares` from the response. `active_shares` is the canonical current
+   grant set, already filtered to grants the calling user may modify
+   (`getActiveShares()` excludes the sharing user's own grant and non-modifiable
+   grantees). Reading via `prepare` reuses Graylog's own modifiability rules instead
+   of re-deriving them MCP-side. Note `active_shares` entries also carry a `grant`
+   GRN id; the merge keys on the grantee GRN, not the grant id.
+2. **Merge is a map, not a set.** Pipeline connections merge a `Set<pipelineId>`.
+   Grants merge a `Map<granteeGrn, capability>`. Adding `userX:view` when `userX`
+   already has `manage` is an UPDATE (overwrite the value), not an insert. Surface
+   the prior capability in `existingMatches` with `similarity_reason:
+   "capability_changed"` (when capability differs) or `"already_granted"` (when
+   unchanged), so the agent sees no-ops and changes without diffing client-side —
+   same UX as `connect_pipelines_to_stream`'s `already_connected`.
 
-### 9. Build Order for the Six Domains
+**Revoke path:** because the endpoint is replace-semantics, an explicit
+revoke/unshare is "merged = current grants MINUS the named grantee, then POST" —
+the `disconnect_pipelines_from_stream` GET-subtract-POST precedent. For v3.1.0 this
+can be a `revoke: true` flag on `share_entity` or a sibling `revoke_entity_share`
+tool — the roadmapper decides; either way the merge primitive is shared.
 
-**Dependency-driven phase ordering:**
+**Acceptance gate to mandate (mirror of Pitfall 2):** a test asserting
+`current = {userA: view, userB: manage}`, then `share_entity(userC, view)` →
+POST body `selected_grantee_capabilities` contains **all three** of A, B, C — NOT
+just `{userC: view}`. This is the load-bearing regression test for the milestone.
+
+### Pattern 4: read-path tool — plain async handler, not the mutating factory
+
+**What:** `get_entity_shares` is read-only — it must NOT use `defineMutatingHandler`
+(no dryRun/token) and must NOT use `defineListHandler`. The `prepare` response is a
+single structured DTO (`EntityShareResponse`) with nested arrays (`active_shares`,
+`available_grantees`, `available_capabilities`); `defineListHandler`'s
+narrow-projection machinery would flatten those away — the exact reason the doc
+comment in `get-pipeline.js` gives for not using `defineListHandler` for single-DTO
+reads.
+
+**Implementation:** copy `src/tools/pipelines/get-pipeline.js` exactly: zod-parse →
+`resolveConnection` (with `_testConnection` seam re-merge) → single
+`client.request()` → JSON envelope → `wrapGraylogError`.
+
+**Endpoint nuance:** the per-entity grant read happens via **`POST
+.../entities/{grn}/prepare` with an empty body** (`@NoAuditEvent` — changes
+nothing). The `prepare` response *is* the read model; there is no
+`GET .../entities/{grn}`. The separate `GET /api/authz/shares/user/{userId}`
+endpoint answers the inverse question ("what is shared *with* this user"), is
+paginated, and is a useful optional second read tool — keep it as its own tool if
+scoped, do not conflate.
+
+## Data Flow
+
+### `share_entity` apply-path request flow
 
 ```
-Phase 0:  Preliminary refactor — dispatch.js, graylog/client.js, services/ scaffold,
-          tools/_shared/* (handler factory, dry-run, validation glue), pipeline-dsl/ scaffold
-          → No new tools shipped; existing read tools migrated to dispatch Map; singleton verified
-
-Phase 1:  Inputs + Extractors            (no upstream Graylog dependencies; produce data that feeds streams)
-Phase 2:  Index Sets                      (streams MUST reference an indexSetId; build before streams)
-Phase 3:  Streams + Stream Rules          (depends on Phase 2 for indexSetId)
-Phase 4:  Pipeline Rules + Pipelines      (uses pipeline-dsl from Phase 0; attaches to streams from Phase 3)
-Phase 5:  Event Definitions + Notifications  (event-defs reference streams; upgrade from existing read-only)
-Phase 6:  Dashboards + Widget Templates   (references everything: streams, pipelines, events)
-Phase 7:  Blueprints                      (composes services from all prior phases)
+agent: share_entity(entityType:"stream", entityId:"S1",
+                    granteeType:"user", granteeId:"U1",
+                    capability:"view", dryRun:false, confirm:<token>)
+   ↓
+src/index.js CallTool → dispatch("share_entity") → handler (defineMutatingHandler)
+   ↓  zod.parse → resolveConnection → writable gate (all existing handler.js steps)
+   ↓  build() [async]:
+       buildGrn("stream","S1")  → entityGrn
+       buildGrn("user","U1")    → granteeGrn
+       POST /api/authz/shares/entities/{entityGrn}/prepare  {selected_grantee_capabilities:{}}
+         → active_shares = {userA: view}                    ← CURRENT GRANTS
+       merged = {userA: view, U1: view}                     ← MERGE (Pattern 3)
+       token  = computeShareGrantHash({entityGrn, grants: merged})
+       returns req with _confirmationToken=token, body={selected_grantee_capabilities:merged}
+   ↓  requireConfirm gate (handler.js 6b): args.confirm === token ? ok : refuse
+   ↓  apply():
+       POST /api/authz/shares/entities/{entityGrn}  {selected_grantee_capabilities:merged}
+         → EntityShareResponse  (check validation_result.failed → HTTP 400 → MCP error)
+   ↓  normalize → { id: entityGrn, body: response }
 ```
 
-**Rationale per dependency edge:**
+### State management
 
-| Phase | Depends on | Why |
-|-------|-----------|-----|
-| 1 (Inputs/Extractors) | Phase 0 only | Inputs are root-level resources; extractors attach to inputs. Both are self-contained Graylog concepts. No downstream tool needs them to *exist* yet at construction time. |
-| 2 (Index Sets) | Phase 0 | Standalone; but streams require `indexSetId`, so this must precede Phase 3. Could swap with Phase 1 (no dependency between them) — listed in this order because Inputs is a simpler validation target for the new architecture. |
-| 3 (Streams) | Phase 2 | `POST /api/streams` requires `index_set_id` (Java source: `StreamResource.create`). Without Phase 2, every stream creation would have to look up index sets by name through read-side tools — workable but fragile. |
-| 4 (Pipelines) | Phase 3 + DSL from Phase 0 | Pipelines connect to streams (`POST /api/system/pipelines/connections`). Pipeline rules emit DSL — the validator and builtins catalogue must exist. |
-| 5 (Events) | Phase 3 | Event definitions filter on streams (`stream_ids: [...]`). Read-side wrappers already exist (`src/events.js`); this phase upgrades them to CRUD using the new architecture. |
-| 6 (Dashboards) | Phases 1–5 | Widget templates query streams, reference pipelines, surface events. Building dashboards before the upstream resources exist means the templates have to be tested against externally-managed data — possible, but it's the only phase where every prior domain is referenced. |
-| 7 (Blueprints) | All | Cross-domain composition — `setup_error_stream_for_app` touches streams, pipeline rules, pipeline connections, and (optionally) a dashboard. By definition the last phase. |
+No new persistent state. Authz tools are stateless request/response, identical to
+the other 8 admin domains. The sha-256 token is stateless-by-design (recomputed on
+apply, never stored MCP-side — survives process restart, per the `cascade-hash.js`
+header). No connection-config schema change.
 
-**Where the build order minimizes "build this before that breaks":**
-- Phase 2 before Phase 3 eliminates "how do I get an indexSetId?" hand-waving in stream tests.
-- Phase 4 after Phase 3 means pipeline-to-stream connection tools can use stream IDs created by Phase 3 tools in integration tests.
-- Phase 5 after Phase 3 means event-definition tests can reference real streams.
-- Phase 7 last means blueprints have a fully populated services/ layer to compose from — no half-built primitives.
+## Scaling Considerations
 
-**Independent pairs (could be parallelized if multiple contributors):**
-- Phase 1 (Inputs/Extractors) ↔ Phase 2 (Index Sets): no shared dependency.
-- After Phase 4 lands: Phase 5 (Events) and Phase 6 (Dashboards) are mostly independent; events references streams, dashboards references everything, but they don't reference each other.
+| Scale | Architecture adjustment |
+|-------|-------------------------|
+| Single Graylog, tens of grants per entity | None — current design is correct |
+| Entity with hundreds of grants | `prepare` returns the full `active_shares`; merge is O(n) — fine. Graylog's own UI loads the same set |
+| Many entities / many share calls | Each `share_entity` call is independent; no MCP-side aggregation — no bottleneck |
 
----
+This is an admin tool surface — request volume is human/agent-paced, not
+throughput-bound. No scaling work is warranted.
 
-## Patterns to Follow
+## Anti-Patterns
 
-### Pattern 1: Mutating Tool Skeleton
-**What:** Every mutating tool is constructed via `defineMutatingHandler`, not hand-written.
-**When:** Any tool that calls `client.request()` with method ≠ GET.
-**Why:** Centralizes dry-run default-to-true, validation, error wrapping, connection resolution.
-**Example:** see Q3 above.
+### Anti-Pattern 1: POST only the new grant ("replace-blindness")
 
-### Pattern 2: Service Layer Returns Plans, Not Results, in `build()`
-**What:** `services/<domain>.js` exposes both `buildXRequest(args)` (pure) and `xWithRequest(client, req)` (effectful).
-**When:** Any mutation that must support dry-run.
-**Why:** Guarantees preview ≡ apply payload.
+**What people do:** `share_entity` POSTs `{selected_grantee_capabilities: {newUser: view}}`.
+**Why it's wrong:** the endpoint is full-replace (confirmed in `EntitySharesService`):
+every other grantee's grant is **deleted**, silently revoking production-log access
+for everyone else on the entity.
+**Do this instead:** prepare → read `active_shares` → merge → POST the full set
+(Pattern 3). Mandate the three-grantee acceptance-gate test.
 
-### Pattern 3: Domain-Local Schemas, Cross-Domain Schemas in `_shared/`
-**What:** zod schemas live in `tools/<domain>/schemas.js`; promote to `tools/_shared/schemas.js` when consumed by ≥2 domains.
-**Why:** Locality by default; avoid premature global schema modules.
+### Anti-Pattern 2: Treating Graylog `/prepare` as the drift guard
 
-### Pattern 4: DSL Emission via Builders, Not String Templates
-**What:** Rule DSL is built up via `pipeline-dsl/index.js` helpers, not by template-string interpolation.
-**Why:** Repeats the CONCERNS.md "no query escaping" lesson at a new level — never let user-controlled values into a DSL via string concatenation.
+**What people do:** skip the local sha-256 token because "Graylog already has a
+prepare step".
+**Why it's wrong:** `/prepare` is `@NoAuditEvent`, issues no token, and binds
+nothing to the subsequent apply. It validates feasibility, not staleness — another
+admin can mutate the grant set in the window between preview and apply.
+**Do this instead:** `/prepare` and the local token are complementary — `/prepare`
+for `validation_result` + `missing_permissions_on_dependencies`, the local token
+(over the merged grant set, recomputed on apply) for drift refusal.
 
----
+### Anti-Pattern 3: GRN string concatenation at each call site
 
-## Anti-Patterns to Avoid
+**What people do:** inline `` `grn:::::stream:${id}` `` in `share_entity` and again
+in `get_entity_shares`.
+**Why it's wrong:** six-token format, mandatory `grn` prefix, lower-casing, and an
+enumerated type set are easy to get subtly wrong; a malformed GRN fails as an opaque
+Graylog 400. Duplication means the dashboards/saved-search generalization must touch
+every call site.
+**Do this instead:** one `buildGrn`/`parseGrn` helper, type validated against
+`GRN_TYPES` at zod-parse time.
 
-### Anti-Pattern 1: Cross-Importing Tool Handlers
-**What:** `tools/blueprints/*.js` calling `handleCreateStream(fakeRequest)`.
-**Why bad:** Double-validation, double-dry-run, parsing args twice, opaque error propagation.
-**Instead:** Call services. Blueprints orchestrate plans + applies, not MCP requests.
+### Anti-Pattern 4: Running `get_entity_shares` through `defineListHandler`
 
-### Anti-Pattern 2: Adding to `src/index.js`'s if-chain
-**What:** Adding `if (name === "create_stream") return handleCreateStream(request);` to `index.js`.
-**Why bad:** Re-creates the 903-line file problem at 50× scale.
-**Instead:** Phase 0 dispatch refactor; every new domain self-registers.
+**What people do:** treat the grant set as a list and run it through the list factory.
+**Why it's wrong:** the `prepare` response is a single nested DTO; narrow-projection
+flattens `active_shares` / `available_grantees` away. Same trap `get-pipeline.js`
+documents in its header.
+**Do this instead:** plain async handler, copy `get-pipeline.js`.
 
-### Anti-Pattern 3: Hand-Encoded HTTP per Endpoint
-**What:** `services/streams.js` doing its own `axios.post(...)`.
-**Why bad:** Auth headers, error mapping, X-Requested-By repeated 50× — same bug surface 50×.
-**Instead:** `client.request(method, path, body)`. Services only know endpoint shape, not transport.
+## Integration Points
 
-### Anti-Pattern 4: Per-Handler `args.dryRun ?? true`
-**What:** Each new mutating handler manually checking the dryRun flag.
-**Why bad:** One missed check = silent destructive operation. The single most expensive class of bug this milestone can produce.
-**Instead:** `defineMutatingHandler` enforces it once.
+### How a new authz tool gets wired in (dispatch / registration)
 
-### Anti-Pattern 5: Singleton Connection for Blueprints
-**What:** Blueprint composes 5 service calls but reads `getActiveConnection()` separately at each one.
-**Why bad:** Agent could `use_connection X` between service calls (in theory) — race condition.
-**Instead:** Blueprint resolves the connection once at handler entry, passes it down explicitly.
+Four mechanical edits — identical to every Phase 1-6 domain in v3.0.0:
 
----
+1. **`src/tools.js`** — append one tool-definition object per authz tool (`name`,
+   `description` ≤200 chars, `inputSchema`). The `ListTools` handler advertises it.
+2. **`src/tools/authz/index.js`** *(new file)* — for each tool: `import` the handler,
+   call `register("<tool_name>", handler)`. Direct copy of `pipelines/index.js`.
+3. **`src/tools/_register.js`** — add one line: `import "./authz/index.js";` in the
+   Phase-barrel section (next to `import "./pipelines/index.js";`). This is the ONLY
+   edit to an existing shared file required for wiring.
+4. `assertAllToolsRegistered(toolDefinitions)` already runs at `src/index.js` startup
+   and fail-fasts if any `tools.js` entry lacks a registered handler — free safety
+   net, no edit needed.
 
-## Scalability Considerations
+Tool-name convention is `<verb>_<domain>_<noun>` snake_case. Proposed names:
+`share_entity`, `get_entity_shares` (or `list_entity_shares`), `create_role`,
+`assign_role`. (`share_entity` slightly bends strict `verb_domain_noun` but reads
+naturally and matches the brief; the roadmapper may prefer `grant_entity_share` for
+strict convention adherence.)
 
-| Concern | At 50 tools (this milestone) | At 100+ tools (future) |
-|---------|------------------------------|------------------------|
-| Dispatch lookup | O(1) Map — already constant | unchanged |
-| `tools.js` size | ~1500 LOC of JSON-Schema | Generate from zod with `zod-to-json-schema` |
-| Service file count | 9 service modules | Sub-organize by Graylog subsystem if needed |
-| Pipeline DSL builtins | ~80–120 entries, hand-curated | Regenerator script from Java source |
-| Connection concurrency | Per-call arg patches singleton risk | Request-scoped connection context (deeper refactor) |
-| Test surface | Per-tool unit + per-service integration | Contract tests against a Graylog 7.2 container |
+### External service — Graylog 7.0.6 authz endpoints
 
----
+| Endpoint | Method | Used by | Notes / gotchas |
+|---|---|---|---|
+| `/api/authz/shares/entities/{grn}/prepare` | POST | `get_entity_shares` (read), `share_entity` (dry-run + apply pre-flight) | `@NoAuditEvent`. Body `{selected_grantee_capabilities:{...}}`; empty body = pure read. Returns `active_shares`, `available_grantees`, `available_capabilities`, `validation_result`, `missing_permissions_on_dependencies` |
+| `/api/authz/shares/entities/{grn}` | POST | `share_entity` (apply) | **Full-replace** of modifiable grants. Returns HTTP **400 with the `EntityShareResponse` body** when `validation_result.failed()` — apply() must inspect the body, not just trust 2xx. Server runs `checkOwnership(grn)` |
+| `/api/authz/shares/user/{userId}` | GET | optional inverse-read tool | Paginated; `capability` / `entity_type` query filters; requires `users:edit` permission |
+| `/api/roles` | GET / POST | `list_roles` / `create_role` | Standard CRUD |
+| `/api/roles/{rolename}` | GET / PUT / DELETE | role read/update/delete | Keyed by **role name**, not id |
+| `/api/roles/{rolename}/members/{username}` | PUT / DELETE | `assign_role` / unassign | PUT adds a user to the role; keyed by name + username, no GRN |
+
+Capability enum (from `Capability.java`): `view`, `manage`, `own` — lower-case on
+the wire. `share_entity`'s zod schema should use `z.enum(["view","manage","own"])`.
+
+Permission gotchas (surface as upstream 403 — no new handling needed, the existing
+`GraylogPermissionError` mapping covers it): `prepare`/`updateEntityShares` call
+`checkOwnership(grn)` — the API token's user must *own* the entity (or be admin) to
+share it. `GET .../user/{userId}` requires `users:edit`. `create_role` requires
+admin. All Graylog-side; the MCP just passes the 403 through.
+
+### Internal boundaries
+
+| Boundary | Communication | Notes |
+|---|---|---|
+| `authz/` handlers ↔ `_shared/handler.js` | `defineMutatingHandler({name,schema,build,apply,summarize,requireConfirm})` | `build()` is async — already supported (`update_input`, `connect_pipelines_to_stream`, `delete_index_set` all use async build) |
+| `authz/` handlers ↔ `_shared/cascade-hash.js` | new thin wrapper `computeShareGrantHash` | Single-sourced canonical form; byte-identity pinned in `test/cascade-hash.test.js` |
+| `authz/` handlers ↔ `graylog/client.js` | `makeClient(conn).request(method,path,body)` | Unchanged. POST-with-body and POST-empty-body both supported (client sets `Content-Type` only when a body is present) |
+| `authz/grn-helpers.js` ↔ handlers | pure import | No I/O; trivially unit-testable |
+| `authz/index.js` ↔ `dispatch.js` | `register()` side-effect | Via `_register.js` barrel import |
+
+### New vs. modified files (explicit)
+
+**NEW files (all under `src/tools/authz/`):**
+- `index.js`, `schemas.js`, `grn-helpers.js`
+- `get-entity-shares.js`, `share-entity.js`
+- `create-role.js`, `assign-role.js` (and optionally `list-roles.js` / `get-role.js`)
+
+**MODIFIED existing files (minimal, additive only):**
+- `src/tools.js` — append the authz tool-definition objects
+- `src/tools/_register.js` — add `import "./authz/index.js";`
+- `src/tools/_shared/cascade-hash.js` — add the `computeShareGrantHash` thin wrapper
+- `test/cascade-hash.test.js` — pin the new wrapper's byte-identity
+
+**No changes** to `src/graylog/client.js`, `src/dispatch.js`,
+`src/tools/_shared/handler.js`, `dry-run.js`, `connection.js`, or any v2.3 read
+tool. The milestone is structurally additive — it satisfies the PROJECT.md
+"existing v2.3 tool contracts unchanged / connection-config additive only" constraints.
+
+## Suggested Build Order (dependency-ordered)
+
+1. **GRN helper + domain scaffold** — `grn-helpers.js` (`buildGrn`/`parseGrn`/`isGrn`
+   + `GRN_TYPES`), `schemas.js` skeleton, empty `index.js` barrel, the `_register.js`
+   one-line import. Pure, fully unit-testable, zero Graylog calls. *Hard prerequisite
+   for everything below.*
+
+2. **`get_entity_shares` (read path)** — plain async handler over
+   `POST .../entities/{grn}/prepare`. Ships the read model the write tool depends on,
+   and — being non-mutating — can be smoke-tested end-to-end against the live `test`
+   instance immediately, giving an early integration checkpoint that de-risks the
+   `prepare`-response parsing. *Depends on: step 1.*
+
+3. **`share_entity` (write path)** — `defineMutatingHandler` with async `build()`
+   doing prepare → read `active_shares` → **merge** → `computeShareGrantHash` →
+   `_confirmationToken`; `requireConfirm` gate; apply with `validation_result`
+   inspection. Add `computeShareGrantHash` to `cascade-hash.js`. Mandate the
+   three-grantee merge acceptance-gate test (Pattern 3). *Depends on: steps 1 + 2 —
+   it literally calls the same `prepare` endpoint the read tool wraps.*
+
+4. **Role management — `create_role`, `assign_role`** (+ optional `list_roles` /
+   `get_role`). Independent of the share path (different endpoints, no GRN merge —
+   `/api/roles` is keyed by plain role names). Can run as a parallel/trailing wave.
+   *Depends on: step 1 for schema conventions only.*
+
+**Phase-ordering rationale:** the GRN helper is a hard prerequisite for both share
+tools, so it leads. The read tool precedes the write tool because (a) `share_entity`'s
+`build()` calls the same `prepare` endpoint the read tool wraps — building the read
+tool first de-risks `prepare`-response parsing — and (b) the read tool is
+non-mutating and live-testable immediately. Roles trail because they share no code
+with the entity-share path and carry less blast radius; the share path is the
+milestone's headline value and stays on the critical path (1→2→3).
+
+If the roadmap splits this into two phases, the natural seam is **Phase A = entity
+sharing (steps 1-3)**, **Phase B = roles (step 4)**. Single-phase is also viable
+given the small surface (~4-6 tools).
 
 ## Sources
 
-| Source | Confidence | Notes |
-|--------|------------|-------|
-| `.planning/codebase/STRUCTURE.md` | HIGH | Existing layout, naming, extraction precedent |
-| `.planning/codebase/CONVENTIONS.md` | HIGH | Handler shape, error response shape, zod-declared-but-unused, async style |
-| `.planning/codebase/CONCERNS.md` | HIGH | Singleton-connection risk, dispatch chain size, query escaping precedent |
-| `.planning/codebase/ARCHITECTURE.md` | HIGH | Tool dispatch layer, clustering subsystem as registry precedent |
-| `src/index.js:38-104` (read) | HIGH | Actual current dispatch shape |
-| `src/tools/cluster-errors.js` (read) | HIGH | Extracted-handler precedent + errorResponse pattern |
-| `src/tools/template-mgmt.js` (read) | HIGH | Multi-tool-per-file precedent + resolveConnection helper pattern |
-| `src/clustering/index.js` (read) | HIGH | Registry pattern (Map + register/get/list/_clearForTests) |
-| `.planning/PROJECT.md` | HIGH | Scope boundaries, key decisions, dry-run default-true requirement |
-| Graylog 7.2 Java source (`source-code/graylog2-server/.../rest/resources/`) | MEDIUM | Referenced by PROJECT.md as authoritative — not directly read during this research pass; endpoint paths (`/api/streams`, `/api/system/pipelines/connections`) cited from PROJECT.md context and standard Graylog REST conventions, verify in implementation phase |
-| Graylog pipeline-processor functions (`source-code/graylog2-server/.../plugin/pipelineprocessor/`) | MEDIUM | Source of builtins catalogue; count estimate (~80–120) is order-of-magnitude, verify when building `pipeline-dsl/builtins.js` |
+- `source-code/graylog2-server/.../security/rest/EntitySharesResource.java` —
+  endpoint paths and methods (`POST .../entities/{grn}` apply,
+  `POST .../entities/{grn}/prepare` preview, `GET .../user/{userId}`),
+  `@NoAuditEvent` on prepare, `checkOwnership`, 400-with-body on validation failure. **HIGH**
+- `source-code/graylog2-server/.../security/shares/EntitySharesService.java` —
+  `updatePrimaryEntityShares()` confirms **full-replace / revoke-on-absence**
+  semantics; `getSelectedGranteeCapabilities()` doc comment ("frontend always
+  submits the full selection"); `getActiveShares()` = current modifiable grant set. **HIGH**
+- `source-code/graylog2-server/.../security/shares/EntityShareRequest.java` /
+  `EntityShareResponse.java` — request body shape (`selected_grantee_capabilities`,
+  `selected_collections`), response shape (`active_shares`, `available_grantees`,
+  `available_capabilities`, `validation_result`, `missing_permissions_on_dependencies`). **HIGH**
+- `source-code/graylog2-server/.../security/Capability.java` — `view`/`manage`/`own`
+  enum, lower-case wire form. **HIGH**
+- `source-code/graylog2-server/.../grn/GRN.java` + `GRNTypes.java` — 6-token GRN
+  format, mandatory `grn` prefix, registered entity types. **HIGH**
+- `source-code/graylog2-server/.../rest/resources/roles/RolesResource.java` — role
+  endpoints (`/api/roles`, `/api/roles/{rolename}`, `/api/roles/{rolename}/members/{username}`). **HIGH**
+- Existing codebase: `src/tools/pipelines/connect-pipelines-to-stream.js`
+  (GET-merge-POST precedent + Pitfall-2 acceptance gate), `src/tools/_shared/handler.js`
+  + `dry-run.js` + `cascade-hash.js` (mutating-handler factory, `requireConfirm`
+  gate, token mechanism, thin-wrapper pattern), `src/tools/index-sets/delete-index-set.js`
+  (async-build pre-flight + `_confirmationToken` precedent), `src/tools/_register.js`
+  + `src/dispatch.js` (registration wiring), `src/tools/pipelines/get-pipeline.js`
+  (read-handler shape), `src/tools/pipelines/index.js` (domain barrel pattern). **HIGH**
+
+> Version caveat: the source clone is 7.2.0-SNAPSHOT; the ship target is live 7.0.6.
+> The entity-share API (`EntitySharesResource`) has been stable since Graylog 4.x and
+> the `prepare`/replace-semantics design is unchanged across 7.0→7.2. Verify the exact
+> response field names against the live `test` instance during step 2 (the read tool)
+> before relying on them in step 3.
+
+---
+*Architecture research for: Graylog MCP authz/sharing tool surface (v3.1.0)*
+*Researched: 2026-05-19*

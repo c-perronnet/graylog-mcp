@@ -1,476 +1,356 @@
-# Domain Pitfalls — Graylog Admin Surface for AI-Agent Consumers
+# Pitfalls Research
 
-**Project:** Graylog MCP — Full Admin Surface
-**Domain:** Wrapping a mutating REST admin API for an LLM caller, against a live Graylog 7.2 cluster
-**Researched:** 2026-05-13
-**Overall confidence:** HIGH (source-code-backed claims), MEDIUM (cross-version drift — read from changelog TOMLs and code annotations rather than running a v6 server)
+**Domain:** Entity-sharing / authorization tooling for an MCP server against Graylog 7.0.6
+**Researched:** 2026-05-19
+**Confidence:** HIGH (source-verified against `EntitySharesResource.java`, `EntitySharesService.java`, `EntityShareRequest.java`, `EntityShareResponse.java`, `Capability.java`, `GRN.java`, `GRNTypes.java`, `GRNRegistry.java`, `AuthzRolesResource.java`, `RolesResource.java` in the local 7.2-SNAPSHOT clone; LOW where noted for 7.0.6-vs-7.2 divergence not verifiable against the live instance)
 
-## Scope
+> This file replaces the v3.0.0 admin-surface pitfalls research. It is scoped to the v3.1.0 AuthZ & Sharing milestone.
 
-This document focuses on pitfalls that are **specific to (a) Graylog 7.2's admin endpoints, or (b) an LLM being the caller**. It does not re-litigate generic distributed-system or REST-client pitfalls. Where a pitfall is generic but the evidence-of-occurrence is Graylog-specific, the Graylog-specific evidence is cited.
+## Source-Confirmed API Shape (read this first)
 
-Each pitfall has:
+The milestone brief says `PUT /api/authz/shares/{grn}`. **The source disagrees** — verify against the live 7.0.6 instance before building. From `EntitySharesResource.java`:
 
-- **Symptom** — how the agent or operator first notices it
-- **Root cause** — why Graylog or the agent loop produces it
-- **Prevention** — concrete code- or design-level countermeasure (no "be careful")
-- **Phase mapping** — which roadmap phase should land the countermeasure
+| Operation | Method + Path | Notes |
+|-----------|---------------|-------|
+| Prepare/preview a share | `POST /api/authz/shares/entities/{entityGRN}/prepare` | `@NoAuditEvent` — does not mutate |
+| Apply a share | `POST /api/authz/shares/entities/{entityGRN}` | NOT `PUT`. Mutates. |
+| Read a user's shares | `GET /api/authz/shares/user/{userId}` | Keyed by **user ID**, not username |
+| Generic prepare (no entity) | `POST /api/authz/shares/entities/prepare` | dependency-check across multiple GRNs |
 
-Phase names referenced here are placeholders the orchestrator will reconcile against the actual ROADMAP.md it builds: **Phase 0 — Foundation** (dispatch refactor, dry-run primitive, zod adoption, registry plumbing), **Phase N — Domain phases** (Streams, Pipelines, Inputs/Extractors, Index sets, Dashboards, Events), **Phase F — Final hardening** (snapshot tests, tool-description tightening, v7-vs-v6 audit).
+Request body for both prepare and apply is `EntityShareRequest`:
+```json
+{ "selected_grantee_capabilities": { "grn::::user:<userId>": "view" },
+  "selected_collections": [ ] }
+```
 
----
+This is the **complete desired grant set**, not a delta. That single fact drives Pitfalls 1, 3, and 7.
 
 ## Critical Pitfalls
 
-Mistakes that cause data loss, silent divergence, or rewrites.
+### Pitfall 1: Grant-set replacement silently revokes every other user's access
 
-### C1. `delete_indices=true` is the default on index-set deletion
+**What goes wrong:**
+`POST /api/authz/shares/entities/{entityGRN}` treats `selected_grantee_capabilities` as the full desired state. `EntitySharesService.updatePrimaryEntityShares` (lines 312–331) does three things: updates grants whose grantee is in the map, **creates** grants for new grantees, and **deletes every existing grant whose grantee is not a key in the submitted map** (`if (!selectedGranteeCapabilities.containsKey(g.grantee())) grantService.delete(g.id())`). An agent that calls `share_entity` with `{"grn::::user:bob": "view"}` to "add Bob" will, if Alice and a team already had grants, **delete Alice's and the team's access**. The `getSelectedGranteeCapabilities` doc comment confirms it: *"we expect the frontend to always submit the full selection not only added/removed grantees. If the grantee selection is empty, that means all shares should be removed."*
 
-**Symptom:** Agent removes a "temporary test index set" and the user loses **all** historical messages in that index set's Elasticsearch indices, including ones the agent never reasoned about.
+**Why it happens:**
+The endpoint name and the `share_entity` verb both imply "add a grant." REST intuition says POST appends. The replacement semantics are invisible unless you read the service code. The MCP tool author writes the obvious thing: take a grantee + capability, build a one-entry map, POST it.
 
-**Root cause:** `IndexSetsResource.delete` at `source-code/graylog2-server/graylog2-server/src/main/java/org/graylog2/rest/resources/system/indexer/IndexSetsResource.java:380-411`:
+**How to avoid:**
+- `share_entity` MUST be a read-modify-write, never a blind write. Mandatory sequence: (1) call `prepare` to get `active_shares`; (2) merge the requested grant into the existing `selected_grantee_capabilities` map; (3) submit the **merged** map. This is the exact GET-merge-POST pattern v3.0.0 already uses for pipeline↔stream connections — reuse that primitive.
+- The tool's input surface should be `{ grant: {grantee, capability} }` (a delta the agent expresses), NOT `{ grants: [...] }` (a full set the agent must assemble). The tool assembles the full set internally from the prepared state. Expose a separate `revoke` intent rather than making the agent omit a grantee.
+- The dry-run output must explicitly diff: "grants ADDED: …", "grants UNCHANGED: …", "grants that WOULD BE REMOVED: …". If the removed list is non-empty and the caller did not explicitly ask to revoke those, refuse and require an explicit confirmation flag.
+- The sha-256 confirmation token must be computed over the **full final grant set**, not just the delta — so an apply that would drop a grant the preview didn't show fails the token check.
 
-```java
-public void delete(@PathParam("id") String id,
-                   @QueryParam("delete_indices") @DefaultValue("true") boolean deleteIndices)
-```
+**Warning signs:**
+- The tool builds a request map containing only the grantee passed in by the agent.
+- No `prepare` call precedes the apply.
+- Dry-run output shows only what is added, never what is removed.
+- Integration test only asserts "Bob can now see the stream," never "Alice still can."
 
-The `@DefaultValue("true")` means if the agent issues `DELETE /system/indices/index_sets/{id}` without explicitly setting `?delete_indices=false`, Graylog kicks off `IndexSetCleanupJob` against the live Elasticsearch/OpenSearch cluster. The deletion is asynchronous (a system job) — the HTTP 204 returns immediately, the destruction continues in the background, and the agent will see "success" with no preview of what is gone.
-
-**Prevention:**
-1. The MCP wrapper for `delete_index_set` MUST require an explicit `deleteIndices: boolean` argument (no default), and the dry-run output MUST list, by name, every ES index that would be cleaned (call `GET /system/indexer/indices/{indexSetId}/list` first and include the response in the dry-run payload).
-2. Additionally enforce: if `deleteIndices=true` and the listed indices contain any messages (use the stats from `GET /system/indices/index_sets/{id}?stats=true`), the tool returns a confirmation token that must be echoed back as `confirm: "<token>"` for the apply call to proceed. This is a second guardrail above the standard `dryRun: false` flip.
-3. Default the **MCP tool**'s `deleteIndices` to `false` even though Graylog defaults it to `true`. The wrapper inverts the dangerous default.
-
-**Phase mapping:** Phase 0 (dry-run primitive design — this is the canonical "dryRun must show side-effects, not just request shape" example) + Phase N — Index sets.
-
----
-
-### C2. Stream deletion cascades silently to rules; pipeline connections become orphaned
-
-**Symptom:** Agent deletes a stream, then a `list_pipelines` shows the pipelines still exist but their `connected_streams` field is shorter; alerting rules that used the stream as a source stop firing with no error.
-
-**Root cause:** `StreamResource.deleteInner` at `StreamResource.java:418-432` calls `streamService.destroy(stream)`. The stream's rules are dropped at the database level (cascading on the Mongo `StreamRule` collection keyed by `streamId`). Pipeline-to-stream connections live in a separate collection (`PipelineStreamConnectionsService`) and are pruned by a different code path — but there's no atomic transaction; the agent sees only the 204 from the stream delete.
-
-The deletion can also throw `StreamGuardException` (line 426) which is mapped to a 400 — but the message is "stream has X dependent things" with no enumeration. The agent will retry or give up without learning what depended on it.
-
-**Prevention:**
-1. Before any stream-delete tool emits the request in dry-run, call `GET /streams/{streamId}/pipelines` and `GET /streams/{streamId}/rules`, and `GET /events/definitions` filtered by stream id (event definitions reference streams). Include the discovered dependents in the dry-run output under `cascades: { stream_rules: [...], pipeline_connections: [...], event_definitions: [...] }`.
-2. When the agent calls apply, the wrapper re-fetches the cascade list and **fails** if it grew since dry-run — refuse to delete with a "the world changed since you previewed" message. This is the only way to make dryRun→apply a safe pattern given the cluster is live.
-3. Map `StreamGuardException` 400s into a structured error with `kind: "stream_has_dependents"` and the dependents enumerated (parse the message string; lossy but better than the raw 400).
-
-**Phase mapping:** Phase 0 (cascade-preview pattern; reusable in pipeline and event-def deletes) + Phase N — Streams.
+**Phase to address:**
+Foundation/core-sharing phase — this is the headline structural defense. It cannot be retrofitted; the read-merge-write contract has to be the shape of `share_entity` from its first commit.
 
 ---
 
-### C3. Encrypted input config fields will silently zero out on update
+### Pitfall 2: GRN malformation — wrong type segment, grantee/target confusion, username-vs-userId
 
-**Symptom:** Agent reads an input via `get_input`, edits `bind_address`, and calls `update_input` echoing the full config back. Next start the input fails to bind because the TLS cert password (encrypted field) is now empty.
+**What goes wrong:**
+A GRN is `grn:<cluster>:<tenant>:<scope>:<type>:<entity>` — six colon-separated tokens (`GRN.parse`, lines 55–72). Common-but-real malformations:
+- **Wrong token count / scheme** — anything but exactly 6 tokens, or first token ≠ `grn`, throws `IllegalArgumentException` → HTTP 400.
+- **Wrong type segment** — the registry rejects unknown types: `newGRNBuilder` throws `"type <X> does not exist"` (GRNRegistry line 143). Valid types are a fixed set (`GRNTypes.java`): `stream`, `dashboard`, `search` (saved searches are type `search`, *not* `saved_search`), `event_definition`, `notification` (event notifications are `notification`, *not* `event_notification`), `user`, `role`, `output`, `report`, `builtin-team`, `grant`, `search_filter`, `favorite`, `last_opened`. Guessing a plausible-but-wrong type (`saved-search`, `eventdefinition`, `stream_id`) is a 400.
+- **Grantee/target confusion** — the *target* GRN goes in the URL path; the *grantee* GRN is a key inside `selected_grantee_capabilities`. Both are GRNs; swapping them is easy and the server cannot detect the mistake (it will happily try to share a user GRN entity with a stream-GRN grantee).
+- **Username-vs-userId-vs-GRN** — a grantee GRN for a user is `grn::::user:<userId>` where `<userId>` is the Mongo ObjectId, **not** the login name. `GET /api/authz/shares/user/{userId}` is also keyed by ID. But `AuthzRolesResource` and the legacy `RolesResource` are keyed by **username** / **rolename**. Three different identifiers for "a user" across three endpoints. Passing a username where a userId GRN is expected produces a grant against a non-existent grantee, or a silent no-op.
+- **Team grantee** — sharing with "everyone" is `grn::::builtin-team:everyone` (`GRNRegistry.GLOBAL_USER_GRN`); the type is `builtin-team`, not `team`.
 
-**Root cause:** `InputsResource.update` at `InputsResource.java:491-522`. The merge logic at lines 503-509 is explicit:
+**Why it happens:**
+GRN strings look like free text. The agent (and the tool author) will infer type names from entity domain names rather than from the registry. Graylog's own naming is inconsistent (`notification` GRN vs `event_notification` everywhere else; `search` GRN for saved searches). User identity has three representations and no compiler to catch a mismatch.
 
-```java
-mergedInput.put(MessageInput.FIELD_CONFIGURATION,
-    EncryptedInputConfigs.merge(origConfig, updatedConfig));
-```
+**How to avoid:**
+- Never let the agent hand-author GRN strings. Provide a `buildGRN(type, id)` helper with a `zod` enum of the **exact** valid type set from `GRNTypes.java`. Reject unknown types client-side with a message listing valid types.
+- Resolve human-friendly inputs to IDs *inside the tool*: accept a username, look up the userId via the users API, construct `grn::::user:<userId>`. Never trust a caller-supplied user GRN without verifying the user exists.
+- Validate the 6-token / `grn`-scheme structure client-side with a regex before any HTTP call — turn a server 400 into a clear client error.
+- Make target and grantee structurally distinct in the tool signature: `entity: {type, id}` vs `grantee: {kind: 'user'|'team'|'role', id}`. The tool builds both GRNs; the agent never sees raw GRN strings.
+- Cross-check: after building the grantee GRN, confirm its type is `user`/`builtin-team`/`role`; after building the target GRN, confirm its type is a shareable entity type (`stream`/`dashboard`/`search`/...). A grantee-shaped target or vice versa is a hard error.
 
-`EncryptedInputConfigs.merge` keeps the *original* encrypted value when the update payload contains the sentinel "redacted" placeholder, otherwise replaces it. If the agent reads via `GET /system/inputs/{id}` and naïvely posts back the same JSON, it sends the redacted placeholder string as a *value* — which `merge` interprets as either "keep" (if the placeholder is exactly the expected one) or "replace with this placeholder string" (if the agent's serialization dropped or transformed it). The behavior is "best case the agent gets lucky, worst case credentials silently wipe."
+**Warning signs:**
+- GRN strings appear as interpolated template literals anywhere in tool code.
+- The type segment is derived from a tool-domain name rather than a constant.
+- A test passes a login name as a userId.
+- HTTP 400 "is not a valid GRN string" or "type <X> does not exist" reaches the agent.
 
-**Prevention:**
-1. The MCP `update_input` tool MUST NOT accept a full-config blob. It MUST take a partial-update shape: `{ inputId, changes: { ...fields to change... } }`. The wrapper internally:
-   - Calls `GET /system/inputs/{inputId}` to fetch current config.
-   - Applies the changes to the non-encrypted fields only.
-   - For encrypted fields, only includes them in the PUT payload if the agent explicitly passed a non-placeholder value.
-2. Document in the tool description (top of agent's view) which input types have encrypted fields (TCP/TLS inputs, AWS inputs with credentials, syslog over TLS). Tool description is the agent's documentation.
-3. Snapshot test: dry-run `update_input` with a no-op changes object against a fixture input that has encrypted fields → assert encrypted fields are **absent** from the emitted payload.
-
-**Phase mapping:** Phase N — Inputs/Extractors. The partial-update pattern is reusable; document the precedent here.
-
----
-
-### C4. Pipeline-rule DSL generation: agent invents function names
-
-**Symptom:** Agent writes a rule like `then set_field("x", uppercase(some_field));` and gets a 400 from `POST /system/pipelines/rule` with `Unable to resolve function uppercase`. Or worse: the rule saves but at runtime in the pipeline processor throws `FunctionResolutionException` against every message that hits the rule — the agent never sees it because the failure is in Graylog's logs, not the create response. The actual function is `to_upper`.
-
-**Root cause:** Graylog has ~100+ built-in functions registered via `FunctionRegistry` (`source-code/graylog2-server/graylog2-server/src/main/java/org/graylog/plugins/pipelineprocessor/parser/FunctionRegistry.java`). The names follow snake_case (e.g. `to_string`, `to_long`, `regex`, `grok`, `set_field`, `lookup_value`), but the LLM's training data is full of Java-style `toUpperCase`, JS-style `toUpper`, etc. The agent **will** invent plausible function names.
-
-`POST /system/pipelines/rule/parse` (RuleResource.java:155-169) is a server-side validator that catches this — but only if the wrapper actually calls it before save.
-
-**Prevention:**
-1. Every rule-DSL-emitting tool (`create_pipeline_rule`, `update_pipeline_rule`, blueprints that generate rules) MUST call `POST /system/pipelines/rule/parse` as a pre-flight, **inside the dry-run output**. If parse returns a ParseException, the dry-run output surfaces `parseError: { line, column, message }` and the tool refuses to apply.
-2. Cache `GET /system/pipelines/rule/functions` (returns function descriptors) at connection-init time. Use it as the basis for a `list_pipeline_functions` MCP tool the agent can call before composing rules — and inject the function list into the description of `create_pipeline_rule` (truncated by category if context-bloat-sensitive).
-3. The parser also catches typoed field references (`message.surce` vs `source`), so the parse pre-flight is doubly valuable.
-
-**Phase mapping:** Phase N — Pipelines (highest-priority deliverable; the dry-run-pre-flights-with-server pattern starts here and propagates).
+**Phase to address:**
+Foundation phase — the GRN abstraction (`src/tools/authz/grn.js`) is a prerequisite for every authz tool and is explicitly a milestone requirement ("a GRN abstraction generalizes the sharing tool"). Build and unit-test it before any sharing handler.
 
 ---
 
-### C5. Event aggregation conditions: v6→v7.1 silently changed syntax
+### Pitfall 3: Self-lockout and the ownerless-entity trap
 
-**Symptom:** Agent (whose training data is from a v6 era) creates an event definition with `conditions: { expression: { type: "comparison", left: { type: "function", function: "count", parameter: "source" } } }`. On v7.1+, the function reference shape changed: parameters fold into the function name. Old: `count(source)`. New: `count_source`.
+**What goes wrong:**
+Two distinct self-harm modes:
+1. **Owner-check gate** — `EntitySharesResource.updateEntityShares` calls `checkOwnership(entity)` (RestResourceWithOwnerCheck), which requires the API token's user to hold `ENTITY_OWN` on the target. If the token user is an admin-by-role but not the entity *owner*, the share call returns **403 ForbiddenException** — even though the same token can edit the stream through other endpoints. Sharing requires `own`, not `manage`.
+2. **Ownerless entity** — `validateRequest` (EntitySharesService lines 397–446) refuses a request that would remove the last `OWN` grant: *"Removing the following owners <…> will leave the entity ownerless."* But because of the replacement semantics (Pitfall 1), a naive full-set write that simply forgets to re-include the current owner triggers exactly this. The request fails validation (HTTP 400 with a `validation_result`), which is the *good* outcome — but a tool that ignores `validation_result` and reports success is lying. Worse: if the entity is *already* ownerless, the guard is bypassed (line 415) and any owner-stripping write succeeds silently.
+3. **Self-grant removal** — note `getForTargetExcludingGrantee` excludes the sharing user's own grant from the existing set (line 272). So the sharing user's own grant is never touched by the replacement logic — you cannot remove your own access via this endpoint, which is a *safety feature*. But it also means the sharing user's own access is invisible in `active_shares`, so a tool that renders "current grants" from `active_shares` will under-report.
 
-**Root cause:** `changelog/7.1.0-rc.1/pr-24703.toml`:
-> Changed format of event aggregation conditions to use underscores instead of parentheses, e.g. 'count(source)' is now 'count_source'
+**Why it happens:**
+"Admin can do anything" intuition — but Graylog scopes sharing to entity ownership specifically. The ownerless guard interacts invisibly with replacement semantics. `validation_result` is a soft field in a 200-shaped response body on prepare, easy to skip.
 
-This is a payload-shape change with no version negotiation header. The endpoint still accepts the v6 shape on some 7.1 paths but the aggregation evaluator can't resolve the function, so the event definition saves successfully and then never fires.
+**How to avoid:**
+- Before applying, the tool must check that the merged grant set still contains at least one `own` grant *if the current set has one*. Surface this in dry-run as a hard pre-flight, not a post-hoc server error.
+- Treat `prepare`'s `validation_result.failed === true` as a blocking error: never proceed to apply, surface the `validation_result.errors` text and `context` (the list of removed-owner GRNs) verbatim to the agent.
+- On apply, the endpoint returns HTTP 400 with the `EntityShareResponse` in the body when `validationResult().failed()` (resource lines 166–170) — the tool must inspect the body on 400, not just throw on non-2xx.
+- Map a 403 from the sharing endpoints to a specific, actionable message: "the connection's API token user is not an *owner* of this entity — sharing requires `own`, distinct from edit/manage." Do not let it surface as a generic permission error.
+- When displaying current grants, note that the sharing user's own grant is excluded by design; label `active_shares` as "grants held by other grantees."
 
-**Prevention:**
-1. Pin the project to Graylog 7.2 (already decided in PROJECT.md). Document this format explicitly in the `create_event_definition` tool description with a worked example.
-2. Provide a `_convert_v6_event_aggregation` helper at the wrapper level: if the agent passes the old `count(field)` form, translate it to `count_field` and emit a warning in the dry-run output (`{ migrated_from_v6_shape: true, original: "...", emitted: "..." }`). Do NOT silently rewrite — surface the change.
-3. Snapshot test: emit dry-run for an event definition with the new shape; pin the expected payload byte-for-byte.
+**Warning signs:**
+- Tool reports apply success without inspecting `validation_result`.
+- 403 on a share call is reported as a connection/auth failure rather than an ownership gap.
+- Dry-run never mentions ownership.
+- No test for "share a stream the token user does not own."
 
-**Phase mapping:** Phase N — Events (the migrate-from-v6 helper is event-specific; the general "pin the version, snapshot the payload" pattern belongs in Phase 0).
-
----
-
-### C6. Dry-run lies because the server assigns the ID
-
-**Symptom:** Agent dry-runs `create_extractor`, sees `{ extractor_id: "<dry-run-placeholder>" }`, then applies and gets `{ extractor_id: "f47ac10b-58cc-4372-a567-0e02b2c3d479" }`. Later it tries to look up the extractor by the placeholder ID and 404s. Multiplied across blueprints (extractor → rule → pipeline connection), this cascades into broken multi-step flows.
-
-**Root cause:** Server-assigned IDs are pervasive in Graylog:
-- Stream IDs: `streamService.saveWithRulesAndOwnership(...)` returns the assigned ID (`StreamResource.java:241`).
-- Stream-create response: `Response.created(streamUri).entity(new StreamCreatedResponse(id)).build()` — ID exists only after `save`.
-- Extractor IDs: `final String id = new com.eaio.uuid.UUID().toString()` (`ExtractorsResource.java:128`) — **generated client-side in the resource handler**, but the agent's MCP wrapper has no way to know that ID before calling.
-- Event-definition IDs: returned from `eventDefinitionHandler.create(dto, ...)` on a 200 response.
-- View (dashboard) IDs: `dbService.saveWithOwner(dto.toBuilder().owner(...).build(), user)` returns the ID.
-
-**Prevention:**
-1. Distinguish two kinds of dry-run output:
-   - **`emittedPayload`** — the exact JSON that *would* be POSTed (deterministic, snapshot-testable).
-   - **`postApplyEstimate`** — the response shape with `<server-assigned>` placeholders for fields the server fills in (ids, timestamps, audit URIs). Mark these clearly with a sentinel like `{ id: "__SERVER_ASSIGNED__" }`.
-2. For blueprint tools that chain calls (e.g. `setup_error_stream_for_app` = create stream → create rule → connect pipeline), dry-run returns the **sequence of payloads** with explicit `dependsOn: { from: "step1.response.id", as: "streamId" }` annotations so the agent (and the user reviewing the preview) sees the chaining.
-3. On apply, the wrapper substitutes each server-assigned ID into subsequent payloads as it goes, and returns a transcript: `[{ step, request, response }, ...]`. If any step fails, the transcript shows where.
-
-**Phase mapping:** Phase 0 (dry-run primitive shape — this is *the* primary design constraint), Phase N — Blueprints (chained-ID substitution).
+**Phase to address:**
+Core-sharing phase. The `validation_result` handling and the ownerless pre-flight are part of the same dry-run pipeline as Pitfall 1's diff.
 
 ---
 
-### C7. Dashboard creation requires a pre-saved Search; widget IDs must match widget-position IDs
+### Pitfall 4: Ignoring prepare-response dependency and validation notices
 
-**Symptom:** Agent tries to `create_dashboard_with_widgets` in one call. Tool emits a `POST /views` and gets `400 BadRequest: Search <abc123> not available`. Agent retries, eventually figures out it needs to create a Search first, but the agent's two-step retry produces an orphan Search if step 2 fails.
+**What goes wrong:**
+`prepare` returns an `EntityShareResponse` (EntityShareResponse.java) with two fields a naive tool drops on the floor:
+- `missing_permissions_on_dependencies` — a map of dependency GRN → entity descriptors. Sharing a stream that is backed by an index set, or a dashboard that wraps a saved search, can leave the new grantee able to *see the entity but not its dependency*. Graylog computes this via `EntityDependencyResolver` + `EntityDependencyPermissionChecker`. The share still applies — Graylog does not block it — but the grantee gets a half-working entity (e.g. a dashboard they can open but whose widgets error).
+- `synced_entities` — on apply, `resolveImplicitGrants` (EntitySharesService lines 350–369) propagates the grant to *related* entities via `SyncedEntitiesResolver`. The apply mutates **more entities than the one in the URL**. A tool that reports "shared stream X" while Graylog also re-shared three synced views is under-reporting the blast radius.
 
-**Root cause:** `ViewsResource.create → createView → validateIntegrity` (`ViewsResource.java:294-328`) requires:
+**Why it happens:**
+The happy path (just `selected_grantee_capabilities` round-trips) works in a demo with no dependencies. `missing_permissions_on_dependencies` is empty for trivial entities, so it is easy to never notice the field exists. `synced_entities` only appears in the apply response, after the fact.
 
-```java
-final Search search = searchDomain.getForUser(dto.searchId(), searchUser)
-    .orElseThrow(() -> new BadRequestException("Search " + dto.searchId() + " not available"));
-```
+**How to avoid:**
+- The dry-run for `share_entity` must always run `prepare` and surface `missing_permissions_on_dependencies` non-empty as a **warning the agent must see** — ideally with the suggested fix ("grantee also needs `view` on index-set <GRN>; share that too or use the generic multi-entity prepare").
+- Use `POST /api/authz/shares/entities/prepare` (the generic form with `prepare_request` = list of dependent GRNs) when the agent's intent spans an entity + its dependencies, so the dependency check runs across the whole set.
+- The apply result's `synced_entities` must be echoed in the tool's success output: "also updated shares on: …". Do not hide it.
+- Because synced entities are mutated, the confirmation-token / drift logic (Pitfall 7) must account for them: a drift check on only the primary entity misses synced-entity changes.
 
-The dashboard (`ViewDTO`) carries `searchId` referencing a pre-existing `Search` entity. `validateSearchProperties` (lines 329-379) then asserts:
-- `dto.state().keySet()` ⊆ `search.queries().map(Query::id)` (state query IDs must match search query IDs)
-- widget search-types referenced in `widgetMapping` ⊆ the search's `searchTypes`
-- `widgetPositions.keySet()` ⊇ `widgets.map(WidgetDTO::id)` (every widget needs a position, no orphans)
+**Warning signs:**
+- The tool's prepare-response parser only reads `selected_grantee_capabilities` / `active_shares`.
+- Dry-run output has no "dependencies" section.
+- Apply success message names exactly one entity.
 
-A handcrafted dashboard payload that fails any of those three constraints returns 400 with a useful-but-cryptic error like "Widget positions don't correspond to widgets, missing widget positions [w-123]; widget IDs: [w-123, w-456]; widget positions: [w-456]".
-
-**Prevention:**
-1. `create_dashboard` MUST be a two-step blueprint, even in single-tool form: internal step 1 creates the Search via `POST /views/search`, step 2 creates the View. Return the chained transcript per C6. Never expose a `create_dashboard` that takes a `searchId` parameter — let the wrapper own the linkage.
-2. Widget-template library generates Search-query-fragments AND widget-position-fragments together. Each template is a `{ widget, position, searchType }` triplet so the dashboard composer cannot produce mismatched sets.
-3. Client-side validator before emitting: check `widgetPositions.keys() == widgets.map(id)` and reject with a clear error before the request is sent. Saves a round-trip and gives the agent a better error to reason about.
-4. Time-range desync: each widget has its own `timerange` field; the dashboard has a global time-range too. Widget time ranges override. Templates default widget time ranges to **inherit-from-dashboard** (omit the field) unless the user/agent explicitly opted into a per-widget override.
-
-**Phase mapping:** Phase N — Dashboards. The "blueprint owns the chain, agent never sees IDs" pattern documented here is reusable for the blueprint layer.
+**Phase to address:**
+Core-sharing phase for the primary-entity dependency warning; a follow-up phase (or the dashboard/saved-search generalization phase) for the multi-entity generic-prepare flow, since dashboards are the entities with the richest dependency graphs.
 
 ---
 
-## Moderate Pitfalls
+### Pitfall 5: Capability enum mistakes (`view` / `manage` / `own`)
 
-### M1. Event-definition `?schedule=true` default starts processing immediately
+**What goes wrong:**
+The `Capability` enum (`Capability.java`) has exactly three values, serialized lowercase: `view`, `manage`, `own`. Mistakes:
+- **Wrong casing / wrong tokens** — `View`, `READ`, `read`, `edit`, `admin`, `write` are all invalid. Jackson will reject an unknown enum value → HTTP 400. `read`/`write`/`edit` are intuitive but wrong.
+- **Severity confusion** — the priority order is `view`(1) < `manage`(2) < `own`(3). `manage` lets a grantee edit *and re-share* the entity; `own` additionally lets them delete it and remove other owners. An agent asked to "give Bob access to look at the stream" that picks `manage` (or `own`) over-grants — and because `manage` confers re-sharing, Bob can then widen access further. Over-granting is a silent privilege escalation, not an error.
+- **`own` and the ownerless guard** — granting `own` is fine; *downgrading* the last `own` to `manage` trips the Pitfall 3 guard.
+- **Capabilities are not the same as RBAC roles** — a capability is per-entity (a grant); a role is a global permission bundle. Confusing "give manage capability" with "assign a role" produces the wrong tool call entirely.
 
-**Symptom:** Agent creates an event definition with dry-run preview that looked harmless, applies it, and now Graylog is running it on every message — including across historical indices if the parameters specify a backfill timerange.
+**Why it happens:**
+"view/manage/own" is a Graylog-specific vocabulary; CRUD/RBAC intuition supplies `read`/`write`/`edit`/`admin`. The agent will reach for the least-surprising word. Severity ordering is undocumented at the API surface — you only see it in the enum's `priority` field.
 
-**Root cause:** `EventDefinitionsResource.create` (lines 314-333) takes `@QueryParam("schedule") @DefaultValue("true") boolean schedule`. The default-true is benign for a human in the web UI (you typically *want* the alert to start firing) but for an LLM iterating on configurations, it means every preview-then-apply cycle puts a new live event into rotation.
+**How to avoid:**
+- `zod` enum pinned to exactly `['view','manage','own']`, lowercase, with a refusal message that lists the three and rejects synonyms explicitly (map common wrong inputs — `read`→`view`, `edit`/`write`→`manage`, `admin`→`own` — to a hint, but still require the caller to confirm rather than silently coercing).
+- Default to the **least** privilege: if the intent is ambiguous ("give access"), the tool should choose `view` and say so in the dry-run, never `manage`/`own`.
+- The dry-run must spell out what each chosen capability allows in plain language ("`manage` — grantee can edit AND re-share this stream to others").
+- Optionally cross-check against the live `available_capabilities` list in the `prepare` response rather than hardcoding — it is authoritative for the running version.
+- Keep capability-grant tooling and role-assignment tooling clearly separated in naming so the agent does not conflate them.
 
-The same default is on `update` (line 344) — toggling any field also re-enables scheduling.
+**Warning signs:**
+- The capability schema is `z.string()` rather than a 3-value enum.
+- The tool silently maps `read`→`view` without telling the caller.
+- Dry-run shows the capability token but not its meaning.
+- Default capability is `manage` or `own`.
 
-**Prevention:**
-- The MCP `create_event_definition` tool defaults `schedule: false`. Agent must explicitly opt in. Update follows the same.
-- The dry-run output explicitly states: `wouldStartScheduling: true|false`.
-- Provide an `enable_event_definition` / `disable_event_definition` pair (wraps `PUT /events/definitions/{id}/schedule|unschedule` — note `@Consumes(WILDCARD)` on those endpoints, lines 422 and 453 — empty body OK).
-
-**Phase mapping:** Phase N — Events.
-
----
-
-### M2. Stream/event/view/index-set create returns inconsistent status codes & shapes
-
-**Symptom:** Agent code that assumes `201 + Location + { id: ... }` works for streams, breaks for event definitions. Code that assumes a flat ID-only response works for streams, breaks for dashboards (full DTO back).
-
-**Root cause:** Survey of the create endpoints:
-| Endpoint | Status | Body |
-|---|---|---|
-| `POST /streams` | **201** | `{ stream_id }` + `Location` header (StreamResource.java:243) |
-| `POST /events/definitions` | **200** | Full `EventDefinitionDto` (line 332) |
-| `POST /views` | **200** | Full `ViewDTO` |
-| `POST /system/inputs` | **201** | `{ id }` + `Location` (InputsResource.java:450) |
-| `POST /system/indices/index_sets` | **200** | Full `IndexSetResponse` (line 284-286) |
-| `POST /system/inputs/{inputId}/extractors` | **201** | `{ extractor_id }` + `Location` (ExtractorsResource.java:148) |
-| `POST /streams/{streamId}/rules` | **201** | `{ streamrule_id }` |
-| `POST /system/pipelines/rule` | **200** | `RuleSource` (full body) |
-| `POST /events/definitions/{id}/duplicate` | **200** | Full `EventDefinitionDto` |
-| `PUT /system/inputs/{id}` | **201** | (note: PUT returning 201 — confusing) `{ id }` + Location |
-
-**Prevention:**
-- Wrap response normalization in a single helper that returns `{ id, body }` regardless of where the ID lives (Location header, response body field, full DTO). The helper documents the per-endpoint inconsistency in one place.
-- Snapshot test the create-response normalizer per resource type — fixture each variant.
-
-**Phase mapping:** Phase 0 — Foundation (the response normalizer is cross-cutting).
+**Phase to address:**
+Core-sharing phase — part of the `share_entity` input schema. Trivial to get right if done at schema-definition time, expensive to retrofit after the agent has learned the wrong vocabulary.
 
 ---
 
-### M3. Pipeline rule DSL: string escaping, type coercion, `then` block semantics
+### Pitfall 6: 7.0.6-vs-7.2 divergence in the authz API surface
 
-**Symptom:** A rule like `when has_field("user.name") then set_field("u_n", $message.user.name);` fails because `.` is parsed as field-traversal, not as part of an identifier. Or a rule sets `set_field("count", to_string($message.count))` and downstream pivot aggregations break because the field is now a string. Or the agent emits `when contains(to_string($message.size), "1024") then ...` thinking `contains` is a Boolean test of substring — it is, but the rule will fire on every message where `size` contains `1024` as a substring (incl. `10240`, `102400`).
+**What goes wrong:**
+The local source clone is **7.2.0-SNAPSHOT**; the ship + test target is **7.0.6**. Everything in this document is read from 7.2 source. Known and suspected divergence points:
+- The brief's `PUT /api/authz/shares/{grn}` may be a real 7.0.x path that was restructured to `POST /api/authz/shares/entities/{entityGRN}` later — or the brief may simply be inaccurate. **Unverified against 7.0.6.** This must be confirmed against the live instance's actual Swagger/`api-browser` before any handler is written.
+- `EntityShareResponse` fields may differ: `synced_entities` and the `SyncedEntitiesResolver` machinery look comparatively recent; a 7.0.6 response may omit `synced_entities` entirely. A tool that assumes the field exists will throw on undefined access.
+- The GRN type set may be smaller in 7.0.6 (`report`, `search_filter`, `last_opened`, `favorite` are plausible later additions). Pinning the `zod` enum to the 7.2 list could *accept* a type the live server rejects.
+- `available_capabilities` is computed server-side — trust the live `prepare` response over any hardcoded 7.2 assumption.
+- Role endpoints: two coexisting surfaces (`/authz/roles` and legacy `/roles`) — their relative completeness in 7.0.6 is unverified.
 
-**Root cause:** Three different agent-DSL traps stacked:
+**Why it happens:**
+Reading source is faster than hitting the live instance, and the source is two minors ahead. v3.0.0's own deferred list already records one such drift ("IndexRangesUpdateJob" conceptual vs the real 7.0.6 class name).
 
-1. **Escaping.** The pipeline rule grammar is in `source-code/graylog2-server/graylog2-server/src/main/antlr4/org/graylog/plugins/pipelineprocessor/parser/RuleLang.g4`. String literals are double-quoted; embedded `"` must be `\"`, and `\` must be `\\`. The agent will produce raw user-provided strings inline. Same risk shape as the unescaped Lucene query bug already flagged in CONCERNS.md.
+**How to avoid:**
+- **Per the project's own Key Decision: live 7.0.6 behaviour wins on every divergence.** Before writing any authz handler, capture the live instance's API browser / Swagger for `/authz/shares` and `/authz/roles`, and a real `prepare` response from a throwaway entity, as fixtures.
+- Treat every `EntityShareResponse` field as optional in the parser (`zod` `.optional()` / `.passthrough()`), defensively defaulting `synced_entities`/`missing_permissions_on_dependencies` to empty.
+- Source the GRN type enum and capability enum from a live probe where feasible, or at minimum gate them behind a "verified against 7.0.6" checklist item.
+- Do not branch on version — single target — but DO write a smoke test that asserts the live 7.0.6 endpoint paths and response shape, so a wrong assumption fails fast and loudly.
 
-2. **Type coercion.** Graylog distinguishes `long`, `double`, `string`, `boolean`. Comparison operators (`==`, `<`, `>`) in the rule language don't auto-coerce in all directions; `"5" == 5` evaluates differently from `5 == 5`. Functions like `to_long`, `to_double`, `to_string` are explicit but easy to forget.
+**Warning signs:**
+- Handler code cites a 7.2-source line as authority for a path or field with no live confirmation.
+- The parser requires `synced_entities`.
+- No captured 7.0.6 `prepare`/apply fixture exists.
 
-3. **`then` block semantics.** The grammar says: `ruleDeclaration: Rule name=String When condition=expression (Then actions=statement*)? End`. The `then` block runs **only if the `when` evaluates truthy**. The agent's mental model from imperative languages may be "the `then` is a continuation" — it is not. Crucially, a `when` condition like `has_field("x") && to_long($message.x) > 100` will short-circuit on missing field; an agent that splits this into `when has_field("x") then if to_long(...) > 100 then ...` will discover that pipeline rules have no `if` statement (only function calls and `let` assignments).
-
-**Prevention:**
-1. **Parse pre-flight** (already specified in C4) catches escaping errors and structural errors. This is the primary defense.
-2. Provide a `simulate_pipeline_rule` MCP tool that wraps `POST /system/pipelines/rule/simulate` (RuleResource.java:171-182) — the agent can simulate against a sample message before saving. **This is uniquely valuable because the simulator catches semantics bugs the parser can't**: type-coercion errors at runtime, unintended field-collision in `set_field` overwriting an existing field, etc.
-3. Provide a `generate_pipeline_rule_dsl` helper that takes structured input (`{ when: { type: "has_field", field: "x" }, then: [{ type: "set_field", target: "y", value: { source: "x" } }] }`) and emits the DSL string with correct escaping. Agent prefers structured input; the wrapper owns string assembly. Documented in tool description: "If you have a structured intent, use `generate_pipeline_rule_dsl`; only emit raw DSL if you need a function the structured form doesn't cover."
-4. The agent's rule template library should include each of the ~20 common patterns (route to stream by field, drop noisy events, enrich from lookup table, normalize timestamp) as canned generator inputs so most rules never go through agent-authored DSL at all.
-
-**Phase mapping:** Phase N — Pipelines.
-
----
-
-### M4. Agent loop: idempotency — retried creates produce duplicates
-
-**Symptom:** Agent calls `create_stream({ title: "App Errors" })`; transient network error mid-response; agent retries; two streams named "App Errors" now exist with different IDs. Subsequent `list_streams` returns both; agent picks one (the "first"), starts attaching rules. Half the rules go to the wrong stream.
-
-**Root cause:** Graylog stream create has no application-level idempotency key. `StreamResource.create` (lines 218-253) assigns the ID server-side and Mongo's uniqueness constraint is on `_id`, not on `title`. Duplicate titles are explicitly allowed.
-
-**Prevention:**
-1. Every create-tool MUST take an optional `idempotencyKey: string` parameter. The wrapper, on apply:
-   - List existing entities of that type, find any tagged with `{ "mcp_idempotency_key": "<key>" }` in their metadata or description.
-   - If found, return that entity instead of creating a new one. Mark the response `{ idempotent: true, existing: true }`.
-   - If not found, create and tag it.
-2. Where Graylog has no metadata slot (most cases), encode the key in the description field with a fixed prefix `[mcp:idem:abc123]`. Ugly, but works without schema changes.
-3. The MCP-level **dispatch layer** auto-generates an idempotency key from a hash of `(connection, tool name, normalized args)` when the agent omits one. The default-on idempotency catches retries the agent didn't realize were retries.
-4. Document the tag-prefix in `list_*` tool descriptions: "Entities created by this MCP carry `[mcp:idem:...]` in their description; this is metadata, not user content."
-
-**Phase mapping:** Phase 0 — Foundation (the idempotency primitive is cross-cutting; every domain phase inherits it).
+**Phase to address:**
+Foundation phase — a live-API reconnaissance task must precede handler implementation. Make "7.0.6 endpoint shape captured as fixture" an explicit Phase 0 acceptance criterion.
 
 ---
 
-### M5. Agent loop: listing-before-creating is skipped under context pressure
+### Pitfall 7: Drift between prepare/preview and apply (TOCTOU)
 
-**Symptom:** Agent's context window is full, so it skips the `list_streams` call before `create_stream`. Now there are two "App Errors" streams (or, worse, an "App Errors" stream and an "App errors" stream — case-different).
+**What goes wrong:**
+Between the `prepare`/dry-run and the `apply`, another admin (or the web UI, or a synced-entity update) changes the entity's grants. Because apply is full-set replacement (Pitfall 1), the agent's merged set was computed from a *stale* `active_shares`. Concretely: dry-run reads grants {Alice:own, Carol:view}, agent merges in {Bob:view} → submits {Alice:own, Carol:view, Bob:view}. Meanwhile another admin adds {Dave:manage}. The apply submits the 3-entry set, which **deletes Dave's brand-new grant** — a silent revocation of a change made seconds ago. This is exactly the TOCTOU class v3.0.0's cascade-hash primitive (`src/tools/_shared/cascade-hash.js`) was built to defend against.
 
-**Root cause:** Pure LLM-loop behavior. The agent's heuristic is "create what was asked for"; the disciplined "list first" step is the kind of thing that gets dropped when the context window is under pressure or when the agent's plan compressed multiple actions.
+**Why it happens:**
+The replacement semantics turn any stale read into a destructive write. The shares endpoint has no optimistic-concurrency token (no ETag/version). A dry-run that produced a confirmation token over only the *delta* (not the full resulting set, and not the precondition state) cannot detect that the precondition changed.
 
-**Prevention:**
-1. The `create_*` tools internally call list-then-check **before emitting the dry-run output**. The dry-run output explicitly states: `existingMatches: [{ id, title, similarity_reason: "exact match" | "case-different" | "prefix" }]`. The agent now sees the conflict in its preview without having to have called list first.
-2. Add a `conflict_policy` argument: `"fail" | "rename" | "reuse_existing"`. Default `"fail"` for creates; `"reuse_existing"` is the implicit semantic of idempotency-key path; `"rename"` auto-appends ` (2)`, ` (3)` etc.
-3. The list-then-check is cheap (one extra GET per create) and prevents an entire class of agent error.
+**How to avoid:**
+- Reuse the cascade-hash pattern: at dry-run, hash the *current full grant set* of the target entity (and of any `synced_entities`). The confirmation token covers that hash.
+- At apply time, re-`prepare`, recompute the hash, and **refuse with a `grants_changed_since_preview` error** if it differs — exactly the `cascade_changed_since_preview` refusal v3.0.0 uses for stream deletes.
+- On refusal, return the new `active_shares` so the agent can re-run the dry-run against fresh state.
+- Because synced-entity grants change out of band, include them in the hash, or accept that synced entities are best-effort and surface that caveat.
+- Keep the prepare→apply window short; do not let a dry-run token be reusable indefinitely.
 
-**Phase mapping:** Phase 0 — Foundation (uniform create-conflict policy primitive).
+**Warning signs:**
+- The confirmation token is computed over the request delta, not the resulting full set + precondition.
+- Apply does not re-read state before writing.
+- No `grants_changed_since_preview` style refusal path exists.
+- Tests never simulate concurrent modification.
 
----
-
-### M6. Token consumption: list responses balloon the agent's context
-
-**Symptom:** A cluster with 200 streams and 100 pipelines is normal. `list_streams` returns ~500 tokens per stream (id, title, description, rules array, creator, timestamps, default index set, etc.). One call returns ~100KB of JSON — eats the context budget for the rest of the agent's work, and the agent has no way to skip fields it doesn't need.
-
-**Root cause:** The default Graylog list responses are dense. `StreamListResponse` (StreamResource.java:299-305) returns the full `Stream` object including embedded rules. The MCP currently wraps responses with a single `JSON.stringify` (per CONCERNS.md, line 47).
-
-**Prevention:**
-1. Every list tool MUST default to a **projection**: `id, title, description` only. Add a `fields` argument: agent opts in to `"all"` or a specific list. Default-deny on everything else.
-2. Every list tool MUST default to a small `limit` (25) and require explicit `limit` to go higher. Pagination is exposed (page/per_page parameters from Graylog).
-3. For deep details, the agent uses `get_<entity>(id)` — single-entity reads with full body. Pattern: list-with-projection finds candidates, single-get loads detail.
-4. Tool description includes a quantitative hint: "default returns ~50 tokens per stream; use `fields:'all'` for ~500 tokens per stream."
-
-**Phase mapping:** Phase 0 — Foundation (projection helper) + every read-shaped tool.
+**Phase to address:**
+Core-sharing phase — drift refusal is part of the same apply pipeline as Pitfall 1's merge and must ship with it. Directly reuse `src/tools/_shared/cascade-hash.js`.
 
 ---
 
-### M7. Agent loop: tool discovery breaks down beyond ~30 tools
+### Pitfall 8: Testing entity-sharing against a LIVE production Graylog
 
-**Symptom:** With ~80 tools total (27 existing + ~50 new), the agent picks `update_stream` when it should have used `pause_stream`, or invokes `list_pipeline_rules` when it should have used `list_pipelines`. The mental model "find the right tool" gets noisier as the catalogue grows.
+**What goes wrong:**
+The `test` connection is real production UNESCO infrastructure (per project memory: *"the test connection is live production Graylog, not a sandbox"*). Sharing tools mutate **who can read production logs**. A careless integration test can:
+- Grant a real user (or `builtin-team:everyone`) `view`/`manage`/`own` on a real production stream — actual exposure of production log data.
+- Trip Pitfall 1 and **revoke** a real production user's legitimate access mid-test.
+- Leave orphan grants behind if a test fails between create and cleanup.
+- Send real audit events / notifications to real admins.
 
-**Root cause:** LLM tool selection scales sublinearly with catalogue size; tool *descriptions* compete for the agent's attention. The MCP protocol passes the full tool list with every request — descriptions live in the context window.
+**Why it happens:**
+v3.0.0 already deferred 8 live-mutation tests to manual UAT for exactly this reason. Sharing is higher-blast-radius than any v3.0.0 domain because the failure mode is *data exposure*, not config breakage. The temptation is to "just test against the real streams" because they are there.
 
-**Prevention:**
-1. **Naming convention:** every tool name is `<verb>_<domain>_<noun>` where verb ∈ `{list, get, create, update, delete, enable, disable, simulate, validate, connect, disconnect}` and domain ∈ `{stream, pipeline, rule, input, extractor, index_set, dashboard, widget, event_def, event_notification, blueprint}`. The agent learns the schema instead of 80 individual names.
-2. **Descriptions are budgeted:** ≤2 sentences per tool, ≤200 chars. The first sentence is what it does; the second is "when to use this vs. the obvious alternative." Tools without a discrimination second-sentence are red flags.
-3. **Provide a meta-tool** `list_admin_tools(domain?)` that returns a brief inventory grouped by domain. Agent calls this once at the start of a session if it needs to orient. Avoids the cost of fitting all 80 descriptions in every system prompt.
-4. **Blueprint catalogue is separate** from CRUD primitives: `list_blueprints()` returns the curated set with a one-line "what it does" per blueprint. CRUD tools are not in that list; they're discovered via the naming convention.
-5. Pre-merge gate: read the tools.js diff and confirm every new tool has a discrimination sentence. Trivial automated check, prevents description bloat.
+**How to avoid:**
+- **Default every test to `dryRun: true`.** The vast majority of sharing logic — GRN construction, capability validation, merge logic, diff rendering, `validation_result` parsing, drift detection — is exercised entirely by `prepare` (`@NoAuditEvent`, non-mutating) plus unit tests over captured fixtures. No real grant needs to be written to test the read-merge-write contract.
+- For the unavoidable apply-path tests: create a **throwaway entity** (a disposable stream the test itself creates and deletes) and share it only with a **dedicated non-human test user / test team** created for this purpose — never a real user, never `everyone`, never a real production stream.
+- Wrap every live mutation test in setup/teardown that asserts cleanup; on any failure, the teardown must still revoke. Prefer the existing `_testConnection` magic-arg pattern and fixture-replay so most tests never touch the network.
+- Capture real `prepare` responses once, as fixtures, and run the bulk of the suite offline against them.
+- Follow v3.0.0 precedent: classify real apply-against-production as **HUMAN-UAT**, gated behind explicit consent, not part of `npm test`.
+- Never use `builtin-team:everyone` as a grantee in any automated test under any circumstance.
 
-**Phase mapping:** Phase F — Final hardening (tool-description audit at the end, when the full catalogue is known) + every phase enforces the naming convention.
+**Warning signs:**
+- An integration test references a real production stream ID.
+- A test grants to a real username or to `everyone`.
+- `dryRun: false` appears in a test that is not explicitly a gated UAT.
+- No teardown, or teardown that is skipped on failure.
 
----
-
-## Backward-Compat Risks: v2.3 Read Tools on Graylog 7.2
-
-The PROJECT.md requires verifying existing read tools still work on v7.2 (no refactors, just fix what's broken). Based on the changelog TOMLs and code annotations, these are the highest-risk endpoints to audit. Each entry lists the specific risk and a fast verification path.
-
-| Endpoint / Behavior | v7 Risk | How to verify |
-|---|---|---|
-| `GET /api/streams` (used by `fetchStreams`, query.js:85) | Marked `@Deprecated` in StreamResource.java:297. The non-deprecated path is `/api/streams/paginated`. The bare endpoint still works in 7.2 but may go away. Response shape: `StreamListResponse { total, streams: [...] }`. | Smoke test: hit `/api/streams` against 7.2, assert shape unchanged. Plan a follow-up: migrate to `/paginated` next milestone. Not blocking. |
-| `POST /api/views/search/sync` (search backbone) | OpenSearch client migration (changelog/7.1.0-rc.1/pr-25390) — internal storage layer changed. Aggregation result shapes are most at risk. The 4-fallback chain in `getLogHistogram` (CONCERNS.md) is precisely the kind of code that quietly accommodates such changes by accident. | Run all four histogram fallbacks individually against 7.2 (not the union). At least one is likely to have changed its trip points. |
-| Stream rule POST/PUT payload | `changelog/7.1.0-rc.1/issue-25609.toml`: "Fix stream rule update request payload". Implies the payload shape was buggy and was fixed in 7.1. v2.3 doesn't currently mutate stream rules (read-only), but the milestone adds CRUD → use **only** the post-7.1 payload shape from the current source (`CreateStreamRuleRequest` in `streams/rules/requests/`). | Read `CreateStreamRuleRequest.java`; do not rely on any blog post or older Swagger doc for payload shape. |
-| `whitelist` → `allowlist` rename (v7.0, changelog issue-21034) | Anywhere v2.3 reads a stream rule's `"whitelist"` field, or any URL allowlist field on outputs/notifications, will return `"allowlist"` on v7. v2.3 doesn't appear to consume these fields, but verify. | grep src/ for `whitelist` — none expected; document expected absence. |
-| Event aggregation conditions (changelog 7.1 pr-24703) | `count(field)` → `count_field`. v2.3's `events.js` is read-only on event definitions (`fetchEventDefinitions`), so reading a v7 event def returns the new shape — agent reading the description string gets the new form. New writes (this milestone) must use the new form. | Existing read tools are fine. Document the shape change in `create_event_definition` description. |
-| Audit-event side-effects | Most v2.3 endpoints are `@NoAuditEvent`. Most new admin endpoints are `@AuditEvent(type = ...)`. Audit events are a side-effect of writes even when the user didn't ask for them — agent should know that every admin call writes to the Graylog audit log. | Not a breakage. Worth noting in MCP top-level documentation: "every admin mutation produces an audit-log entry on the Graylog server, even dry-run=false single calls; this is by design and is the operator's primary visibility into agent actions." |
-| `GET /api/events/definitions` pagination | Resource defines both `/paginated` (line 188) and a deprecated bare `GET` (line 247-250, `@Deprecated`). v2.3 uses the deprecated path. Same migration story as streams. | Smoke test: hit current path on 7.2. Migrate next milestone. |
-| `GET /api/events/notifications` | Listed in INTEGRATIONS.md as v2.3's path. Verify against 7.2 EventNotificationsResource; format may have added fields (additive is fine, removed fields are not). | Smoke test, assert shape contains expected fields. |
-
-**Confidence:** MEDIUM. Drawn from changelog TOMLs and code annotations in the 7.2.0-SNAPSHOT source. Not validated against a running v6 instance — that's the verification phase's job.
+**Phase to address:**
+Every phase — but the testing strategy (fixture capture, throwaway-entity harness, dedicated test user/team) must be established in the Foundation phase before the first apply handler exists, and re-asserted as a gate in the final hardening phase.
 
 ---
 
-## Test-Coverage Pitfalls
+## Technical Debt Patterns
 
-The CONCERNS.md flags that `npm test` is broken (references nonexistent `test-server.js`), there's no runner, and four ad-hoc test scripts live at the repo root. Adding ~50 mutating tools to this surface is the highest test-debt-creation event in the project's history. The choices below are about *what is non-negotiable vs nice-to-have*.
+| Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
+|----------|-------------------|----------------|-----------------|
+| `share_entity` takes a full grant array instead of read-merge-write | Simpler tool, one HTTP call | Every caller must remember to include all existing grants or silently revoke them (Pitfall 1) | Never — the merge is the whole point of the tool |
+| Hardcode GRN type / capability enums from 7.2 source | No live probe needed | Accepts types/values the live 7.0.6 server rejects, or rejects valid ones (Pitfall 6) | Only with a "verified against 7.0.6" checklist item closed |
+| Confirmation token over the request delta only | Less to hash | Misses out-of-band grant changes; TOCTOU revocation (Pitfall 7) | Never |
+| Skip `validation_result` / `missing_permissions_on_dependencies` parsing | Smaller response model | Reports false success; leaves grantees with half-working entities (Pitfalls 3, 4) | Never |
+| Accept username as grantee and interpolate into a user GRN | No user-lookup call | Grants against non-existent grantees; silent no-ops (Pitfall 2) | Never — always resolve to userId first |
+| Test apply paths against real production streams | Real coverage fast | Production log exposure / real revocations (Pitfall 8) | Never — throwaway entity + test user only, gated UAT |
 
-### Non-negotiable
+## Integration Gotchas
 
-1. **Dry-run snapshot tests for every mutating tool.** Each tool's dry-run output for a fixed fixture argument set is byte-compared against a checked-in snapshot. This catches: agent-perceived payload drift, accidental field name changes, accidental side-effect-on-dry-run bugs. Node 22's stable `t.snapshot()` is the recommended primitive (per STACK.md). Without snapshot tests, dry-run as a safety primitive is unverifiable.
+| Integration | Common Mistake | Correct Approach |
+|-------------|----------------|------------------|
+| `POST /authz/shares/entities/{grn}` | Treating it as additive (REST POST intuition) | It is full-set replacement; read-merge-write always (Pitfall 1) |
+| `share_entity` path/method | Using brief's `PUT /api/authz/shares/{grn}` | Source shows `POST /api/authz/shares/entities/{entityGRN}`; verify live 7.0.6 first (Pitfall 6) |
+| Grantee identity | Using login name in a `user:` GRN | `grn::::user:<userId>` uses the Mongo ObjectId; resolve username→id first (Pitfall 2) |
+| Saved-search GRN type | `saved_search` / `saved-search` | The type is `search` (Pitfall 2) |
+| Event-notification GRN type | `event_notification` | The GRN type is `notification` (Pitfall 2) |
+| "Everyone" grantee | `team:everyone` / `everyone` | `grn::::builtin-team:everyone` (Pitfall 2) |
+| Role assignment | Expecting `/authz/roles` to create roles | `/authz/roles` only **lists/assigns** (`PUT {roleId}/assignees` adds usernames, additive); role *creation* is the legacy `POST /roles` keyed by **rolename** (Pitfall 5 / scope note) |
+| Apply response on validation failure | Throwing on HTTP 400 | 400 carries the full `EntityShareResponse` with `validation_result`; parse the body (Pitfall 3) |
+| Sharing permission | Assuming admin role suffices | `checkOwnership` requires `ENTITY_OWN` on the target → 403 otherwise (Pitfall 3) |
 
-2. **Schema validation tests for every zod schema.** For each tool, a `valid_inputs.json` and `invalid_inputs.json` fixture set. The test asserts the schema accepts/rejects as expected. Catches schema drift when the tool description changes but the schema doesn't (or vice versa).
+## Security Mistakes
 
-3. **Blueprint composition tests.** For each blueprint (e.g. `setup_error_stream_for_app`), the test runs dry-run, walks the chained step list, asserts each step references the previous step's `__SERVER_ASSIGNED__` IDs correctly, asserts the cumulative payload sequence is what the snapshot expects. Catches composition bugs that wouldn't show up in single-tool tests.
+| Mistake | Risk | Prevention |
+|---------|------|------------|
+| Blind full-set write drops other users' grants | Silent revocation of legitimate access to production logs | Read-merge-write + removed-grants diff in dry-run (Pitfall 1) |
+| Over-granting `manage`/`own` when `view` was intended | `manage` confers re-sharing → privilege escalation chain | Default to `view`; spell out capability meaning in dry-run (Pitfall 5) |
+| Granting to `builtin-team:everyone` | Exposes a production stream to every Graylog user | Treat `everyone` as a grantee requiring an explicit, separate confirmation; never in tests (Pitfalls 2, 8) |
+| Ignoring `missing_permissions_on_dependencies` | Grantee sees an entity but not its index set / backing search → confusing partial access, or info leak via error messages | Surface dependency gaps as blocking warnings (Pitfall 4) |
+| Reusing a stale dry-run token after concurrent change | TOCTOU revocation of another admin's just-made grant | Re-prepare + hash compare + `grants_changed_since_preview` refusal (Pitfall 7) |
+| Testing apply paths on real production entities | Real data exposure / real revocation incidents | Throwaway entity + dedicated test user, dryRun-default, gated UAT (Pitfall 8) |
+| Logging full GRNs / grant maps at info level | Audit-trail leakage of who-can-see-what | Keep grant detail to dry-run output; minimal `console.error` for failures only |
 
-4. **Stream/pipeline/dashboard cascade-detection tests.** Mock `GET /streams/{id}/pipelines` returning N connected pipelines; assert `delete_stream` dry-run output includes them. Mock the empty case; assert the output says `cascades: { pipeline_connections: [] }` explicitly (no missing-field ambiguity).
+## UX Pitfalls
 
-### Nice-to-have
+| Pitfall | User Impact | Better Approach |
+|---------|-------------|-----------------|
+| Tool reports "shared with Bob" but silently revoked Alice | Operator trusts a false success; access loss discovered later | Dry-run + success output both diff added/removed grants explicitly (Pitfall 1) |
+| `view`/`manage`/`own` shown as opaque tokens | Operator/agent cannot judge whether the grant is too broad | Render plain-language meaning of each capability in dry-run (Pitfall 5) |
+| Dependency warnings buried or omitted | Grantee gets a half-working dashboard; operator blamed | Surface `missing_permissions_on_dependencies` as a prominent warning with a fix suggestion (Pitfall 4) |
+| `synced_entities` not mentioned | Operator unaware that 3 other entities were re-shared | Echo every synced entity in the success message (Pitfall 4) |
 
-5. **Round-trip integration tests against a Docker-Compose Graylog.** Slow, fragile (Graylog container is heavy). Only run on demand, not in the dev loop. Value: catches the "Graylog rejected our payload" failures that snapshot tests can't.
+## "Looks Done But Isn't" Checklist
 
-6. **Property-based tests on rule-DSL generation.** Feed structured inputs to `generate_pipeline_rule_dsl`, assert `POST /system/pipelines/rule/parse` accepts the output. Requires a live Graylog connection; not worth the infra investment until M3 patterns prove they cause real bugs.
+- [ ] **`share_entity`:** Often missing the read-merge step — verify a test proves a *pre-existing* grant survives an add.
+- [ ] **`share_entity`:** Often missing the removed-grants diff — verify dry-run output lists "grants that would be removed."
+- [ ] **GRN abstraction:** Often missing rejection of unknown types — verify `saved_search`, `event_notification`, `team` are rejected client-side with a helpful message.
+- [ ] **GRN abstraction:** Often missing username→userId resolution — verify a username input does not silently become a bad GRN.
+- [ ] **Capability schema:** Often a bare string — verify it is a 3-value enum and `read`/`edit`/`admin` are rejected.
+- [ ] **Apply path:** Often only handles 2xx — verify HTTP 400 with a `validation_result` body is parsed, not thrown away.
+- [ ] **Ownerless guard:** Often untested — verify a request that drops the last `own` is refused with the server's message surfaced.
+- [ ] **Dependency notices:** Often dropped — verify `missing_permissions_on_dependencies` non-empty produces a visible warning.
+- [ ] **Synced entities:** Often unreported — verify apply success names every entity in `synced_entities`, not just the URL target.
+- [ ] **Drift refusal:** Often missing — verify a `grants_changed_since_preview` path exists and a concurrent-modification test exercises it.
+- [ ] **403 handling:** Often generic — verify a non-owner share attempt yields an ownership-specific message.
+- [ ] **Live-version shape:** Often assumed from 7.2 source — verify a captured 7.0.6 `prepare`/apply fixture exists and a smoke test asserts the path.
 
-7. **Coverage report (c8).** Useful for finding untested branches but adds friction. Recommend post-MVP.
+## Recovery Strategies
 
-**Anti-pattern to avoid:** **do not write tests that mock the entire Graylog response.** The fallback-chain story (CONCERNS.md histogram section) is what happens when mocked tests pass while reality drifts. Test the payload **generation** end (snapshot tests) and the schema **validation** end thoroughly; trust Graylog's behavior to the integration test layer instead of recreating it in unit-test mocks.
+| Pitfall | Recovery Cost | Recovery Steps |
+|---------|---------------|----------------|
+| Pitfall 1 — revoked others' grants | MEDIUM | Re-`prepare` to read survivors; reconstruct lost grants from audit log (`EntitySharesUpdateEvent` records deletes) or admin memory; re-apply the corrected full set. Audit log is the canonical recovery source. |
+| Pitfall 2 — malformed GRN | LOW | Server 400 means nothing was written; fix the GRN and retry. A *valid-but-wrong* GRN that wrote a grant requires a corrective full-set apply. |
+| Pitfall 3 — self-lockout (lost own) | HIGH | If the entity is now ownerless, only a server-admin can re-grant ownership (the validation guard normally prevents this; an already-ownerless entity bypasses it). Escalate to a Graylog superadmin. |
+| Pitfall 4 — missed dependency | LOW | Run the generic multi-entity prepare, then share the missing dependency GRN with the same grantee. |
+| Pitfall 7 — TOCTOU revocation | MEDIUM | Same as Pitfall 1 — reconstruct the clobbered grant from the audit log and re-apply. |
+| Pitfall 8 — production exposure | HIGH | Immediately re-`prepare` and apply a corrected set removing the unintended grantee; review the audit log for the exposure window; report per the org's data-handling policy. |
 
-**Phase mapping:** Phase 0 — Foundation lands the snapshot infrastructure and the first 5-10 snapshot tests (proves it works). Every domain phase MUST add snapshot tests for its new tools as part of the phase, not as cleanup at the end. Phase F runs the coverage audit.
+## Pitfall-to-Phase Mapping
 
----
-
-## Minor Pitfalls
-
-### m1. `checkNotEditableStream` — some streams reject mutations
-
-**Symptom:** Agent tries to update or delete the built-in `All messages` stream. 400 BadRequest "The stream cannot be edited."
-
-**Root cause:** `StreamResource.update` (line 395) and `delete` (line 420) both call `checkNotEditableStream(streamId, ...)`. Built-in streams (default stream, Illuminate streams, all-events) are protected.
-
-**Prevention:** List tools surface a `mutable: boolean` field per stream so the agent can filter. Don't try to delete what you can't delete.
-
-**Phase mapping:** Phase N — Streams.
-
----
-
-### m2. `setDefault` index set requires `isRegularIndex`
-
-**Symptom:** Agent tries to set an events-stream-style index set as default. 409 Conflict.
-
-**Root cause:** `IndexSetsResource.setDefault` (line 359-361) — only "regular" index sets are eligible.
-
-**Prevention:** List index sets exposes the `isRegularIndex` field; the tool description for `set_default_index_set` says "only regular index sets are eligible; check `regular: true` on the target."
-
-**Phase mapping:** Phase N — Index sets.
-
----
-
-### m3. Deflector cycle is destructive of the current write index
-
-**Symptom:** Agent calls `POST /system/deflector/cycle` to "rotate" an index, expecting a no-op equivalent of "open a new index." Instead the current write index closes; in-flight writes can fail until the new index is ready.
-
-**Root cause:** `DeflectorResource.cycle` (`source-code/.../resources/system/DeflectorResource.java:89-106`) calls `indexSet.cycle()` — closes the current write index, creates the next one. Brief gap.
-
-**Prevention:** The MCP tool description for any "rotate index" wrapper must include: "this momentarily closes the current write index; in-flight messages buffer." Don't expose this as a default action in any blueprint.
-
-**Phase mapping:** Phase N — Index sets.
-
----
-
-### m4. `MediaType.WILDCARD` on enable/disable endpoints
-
-**Symptom:** Agent's MCP client always sets `Content-Type: application/json`; on `PUT /events/definitions/{id}/schedule`, Graylog accepts. But the agent constructs a JSON body too, thinking it must — the body is ignored, but the agent wastes context.
-
-**Root cause:** `EventDefinitionsResource.schedule|unschedule` etc. set `@Consumes(MediaType.WILDCARD)` (lines 422, 453) — they accept any content type and ignore the body.
-
-**Prevention:** Wrapper for `enable_event_definition` / `disable_event_definition` sends an empty body, no Content-Type. Document the no-body convention so blueprint code doesn't drag a fake body through.
-
-**Phase mapping:** Phase N — Events.
-
----
-
-### m5. Async system jobs return 204 immediately but work continues
-
-**Symptom:** Agent deletes an index set with `delete_indices=true`, gets 204 back, immediately tries to confirm the indices are gone via `GET /system/indexer/indices/...` — they're still there because the cleanup job is mid-flight.
-
-**Root cause:** `IndexSetsResource.delete` (line 398): `systemJobManager.submit(indexSetCleanupJobFactory.create(indexSet))`. The HTTP response returns before the job finishes. Job progress is observable via `GET /system/jobs`.
-
-**Prevention:**
-- Where the MCP tool's effect is implemented as a system job (currently: index-set delete with index cleanup; index ranges rebuild on index reopen/close/delete), the tool returns `{ async: true, job_id_observable_at: "/system/jobs" }` and the response *does not* claim the work is complete.
-- Provide an `await_system_job` tool that polls `GET /system/jobs/{jobId}` until completion. Document it as the canonical way to wait.
-
-**Phase mapping:** Phase N — Index sets (the first encounter); Phase 0 documents the async-pattern primitive.
-
----
-
-### m6. `cloneStream` and `duplicate` event-definition create NEW IDs
-
-**Symptom:** Agent uses `cloneStream` as a shortcut for "set up another stream like this one." Then tries to update the source stream's rules and expects them to propagate to the clone. They don't — clone is a snapshot at clone-time.
-
-**Root cause:** `StreamResource.cloneStream` (line 606) builds a fresh `StreamImpl` with `new ObjectId().toHexString()`. `EventDefinitionsResource.duplicate` (line 516) goes through `eventDefinitionHandler.duplicate(...)`.
-
-**Prevention:** Tool descriptions for `clone_*` tools explicitly state "creates an independent copy at clone-time; does not maintain linkage to source." Cheap line of documentation, catches the agent's mental model error.
-
-**Phase mapping:** Phase N — Streams, Events.
-
----
-
-## Phase-Specific Warnings (Concise Roll-Up)
-
-| Phase | Top pitfall to address before the phase ships | Reference |
-|---|---|---|
-| Phase 0 — Foundation | Dry-run primitive must include side-effect preview, not just emittedPayload. Establish server-assigned-ID sentinel. Build idempotency-key dispatch wrapper. Land snapshot-test infrastructure. | C1, C2, C6, M2, M4, M5, M6, M7 |
-| Phase N — Streams | Cascade preview (rules, pipelines, event defs); built-in-stream protection; idempotency by title-hash. | C2, m1, m6 |
-| Phase N — Pipelines | `POST /pipelines/rule/parse` pre-flight in every dry-run; `simulate_pipeline_rule` MCP tool; structured-input DSL generator; cached function-registry. | C4, M3 |
-| Phase N — Inputs/Extractors | Partial-update for inputs that protects encrypted fields; server-assigned extractor ID surfaced clearly. | C3, C6 |
-| Phase N — Index sets | Invert `deleteIndices` default; surface system-job async; reject delete of default index set explicitly. | C1, m2, m3, m5 |
-| Phase N — Dashboards | Search-then-View two-step blueprint; widget-template triplet (widget+position+searchType); time-range default to inherit. | C7 |
-| Phase N — Events | `schedule:false` default; v6→v7 aggregation syntax migrator with warning; `enable`/`disable` separate tools using WILDCARD body. | C5, M1, m4 |
-| Phase F — Final hardening | Tool-description audit (≤200 char, discrimination sentence); v7-vs-v6 endpoint regression smoke tests on existing v2.3 tools; coverage report. | M7, "Backward-Compat Risks" section |
-
----
+| Pitfall | Prevention Phase | Verification |
+|---------|------------------|--------------|
+| 1 — grant-set replacement | Core-sharing (the headline structural defense) | Test: adding a grant preserves all pre-existing grants; dry-run lists removed grants |
+| 2 — GRN malformation | Foundation (GRN abstraction) | Unit tests: unknown types rejected; username resolved to userId; 6-token structure enforced |
+| 3 — self-lockout / ownerless | Core-sharing | Test: dropping last `own` is refused; 403 on non-owned entity yields ownership-specific error |
+| 4 — dependency notices | Core-sharing (primary) + generalization phase (multi-entity) | Test: `missing_permissions_on_dependencies` surfaced; `synced_entities` echoed in success |
+| 5 — capability enum | Core-sharing (input schema) | Test: only `view`/`manage`/`own` accepted; default is `view`; meanings shown in dry-run |
+| 6 — 7.0.6-vs-7.2 divergence | Foundation (live-API recon task) | Captured 7.0.6 fixture exists; smoke test asserts live endpoint path + response shape |
+| 7 — prepare/apply drift | Core-sharing (apply pipeline) | Test: simulated concurrent change triggers `grants_changed_since_preview` refusal |
+| 8 — live-production testing | Foundation (harness) + final hardening (re-assert gate) | No test references a real stream/user; apply tests use throwaway entity + test user; `dryRun:false` only in gated UAT |
 
 ## Sources
 
-- **Local Graylog 7.2.0-SNAPSHOT source** (`source-code/graylog2-server/`):
-  - `StreamResource.java` — stream CRUD, cascading delete, clone, testMatch, pause/resume, bulk operations
-  - `StreamRuleResource.java` — stream-rule CRUD nested under stream
-  - `IndexSetsResource.java` — index-set CRUD; the `delete_indices=true` default; default-index protection
-  - `IndicesResource.java` — physical-index reopen/close/delete; write-index protection
-  - `DeflectorResource.java` — manual index rotation/cycle
-  - `InputsResource.java` — input CRUD; encrypted-config merge; routing-rule listing
-  - `ExtractorsResource.java` — server-assigned extractor UUIDs
-  - `EventDefinitionsResource.java` — event-def CRUD; `schedule` query default; `/validate` and cron-validate endpoints; bulk-schedule/unschedule
-  - `EventNotificationsResource.java` — referenced for v2.3 read-side compat audit
-  - `ViewsResource.java` — dashboard (View) CRUD; Search-link validation; widget-position integrity
-  - `RuleResource.java` (pipelineprocessor) — rule CRUD; **`/parse` and `/simulate` endpoints** that the wrapper should leverage; function-descriptor registry endpoint
-  - `PipelineResource.java` — pipeline CRUD
-  - `PipelineConnectionsResource.java` — pipeline-to-stream connection management
-  - `RuleLang.g4` (ANTLR) — pipeline rule grammar canonical reference
-- **Local changelog TOMLs:** `changelog/7.0.0-rc.1/` and `changelog/7.1.0-rc.1/` — `pr-24703` (event aggregation syntax), `issue-25609` (stream rule update payload), `issue-21034` (whitelist→allowlist), `pr-23872` (Swagger 2 → OpenAPI 3.1), `pr-25390` (OpenSearch client migration)
-- **In-repo project context:** `.planning/PROJECT.md`, `.planning/codebase/CONCERNS.md`, `.planning/codebase/INTEGRATIONS.md`, `.planning/codebase/STRUCTURE.md`, `src/query.js`
+- `source-code/graylog2-server/.../security/rest/EntitySharesResource.java` (7.2.0-SNAPSHOT) — endpoint paths, methods, `checkOwnership`, 400-on-validation-failure — HIGH
+- `source-code/graylog2-server/.../security/shares/EntitySharesService.java` — full-set replacement semantics (lines 312–331), ownerless validation (397–446), synced-entity propagation (350–369), `getForTargetExcludingGrantee` self-grant exclusion — HIGH
+- `source-code/graylog2-server/.../security/shares/EntityShareRequest.java` / `EntityShareResponse.java` — request/response shape, `missing_permissions_on_dependencies`, `synced_entities`, `validation_result` — HIGH
+- `source-code/graylog2-server/.../security/Capability.java` — exact enum `view`/`manage`/`own` + priority ordering — HIGH
+- `source-code/graylog2-server/.../grn/GRN.java`, `GRNTypes.java`, `GRNRegistry.java` — GRN structure, valid type set, parse-failure behavior — HIGH
+- `source-code/graylog2-server/.../security/authzroles/AuthzRolesResource.java` and `.../rest/resources/roles/RolesResource.java` — two coexisting role surfaces; `/authz/roles` assigns by username, legacy `/roles` creates by rolename — HIGH
+- `.planning/PROJECT.md`, `.planning/MILESTONES.md` — v3.0.0 mitigation library (C1–C7, cascade-hash primitive, dry-run + confirmation-token discipline), live-7.0.6 test constraint — HIGH
+- Project memory: `test` connection is live production UNESCO Graylog — HIGH
+- **Divergence caveat:** all source above is 7.2.0-SNAPSHOT, two minors ahead of the 7.0.6 ship target; every path/field claim is LOW confidence until verified against the live instance — see Pitfall 6.
 
-**Confidence summary:**
-
-| Claim category | Level | Reason |
-|---|---|---|
-| Endpoint shapes (status codes, payloads, defaults) | HIGH | Read directly from JAX-RS-annotated Java source at known file:line |
-| Side-effect behaviors (cascades, async jobs, encrypted-field merge) | HIGH | Code paths traced from resource method to service implementation reference |
-| v6→v7 specific changes | MEDIUM | Drawn from changelog TOMLs; not validated against a running v6 cluster (which the project doesn't have access to). Confidence is high *for changes mentioned in the changelog*; unknown for changes that weren't recorded there |
-| Agent-loop pitfalls (M4, M5, M6, M7) | MEDIUM-HIGH | Based on known LLM behaviors; specifics (token counts, naming-convention impact) are well-supported by community evidence but not pinned to a single citation |
-| Pipeline-rule DSL semantics (M3) | HIGH | Grammar file is authoritative; function names cross-referenced with FunctionRegistry endpoint |
+---
+*Pitfalls research for: entity-sharing / authz tooling — Graylog MCP v3.1.0*
+*Researched: 2026-05-19*
