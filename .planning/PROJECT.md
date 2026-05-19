@@ -18,6 +18,18 @@ A Model Context Protocol server that gives an AI agent end-to-end control of a G
 
 **Known deferred items:** 11 (see `MILESTONES.md → Technical debt / deferred`) — all live-cluster-mutation or visual-UAT; none code-blocking.
 
+## Current Milestone: v3.1.0 AuthZ & Sharing
+
+**Goal:** Add the authorization layer to the Graylog MCP — let an agent grant users access to entities, starting with streams.
+
+**Target features:**
+- `share_entity` tool wrapping `PUT /api/authz/shares/{grn}` — grant a user view/manage/own access to a stream
+- GRN abstraction that generalizes the sharing path to dashboards and saved searches
+- A read path for an entity's current grants — sharing safely requires seeing current state
+- Role management (`create_role` / `assign_role`) — scope confirmed during requirements
+
+**Key context:** Reverses v3.0.0's "users/roles out of scope" exclusion. Same constraints — Node ESM, zod validation, `dryRun: true` default + confirmation token, new code under `src/tools/authz/`, v2.3 contracts unchanged. Entity-sharing is a higher-blast-radius surface (it changes who can read production logs), so the dry-run + drift-refusal discipline from v3.0.0 applies with extra weight.
+
 ## Requirements
 
 ### Validated
@@ -65,16 +77,19 @@ A Model Context Protocol server that gives an AI agent end-to-end control of a G
 
 ### Active
 
-<!-- Empty until /gsd-new-milestone populates the next milestone's hypotheses. -->
+<!-- v3.1.0 AuthZ & Sharing — hypotheses to validate this milestone. -->
 
-_(none — next milestone planning not yet started)_
+- ◻ Agent can grant a user view/manage/own access to a stream via `share_entity` (`PUT /api/authz/shares/{grn}`) — v3.1.0
+- ◻ A GRN abstraction generalizes the sharing tool to dashboards and saved searches — v3.1.0
+- ◻ Agent can read an entity's current grants before mutating them — v3.1.0
+- ◻ Role management (`create_role` / `assign_role`) — scope confirmed during requirements — v3.1.0
 
 ### Out of Scope
 
 <!-- Explicit boundaries with reasons. Future milestones, not this one. -->
 
 - **Lookup tables, data adapters, caches** — user did not select; deferred to follow-up milestone if needed
-- **Users / roles / API token management** — explicitly excluded as a high-risk surface; not in this milestone's threat model
+- **API token minting & user account CRUD** — creating/deleting users and issuing API tokens stays out of scope; v3.1.0 adds entity-sharing and role assignment only (the v3.0.0 blanket "users/roles" exclusion is narrowed, not lifted)
 - **Content packs** — bundling/distribution is its own subsystem; out of scope
 - **Sidecar / collector management** — covers fleet-side agents, not server-side config; out of scope
 - **Multi-version compatibility (anything other than 7.0.x)** — single target is Graylog 7.0.6 (the live test instance); 6.x and earlier are out, and divergence with the 7.2-source clone is treated as a known-future-issue not addressed this milestone
@@ -146,4 +161,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-16 — MILESTONE v3.0.0 ADMIN-SURFACE COMPLETE. All 8 phases (0-7) closed; all 85/85 requirements satisfied (13 FOUND + 11 INPUT + 8 INDEX + 11 STREAM + 14 PIPE + 9 EVENT + 14 DASH+BLUE + 5 HARD). Total tool surface: 91 tools. Test suite: 1073/1073 green. c8 coverage baseline: 93.58% statements / 79.13% branches / 89.93% functions / 93.58% lines. Major mitigations end-to-end: C1 (delete_indices default-true inverted + sha-256 confirmation), C2 (stream-cascade keyed-buckets hash + drift refusal), C3 (encrypted-field zeroing — partial-update wrapper), C4 (rule-DSL parse pre-flight + 133-entry function catalogue), C5 (v6→v7 aggregation visible migration), C7 (dashboard Search+View 2-step chain + widget-position integrity), M1 (event-def `schedule:false` default), M3 (simulate_pipeline_rule M3 gate), Pitfall 2 (connect/disconnect GET-merge-PUT). Headline blueprint BLUE-01 `setup_app_monitoring_stack` ships the 6-step chain. Outstanding HUMAN-UAT (deferred to `/gsd-verify-work`): 11 items across phases 2/3/4/5/6 — all live-Graylog smoke + checkpoint sign-offs auto-approved under "AFK to milestone end" directive. Phase rollup: Phase 0 (Foundation 13/13), Phase 1 (Inputs & Extractors 11/11), Phase 2 (Index Sets 8/8), Phase 3 (Streams 11/11), Phase 4 (Pipelines 14/14), Phase 5 (Events & Notifications 9/9), Phase 6 (Dashboards + Blueprints 14/14), Phase 7 (Final Hardening 5/5).*
+*Last updated: 2026-05-19 — MILESTONE v3.1.0 AuthZ & Sharing started (planning). Previous: v3.0.0 ADMIN-SURFACE COMPLETE (2026-05-16) — all 8 phases (0-7) closed; all 85/85 requirements satisfied (13 FOUND + 11 INPUT + 8 INDEX + 11 STREAM + 14 PIPE + 9 EVENT + 14 DASH+BLUE + 5 HARD). Total tool surface: 91 tools. Test suite: 1073/1073 green. c8 coverage baseline: 93.58% statements / 79.13% branches / 89.93% functions / 93.58% lines. Major mitigations end-to-end: C1 (delete_indices default-true inverted + sha-256 confirmation), C2 (stream-cascade keyed-buckets hash + drift refusal), C3 (encrypted-field zeroing — partial-update wrapper), C4 (rule-DSL parse pre-flight + 133-entry function catalogue), C5 (v6→v7 aggregation visible migration), C7 (dashboard Search+View 2-step chain + widget-position integrity), M1 (event-def `schedule:false` default), M3 (simulate_pipeline_rule M3 gate), Pitfall 2 (connect/disconnect GET-merge-PUT). Headline blueprint BLUE-01 `setup_app_monitoring_stack` ships the 6-step chain. Outstanding HUMAN-UAT (deferred to `/gsd-verify-work`): 11 items across phases 2/3/4/5/6 — all live-Graylog smoke + checkpoint sign-offs auto-approved under "AFK to milestone end" directive. Phase rollup: Phase 0 (Foundation 13/13), Phase 1 (Inputs & Extractors 11/11), Phase 2 (Index Sets 8/8), Phase 3 (Streams 11/11), Phase 4 (Pipelines 14/14), Phase 5 (Events & Notifications 9/9), Phase 6 (Dashboards + Blueprints 14/14), Phase 7 (Final Hardening 5/5).*
