@@ -20,6 +20,7 @@ import {
     isGrn,
     GRN_TYPES,
 } from "../src/tools/authz/grn-helpers.js";
+import { Capability } from "../src/tools/authz/schemas.js";
 
 // =====================================================================
 // GRN_TYPES — the restricted 6-type milestone set
@@ -125,4 +126,23 @@ test("isGrn returns true for a valid GRN and false otherwise (never throws)", ()
     assert.equal(isGrn(undefined), false);
     assert.equal(isGrn(42), false);
     assert.equal(isGrn("grn:::::stream:abc"), false);
+});
+
+// =====================================================================
+// Capability enum — exactly view/manage/own (least-privilege default)
+// =====================================================================
+
+test("Capability accepts exactly view/manage/own", () => {
+    for (const cap of ["view", "manage", "own"]) {
+        assert.equal(Capability.parse(cap), cap, `Capability should accept "${cap}"`);
+    }
+});
+
+test("Capability rejects strings outside view/manage/own", () => {
+    for (const bad of ["read", "write", "admin", "edit", "View", "OWN", ""]) {
+        assert.throws(
+            () => Capability.parse(bad),
+            `Capability should reject "${bad}"`,
+        );
+    }
 });
