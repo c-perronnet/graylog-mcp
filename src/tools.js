@@ -1939,6 +1939,26 @@ export const toolDefinitions = [
         },
     },
     {
+        name: "share_entity",
+        description: "Share, change, or revoke a user's access to a stream/dashboard/search (view/manage/own). Defaults dryRun:true; agent must echo the confirmation token to apply. Use revoke:true to remove.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                connectionName: { type: "string" },
+                dryRun: { type: "boolean", description: "Defaults true. Set false to apply." },
+                idempotencyKey: { type: "string" },
+                entityGrn: { type: "string", description: "Full GRN. Either this OR entityType+entityId." },
+                entityType: { type: "string", enum: ["stream", "dashboard", "search"] },
+                entityId: { type: "string" },
+                granteeGrn: { type: "string", description: "Full user-GRN. Either this OR granteeUsername." },
+                granteeUsername: { type: "string", description: "Resolved via available_grantees[].title from the /prepare response." },
+                capability: { type: "string", enum: ["view", "manage", "own"], description: "Required unless revoke:true." },
+                revoke: { type: "boolean", description: "Defaults false. When true, removes the grantee's grant." },
+                confirm: { type: "string", description: "Echo the dry-run confirmationToken to apply." },
+            },
+        },
+    },
+    {
         name: "list_admin_tools",
         description: "List every MCP tool grouped by domain (inputs/streams/pipelines/etc.) with a one-line summary. Use this vs. dumping the full /tools list when you need to orient at session start.",
         inputSchema: {
