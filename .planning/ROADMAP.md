@@ -76,7 +76,11 @@ Plans:
   3. An agent can revoke a user's access (re-POST the merged grant set minus that grantee), and the dry-run output explicitly diffs grants added, unchanged, and would-be-removed
   4. `share_entity` defaults to `dryRun: true`, returns a sha-256 confirmation token over the merged grant set, refuses apply with `grants_changed_since_preview` when the live grant set drifted, and refuses apply on confirmation-token mismatch
   5. Graylog's `validation_result` and `missing_permissions_on_dependencies` are surfaced as structured output (including the HTTP 400-with-body case), a non-owner attempt yields an ownership-specific error, and a request that would drop the last `own` grant is refused
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] 10-01-PLAN.md — Wave 0 offline test scaffold (16 tests incl. MANDATORY Pitfall-1 acceptance gate) + ShareEntitySchema with XOR/refine validators (Wave 1)
+- [ ] 10-02-PLAN.md — share-entity.js handler (defineMutatingHandler composition: read-merge-write via fetchEntitySharePreview, computeShareGrantHash token, last-own guard, 400-with-body parser, 403 → not_entity_owner) + authz barrel/tools.js/DOMAIN_OVERRIDES wiring + tool count 93→94 (Wave 2)
+- [ ] 10-03-PLAN.md — opt-in dryRun-only live smoke probe + human-verify checkpoint for throwaway-entity full-apply UAT (Wave 3)
 
 ### Phase 11: Role Management
 **Goal**: An agent can inspect, create, modify, delete, and assign Graylog roles — the coarse-grained global permission layer — as an independent track from entity sharing, with built-in roles protected from mutation.
