@@ -116,7 +116,7 @@ function parseHandlerResult(res, label) {
 /**
  * SELF-GUARD: assert an authz request path is SAFE for the dry-run-only
  * smoke probe. SAFE = either it does not touch authz at all, OR it ends
- * with `/prepare` (the read probe). UNSAFE = anything under AUTHZ_PREFIX
+ * with `/prepare` (the read probe). UNSAFE = anything authz-adjacent
  * that does NOT end with `/prepare` — that is the mutating commit
  * endpoint, which must NEVER fire because the handler runs under
  * `dryRun: true`. A violation aborts the process with exit code 2.
@@ -124,13 +124,53 @@ function parseHandlerResult(res, label) {
  * Also asserts the GRN segment between AUTHZ_PREFIX and the trailing
  * `/prepare` is percent-encoded (no raw `:` — colons must be `%3A`).
  *
+ * REVIEW WR-05: the broadened "authz-adjacent" check catches Graylog
+ * path aliases (e.g. `/api/system/authz/...`, `/api/legacy/authz/...`,
+ * any `/api/authz/shares/...` variant) that would otherwise slip past
+ * the exact-AUTHZ_PREFIX startsWith check. Defense-in-depth is the
+ * entire point of this file — a future Graylog upgrade adding an alias
+ * must NOT silently let a mutating POST through.
+ *
+ * @param {string} method - the HTTP method (GET / POST / ...)
  * @param {string} path - the request path issued by the handler
  */
-function assertSafeAuthzPath(path) {
-    if (typeof path !== "string" || !path.startsWith(AUTHZ_PREFIX)) {
-        return; // not an authz-shares path — nothing to guard
+function assertSafeAuthzPath(method, path) {
+    if (typeof path !== "string") return;
+
+    // Check 1 (REVIEW WR-05): is this path authz-adjacent? Catch ANY path
+    // containing "authz" or "shares" — not just the exact AUTHZ_PREFIX.
+    // GET-only probes are allowed regardless (the live /prepare flow does
+    // POST, but read-only authz reads via GET are fine to pass through).
+    const isAuthzAdjacent = /authz|shares/i.test(path);
+    if (isAuthzAdjacent) {
+        const httpMethod = typeof method === "string" ? method.toUpperCase() : "";
+        // Non-GET on an authz-adjacent path MUST end with /prepare. The
+        // commit endpoint never ends with /prepare; any alias that doesn't
+        // either is either the commit endpoint or a new mutating path that
+        // wasn't anticipated when this guard was written.
+        if (httpMethod && httpMethod !== "GET" && !path.endsWith("/prepare")) {
+            console.error(
+                `[smoke] FATAL: non-GET authz-adjacent request "${httpMethod} ${path}" `
+                    + "is not a /prepare read probe. This probe is dryRun-only — "
+                    + "the mutating commit endpoint (or any aliased mutating path) "
+                    + "must never run. Refusing.",
+            );
+            process.exit(2);
+        }
+    }
+
+    // Check 2 (preserved): if the path lands under the canonical
+    // AUTHZ_PREFIX, the GRN segment between the prefix and the trailing
+    // `/prepare` must be percent-encoded (no raw `:` — colons must be
+    // `%3A`). This catches a regression where the GRN was interpolated
+    // raw and would mis-route the JAX-RS router (or path-traverse).
+    if (!path.startsWith(AUTHZ_PREFIX)) {
+        return;
     }
     if (!path.endsWith("/prepare")) {
+        // Already caught by Check 1 above if method is non-GET; this is the
+        // narrow case where method was empty/unknown. Preserve the original
+        // exact-prefix refusal for that case.
         console.error(
             `[smoke] FATAL: authz request path "${path}" is the MUTATING `
                 + "commit endpoint. This probe is dryRun-only — apply must never "
@@ -138,7 +178,6 @@ function assertSafeAuthzPath(path) {
         );
         process.exit(2);
     }
-    // The GRN segment lives between the prefix and the trailing `/prepare`.
     const grnSegment = path.slice(AUTHZ_PREFIX.length, -"/prepare".length);
     if (grnSegment.includes(":")) {
         console.error(
@@ -176,8 +215,12 @@ async function driveHandlerGuarded(handler, args, conn) {
         //    or an unencoded GRN ever reaches the network. For Phase 10
         //    the forbidden path is the commit endpoint itself; under
         //    `dryRun: true` the handler never reaches apply, so the
-        //    commit endpoint should never be observed.
-        assertSafeAuthzPath(req?.path);
+        //    commit endpoint should never be observed. REVIEW WR-05:
+        //    method is now threaded through so the broadened
+        //    authz-adjacent guard can pass GET probes while refusing
+        //    non-GET requests against any authz-adjacent path that
+        //    doesn't end with /prepare.
+        assertSafeAuthzPath(req?.method, req?.path);
         // 2. Issue the genuine call with the seam temporarily uninstalled
         //    so the real request does not recurse back into this
         //    interceptor.
