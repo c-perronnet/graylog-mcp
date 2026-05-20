@@ -9,14 +9,14 @@ Requirements for the v3.1.0 milestone. Each maps to a roadmap phase.
 
 ### Entity Sharing
 
-- [ ] **SHARE-01**: Agent can grant a user view/manage/own access to a stream via `share_entity`
+- [x] **SHARE-01**: Agent can grant a user view/manage/own access to a stream via `share_entity`
 - [x] **SHARE-02**: Agent can read an entity's current grants (active shares) via `get_entity_shares`
-- [ ] **SHARE-03**: Agent can revoke a user's access to an entity
-- [ ] **SHARE-04**: `share_entity` accepts a username and resolves it to the user-GRN the Graylog API requires
-- [ ] **SHARE-05**: `share_entity` is read-merge-write — adding a grantee never silently revokes other grantees' existing grants
-- [ ] **SHARE-06**: `share_entity` surfaces Graylog's `validation_result` and `missing_permissions_on_dependencies` as structured output, not raw errors
-- [ ] **SHARE-07**: Agent can share a dashboard via `share_entity`
-- [ ] **SHARE-08**: Agent can share a saved search via `share_entity`
+- [x] **SHARE-03**: Agent can revoke a user's access to an entity
+- [x] **SHARE-04**: `share_entity` accepts a username and resolves it to the user-GRN the Graylog API requires
+- [x] **SHARE-05**: `share_entity` is read-merge-write — adding a grantee never silently revokes other grantees' existing grants
+- [x] **SHARE-06**: `share_entity` surfaces Graylog's `validation_result` and `missing_permissions_on_dependencies` as structured output, not raw errors
+- [x] **SHARE-07**: Agent can share a dashboard via `share_entity`
+- [x] **SHARE-08**: Agent can share a saved search via `share_entity`
 - [x] **SHARE-09**: Agent can list the grantees available for sharing an entity via `list_grantees`
 
 ### Role Management
@@ -31,7 +31,7 @@ Requirements for the v3.1.0 milestone. Each maps to a roadmap phase.
 
 ### Safety & Verification
 
-- [ ] **AUTHZ-01**: Every mutating authz tool (`share_entity`, `create_role`, `update_role`, `delete_role`, `assign_role`, `unassign_role`) defaults to `dryRun: true`, returns a sha-256 confirmation token, and refuses apply on drift between preview and apply
+- [x] **AUTHZ-01**: Every mutating authz tool (`share_entity`, `create_role`, `update_role`, `delete_role`, `assign_role`, `unassign_role`) defaults to `dryRun: true`, returns a sha-256 confirmation token, and refuses apply on drift between preview and apply
 - [x] **AUTHZ-02**: The authz tool surface is verified against the live Graylog 7.0.6 instance before milestone close — correct `POST /api/authz/shares/entities/{entityGRN}` endpoint, GRN URL-encoding, and role endpoints
 
 ## v2 Requirements
@@ -62,14 +62,14 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| SHARE-01 | Phase 10 | Pending |
+| SHARE-01 | Phase 10 | Complete |
 | SHARE-02 | Phase 9 | Complete |
-| SHARE-03 | Phase 10 | Pending |
-| SHARE-04 | Phase 10 | Pending |
-| SHARE-05 | Phase 10 | Pending |
-| SHARE-06 | Phase 10 | Pending |
-| SHARE-07 | Phase 10 | Pending |
-| SHARE-08 | Phase 10 | Pending |
+| SHARE-03 | Phase 10 | Complete |
+| SHARE-04 | Phase 10 | Complete |
+| SHARE-05 | Phase 10 | Complete |
+| SHARE-06 | Phase 10 | Complete |
+| SHARE-07 | Phase 10 | Complete |
+| SHARE-08 | Phase 10 | Complete |
 | SHARE-09 | Phase 9 | Complete |
 | ROLE-01 | Phase 11 | Pending |
 | ROLE-02 | Phase 11 | Pending |
@@ -78,7 +78,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | ROLE-05 | Phase 11 | Pending |
 | ROLE-06 | Phase 11 | Pending |
 | ROLE-07 | Phase 11 | Pending |
-| AUTHZ-01 | Phase 10 | Pending |
+| AUTHZ-01 | Phase 10 | Complete |
 | AUTHZ-02 | Phase 8 | Complete |
 
 **Coverage:**

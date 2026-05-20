@@ -78,7 +78,7 @@ Plans:
   5. Graylog's `validation_result` and `missing_permissions_on_dependencies` are surfaced as structured output (including the HTTP 400-with-body case), a non-owner attempt yields an ownership-specific error, and a request that would drop the last `own` grant is refused
 **Plans**: 3 plans
 Plans:
-- [ ] 10-01-PLAN.md — Wave 0 offline test scaffold (16 tests incl. MANDATORY Pitfall-1 acceptance gate) + ShareEntitySchema with XOR/refine validators (Wave 1)
+- [x] 10-01-PLAN.md — Wave 0 offline test scaffold (16 tests incl. MANDATORY Pitfall-1 acceptance gate) + ShareEntitySchema with XOR/refine validators (Wave 1)
 - [ ] 10-02-PLAN.md — share-entity.js handler (defineMutatingHandler composition: read-merge-write via fetchEntitySharePreview, computeShareGrantHash token, last-own guard, 400-with-body parser, 403 → not_entity_owner) + authz barrel/tools.js/DOMAIN_OVERRIDES wiring + tool count 93→94 (Wave 2)
 - [ ] 10-03-PLAN.md — opt-in dryRun-only live smoke probe + human-verify checkpoint for throwaway-entity full-apply UAT (Wave 3)
 
@@ -111,5 +111,5 @@ Phases execute in numeric order: 8 → 9 → 10 → 11
 | 7. Final Hardening | v3.0.0 | 3/3 | Complete | 2026-05-16 |
 | 8. AuthZ Foundation | v3.1.0 | 3/3 | Complete   | 2026-05-19 |
 | 9. Entity Shares Read Path | v3.1.0 | 2/2 | Complete   | 2026-05-19 |
-| 10. Entity Sharing Write Path | v3.1.0 | 0/TBD | Not started | - |
+| 10. Entity Sharing Write Path | v3.1.0 | 1/3 | In Progress|  |
 | 11. Role Management | v3.1.0 | 0/TBD | Not started | - |

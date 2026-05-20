@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v3.1.0
 milestone_name: AuthZ & Sharing
-status: ready_to_plan
-stopped_at: Phase 09 complete (2/2) — ready to discuss Phase 10
-last_updated: 2026-05-19T16:35:32.376Z
-last_activity: 2026-05-19
+status: executing
+stopped_at: ROADMAP.md created for v3.1.0 — 4 phases (8-11), all 18 requirements mapped, 100% coverage
+last_updated: "2026-05-20T15:28:50.347Z"
+last_activity: 2026-05-20
 progress:
   total_phases: 4
   completed_phases: 2
-  total_plans: 5
-  completed_plans: 5
+  total_plans: 8
+  completed_plans: 6
   percent: 50
 ---
 
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-19)
 
 **Core value:** An AI agent can configure Graylog from intent alone, safely, without touching the web UI.
-**Current focus:** Phase 10 — entity sharing write path
+**Current focus:** Phase 10 — entity-sharing-write-path
 
 ## Current Position
 
-Phase: 10
-Plan: Not started
-Status: Ready to plan
-Last activity: 2026-05-19
+Phase: 10 (entity-sharing-write-path) — EXECUTING
+Plan: 2 of 3
+Status: Ready to execute
+Last activity: 2026-05-20
 
-Progress: [██████████] 100%
+Progress: [████████░░] 75%
 
 ## Performance Metrics
 
@@ -55,6 +55,7 @@ Progress: [██████████] 100%
 | Phase 08 P01 | 14min | 3 tasks | 5 files |
 | Phase 09 P01 | 6min | 4 tasks | 11 files |
 | Phase 09 P02 | 3 | 1 tasks | 1 files |
+| Phase 10 P01 | 6min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -70,6 +71,9 @@ Recent decisions affecting current work:
 - Zero new dependencies; new code under `src/tools/authz/`; v2.3 contracts unchanged.
 - [Phase ?]: Phase 8 Plan 01: GRN canonical form locked to 6-token grn::::<type>:<id>; GRN_TYPES pinned to the 6-type milestone set; Capability enum exactly view/manage/own
 - [Phase ?]: Phase 9 Plan 01: entity-shares read path — get_entity_shares + list_grantees on POST .../prepare with empty {} body; authz barrel now non-empty
+- [Phase ?]: Phase 10 Plan 10-01: Wave 0 RED scaffold pattern — ship test file before handler so the failing tests are the executable specification Plan 10-02 must satisfy
+- [Phase ?]: Phase 10 Plan 10-01: ENTITY_TYPES promoted from file-private to exported in src/tools/authz/schemas.js — single source of truth for shareable types across read + write
+- [Phase ?]: Phase 10 Plan 10-01: ShareEntitySchema invariants encoded as three .refine clauses (entity-XOR, grantee-XOR, revoke<->capability) — matches Phase 9 GetEntitySharesSchema pattern
 
 ### Pending Todos
 
@@ -93,7 +97,7 @@ Items carried forward from the v3.0.0 milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-19T16:30:08.684Z
+Last session: 2026-05-20T15:28:40.677Z
 Stopped at: ROADMAP.md created for v3.1.0 — 4 phases (8-11), all 18 requirements mapped, 100% coverage
 Resume file: None
 </content>
