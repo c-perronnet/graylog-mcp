@@ -882,6 +882,70 @@ test("share_entity REVIEW WR-03: empty-string entityGrn is rejected by zod (.min
     assert.equal(captured, null, "no HTTP request reached the seam");
 });
 
+// =====================================================================
+// Test 22 — REVIEW WR-04: apply-path network failure tagged
+// reason=apply_inconclusive
+// =====================================================================
+//
+// REVIEW.md WR-04: a non-GraylogError exception (ECONNRESET / ETIMEDOUT)
+// from the apply POST previously surfaced as a generic envelope with no
+// `reason` tag, leaving the agent unable to programmatically distinguish
+// "the apply may or may not have hit the server" from a definite no-fire.
+// Partial-apply on this endpoint changes authz — a blind retry risks
+// compounding the change. The fix tags such untyped exceptions with
+// reason="apply_inconclusive" so the agent re-reads via get_entity_shares
+// BEFORE retrying.
+//
+// GraylogErrors that aren't 400-with-body or 403 are NOT re-tagged — they
+// already carry their own status/method/path context.
+
+test("share_entity REVIEW WR-04: apply-path network failure surfaces reason=apply_inconclusive", async () => {
+    const fixture = {
+        ...PREPARE_FIXTURE,
+        active_shares: [],
+        available_grantees: [
+            { id: "grn::::user:a", type: "user", title: "userA" },
+        ],
+    };
+    _setCaptureRequest((req) => {
+        if (req.path.endsWith("/prepare")) return fixture;
+        // Apply POST — simulate a network-layer failure (plain Error, NOT a
+        // GraylogError — that's the key distinction WR-04 targets).
+        const err = new Error("ECONNRESET: connection reset by peer");
+        err.code = "ECONNRESET";
+        throw err;
+    });
+    const dry = await handleShareEntity({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                entityType: "stream",
+                entityId: "s1",
+                granteeUsername: "userA",
+                capability: "view",
+                dryRun: true,
+            },
+        },
+    });
+    const token = JSON.parse(dry.content[0].text).confirmationToken;
+    const res = await handleShareEntity({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                entityType: "stream",
+                entityId: "s1",
+                granteeUsername: "userA",
+                capability: "view",
+                dryRun: false,
+                confirm: token,
+            },
+        },
+    });
+    assert.equal(res.isError, true);
+    assert.equal(res.reason, "apply_inconclusive");
+    assert.match(res.content[0].text, /ECONNRESET|apply_inconclusive/);
+});
+
 test("share_entity refuses dryRun:false on a writable:false connection with reason=connection_read_only", async () => {
     let appliedHit = false;
     _setCaptureRequest((req) => {

@@ -354,6 +354,25 @@ export const handleShareEntity = defineMutatingHandler({
                     `(not \`manage\`); confirm the connection's API-token user is an owner via get_entity_shares.`;
                 throw err;
             }
+            // REVIEW WR-04: untyped exceptions from the apply POST (no
+            // `isGraylogError` flag — typically network-layer failures like
+            // ECONNRESET / ETIMEDOUT) must be tagged with
+            // `reason: "apply_inconclusive"` so the agent can programmatically
+            // identify "the apply may or may not have hit the server" and
+            // re-read via get_entity_shares BEFORE retrying. Partial-apply on
+            // this endpoint changes authz; a blind retry risks compounding
+            // the change.
+            //
+            // GraylogErrors that aren't 400-with-body or 403 fall through to
+            // the existing untagged re-throw so wrapGraylogError surfaces
+            // their native status/method/path context — only PLAIN errors
+            // (no isGraylogError) get the apply_inconclusive tag.
+            if (err && !err.isGraylogError) {
+                if (typeof err.reason !== "string" || err.reason.length === 0) {
+                    err.reason = "apply_inconclusive";
+                }
+                throw err;
+            }
             throw err;
         }
     },
