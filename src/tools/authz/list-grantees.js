@@ -11,7 +11,7 @@
 import { ListGranteesSchema } from "./schemas.js";
 import { resolveConnection } from "../_shared/connection.js";
 import { makeClient } from "../../graylog/client.js";
-import { buildGrn, parseGrn } from "./grn-helpers.js";
+import { resolveEntityGrn } from "./grn-helpers.js";
 import { fetchEntitySharePreview } from "./prepare-share.js";
 import {
     errorResponse,
@@ -37,12 +37,14 @@ export async function handleListGrantees(request) {
     const { conn, name: connectionName, error } = resolveConnection(seamArgs);
     if (error) return error;
 
-    // 3. Normalize the entity reference to a canonical GRN BEFORE any HTTP call.
+    // 3. Normalize the entity reference to a canonical share-target GRN
+    //    BEFORE any HTTP call. resolveEntityGrn() also rejects grantee-type
+    //    GRNs (user / builtin-team / role) so they can never reach the network
+    //    as a share target — mirroring the schema's ENTITY_TYPES enum on the
+    //    `entityType` path. See grn-helpers.js.
     let entityGrn;
     try {
-        entityGrn = args.entityGrn
-            ? (parseGrn(args.entityGrn), args.entityGrn.toLowerCase())
-            : buildGrn(args.entityType, args.entityId);
+        entityGrn = resolveEntityGrn(args);
     } catch (err) {
         return errorResponse(`Invalid entity reference: ${err.message}`);
     }

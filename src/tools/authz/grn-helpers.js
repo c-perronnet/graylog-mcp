@@ -123,3 +123,32 @@ export function isGrn(value) {
         return false;
     }
 }
+
+/**
+ * Normalize a validated entity-shares tool input into a canonical share-target
+ * GRN. Used by both get_entity_shares and list_grantees so the GRN
+ * normalization lives in exactly one place.
+ *
+ * Accepts the zod-validated args object — exactly one of:
+ *   - `entityGrn`: a full GRN string, OR
+ *   - `entityType` + `entityId`: the pieces buildGrn assembles.
+ *
+ * For the `entityGrn` path: parses the GRN (rejecting malformed shapes — a
+ * statement-form call rather than the previous comma-operator-inside-ternary,
+ * which was easy to misread) and returns its canonical lowercase form. For
+ * the `entityType`/`entityId` path the zod enum (schemas.js ENTITY_TYPES)
+ * already pins the type to the shareable set; buildGrn assembles the GRN.
+ *
+ * @param {{entityGrn?: string, entityType?: string, entityId?: string}} args
+ * @returns {string} the canonical lowercase share-target GRN
+ * @throws when the GRN is malformed
+ */
+export function resolveEntityGrn(args) {
+    if (args.entityGrn) {
+        parseGrn(args.entityGrn); // throws on malformed GRN
+        // parseGrn lowercases internally for validation; the canonical GRN we
+        // send must also be lowercase to round-trip the wire contract.
+        return args.entityGrn.toLowerCase();
+    }
+    return buildGrn(args.entityType, args.entityId);
+}

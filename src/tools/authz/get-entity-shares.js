@@ -19,7 +19,7 @@
 import { GetEntitySharesSchema } from "./schemas.js";
 import { resolveConnection } from "../_shared/connection.js";
 import { makeClient } from "../../graylog/client.js";
-import { buildGrn, parseGrn } from "./grn-helpers.js";
+import { resolveEntityGrn } from "./grn-helpers.js";
 import { fetchEntitySharePreview } from "./prepare-share.js";
 import {
     errorResponse,
@@ -47,13 +47,14 @@ export async function handleGetEntityShares(request) {
     const { conn, name: connectionName, error } = resolveConnection(seamArgs);
     if (error) return error;
 
-    // 3. Normalize the entity reference to a canonical GRN. This MUST happen
-    //    before any HTTP call so a malformed GRN never reaches the network.
+    // 3. Normalize the entity reference to a canonical share-target GRN.
+    //    This MUST happen before any HTTP call so a malformed GRN — or a
+    //    grantee-type GRN used as a share target — never reaches the network.
+    //    resolveEntityGrn() centralizes both the parse and the shareable-type
+    //    guard so both handlers stay in lockstep (see grn-helpers.js).
     let entityGrn;
     try {
-        entityGrn = args.entityGrn
-            ? (parseGrn(args.entityGrn), args.entityGrn.toLowerCase())
-            : buildGrn(args.entityType, args.entityId);
+        entityGrn = resolveEntityGrn(args);
     } catch (err) {
         return errorResponse(`Invalid entity reference: ${err.message}`);
     }
