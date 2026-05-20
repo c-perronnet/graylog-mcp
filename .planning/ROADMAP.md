@@ -31,7 +31,7 @@ The journey is strictly dependency-ordered. A correct GRN and the *corrected* en
 
 - [x] **Phase 8: AuthZ Foundation — GRN Helper & Live API Recon** - Build the GRN abstraction, capture live 7.0.6 endpoint/response fixtures, and scaffold the `authz` domain (completed 2026-05-19)
 - [x] **Phase 9: Entity Shares Read Path** - `get_entity_shares` and `list_grantees` — see an entity's current grants and resolvable grantees at zero blast radius (completed 2026-05-19)
-- [ ] **Phase 10: Entity Sharing Write Path** - `share_entity` (streams, dashboards, saved searches) with read-merge-write, dry-run, confirmation token, drift refusal, and revoke
+- [x] **Phase 10: Entity Sharing Write Path** - `share_entity` (streams, dashboards, saved searches) with read-merge-write, dry-run, confirmation token, drift refusal, and revoke (completed 2026-05-20)
 - [ ] **Phase 11: Role Management** - `list_roles` / `create_role` / `update_role` / `delete_role` / `assign_role` / `unassign_role` with built-in-role protection
 
 ## Phase Details
@@ -80,7 +80,7 @@ Plans:
 Plans:
 - [x] 10-01-PLAN.md — Wave 0 offline test scaffold (16 tests incl. MANDATORY Pitfall-1 acceptance gate) + ShareEntitySchema with XOR/refine validators (Wave 1)
 - [x] 10-02-PLAN.md — share-entity.js handler (defineMutatingHandler composition: read-merge-write via fetchEntitySharePreview, computeShareGrantHash token, last-own guard, 400-with-body parser, 403 → not_entity_owner) + authz barrel/tools.js/DOMAIN_OVERRIDES wiring + tool count 93→94 (Wave 2)
-- [ ] 10-03-PLAN.md — opt-in dryRun-only live smoke probe + human-verify checkpoint for throwaway-entity full-apply UAT (Wave 3)
+- [x] 10-03-PLAN.md — opt-in dryRun-only live smoke probe + human-verify checkpoint for throwaway-entity full-apply UAT (Wave 3)
 
 ### Phase 11: Role Management
 **Goal**: An agent can inspect, create, modify, delete, and assign Graylog roles — the coarse-grained global permission layer — as an independent track from entity sharing, with built-in roles protected from mutation.
@@ -111,5 +111,5 @@ Phases execute in numeric order: 8 → 9 → 10 → 11
 | 7. Final Hardening | v3.0.0 | 3/3 | Complete | 2026-05-16 |
 | 8. AuthZ Foundation | v3.1.0 | 3/3 | Complete   | 2026-05-19 |
 | 9. Entity Shares Read Path | v3.1.0 | 2/2 | Complete   | 2026-05-19 |
-| 10. Entity Sharing Write Path | v3.1.0 | 2/3 | In Progress|  |
+| 10. Entity Sharing Write Path | v3.1.0 | 3/3 | Complete   | 2026-05-20 |
 | 11. Role Management | v3.1.0 | 0/TBD | Not started | - |

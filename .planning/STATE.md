@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v3.1.0
 milestone_name: AuthZ & Sharing
-status: executing
-stopped_at: ROADMAP.md created for v3.1.0 — 4 phases (8-11), all 18 requirements mapped, 100% coverage
-last_updated: "2026-05-20T15:41:54.686Z"
+status: verifying
+stopped_at: Phase 10 complete (3/3 plans); throwaway-entity full-apply UAT deferred to v3.1.0 milestone close
+last_updated: "2026-05-20T16:17:23.400Z"
 last_activity: 2026-05-20
 progress:
   total_phases: 4
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 8
-  completed_plans: 7
-  percent: 50
+  completed_plans: 8
+  percent: 75
 ---
 
 # Project State
@@ -27,10 +27,10 @@ See: .planning/PROJECT.md (updated 2026-05-19)
 
 Phase: 10 (entity-sharing-write-path) — EXECUTING
 Plan: 3 of 3
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-05-20
 
-Progress: [█████████░] 88%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -57,6 +57,7 @@ Progress: [█████████░] 88%
 | Phase 09 P02 | 3 | 1 tasks | 1 files |
 | Phase 10 P01 | 6min | 2 tasks | 2 files |
 | Phase 10 P02 | 10min | 2 tasks | 8 files |
+| Phase 10 P03 | 22min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -78,6 +79,7 @@ Recent decisions affecting current work:
 - [Phase ?]: Phase 10 Plan 10-02: share_entity ships as composition-over-invention — handler is 290 lines, all safety primitives pre-existing; new code is merge + diff + last-own guard + 400-body parser + 403 classifier
 - [Phase ?]: Phase 10 Plan 10-02: extended resolveConnection to accept inline-object _testConnection — enables Test 16 writable:false short-circuit without registering a connection; backward compatible
 - [Phase ?]: Phase 10 Plan 10-02: PITFALL 1 ACCEPTANCE GATE GREEN — current=[A,B] add C → body=[A,B,C] (not [C]); read-merge-write is the load-bearing safety property of v3.1.0
+- [Phase 10]: Phase 10 Plan 10-03: dryRun-only live smoke probe (stream+dashboard PASS, search SKIP same as Phase 9); throwaway-entity full-apply UAT deferred to v3.1.0 milestone close per operator (Option B)
 
 ### Pending Todos
 
@@ -98,10 +100,12 @@ Items carried forward from the v3.0.0 milestone close:
 | Visual-only | 2 widget/dashboard visual verifications | Out of scope (MCP server) | v3.0.0 close |
 | Code | Phase 4 IN-02 (duplicate `preflightParseRule`) + IN-06 (regex hardening) | Deferred | v3.0.0 close |
 | Code | `src/query.js` + `src/events.js` bypass `src/graylog/client.js` (HARD-05) | Deferred | v3.0.0 close |
+| Live-UAT (v3.1.0) | `share_entity` throwaway-entity full-apply UAT — exercises the commit endpoint against a freshly-created throwaway stream + dedicated test user per 08-TEST-STRATEGY.md | Deferred | Plan 10-03 (Option B; operator) |
+| Live-UAT (v3.1.0) | Saved-search-view dryRun smoke (third entity type) — no saved-search view exists on the live `test` instance; bundle with throwaway-entity UAT at milestone close | Deferred | Plan 10-03 (same finding as Phase 9) |
 
 ## Session Continuity
 
-Last session: 2026-05-20T15:41:47.344Z
-Stopped at: ROADMAP.md created for v3.1.0 — 4 phases (8-11), all 18 requirements mapped, 100% coverage
+Last session: 2026-05-20T16:17:23.366Z
+Stopped at: Phase 10 complete (3/3 plans); throwaway-entity full-apply UAT deferred to v3.1.0 milestone close
 Resume file: None
 </content>
