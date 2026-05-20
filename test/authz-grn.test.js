@@ -28,12 +28,23 @@ import { Capability } from "../src/tools/authz/schemas.js";
 const FIXTURE_DIR = join(dirname(fileURLToPath(import.meta.url)), "fixtures", "authz");
 
 // =====================================================================
-// GRN_TYPES — the restricted 6-type milestone set
+// GRN_TYPES — the restricted milestone set (Phase 10 REVIEW CR-02 added
+// "team" to support the live `grn::::team:sidecar-system-user` grantee
+// observed on the UNESCO Graylog 7.0.6 instance and named in the Phase
+// 10 smoke probe's default grantee).
 // =====================================================================
 
-test("GRN_TYPES has exactly the 6 milestone types", () => {
-    assert.equal(GRN_TYPES.size, 6);
-    for (const t of ["stream", "dashboard", "search", "user", "builtin-team", "role"]) {
+test("GRN_TYPES has exactly the 7 milestone types", () => {
+    assert.equal(GRN_TYPES.size, 7);
+    for (const t of [
+        "stream",
+        "dashboard",
+        "search",
+        "user",
+        "team",
+        "builtin-team",
+        "role",
+    ]) {
         assert.ok(GRN_TYPES.has(t), `GRN_TYPES should contain "${t}"`);
     }
 });
@@ -80,7 +91,10 @@ test("buildGrn lowercases a mixed-case type token", () => {
 // =====================================================================
 
 test("buildGrn throws on an unknown type with the valid set listed", () => {
-    for (const bad of ["saved_search", "event_notification", "team"]) {
+    // Phase 10 REVIEW CR-02 — "team" was promoted into GRN_TYPES, so it is
+    // no longer in the unknown-type set. Pick types that remain outside the
+    // milestone registry.
+    for (const bad of ["saved_search", "event_notification", "view"]) {
         let caught;
         try {
             buildGrn(bad, "x");
@@ -117,7 +131,11 @@ test("parseGrn rejects a non-GRN string and a non-string input", () => {
 });
 
 test("parseGrn rejects a 6-token string with an unknown type", () => {
-    assert.throws(() => parseGrn("grn::::team:abc"), /not in valid set/);
+    // Phase 10 REVIEW CR-02 — "team" was promoted into GRN_TYPES, so pick a
+    // type still outside the milestone registry (saved_search is a real
+    // Graylog GRN type registered in 7.x but deliberately excluded from
+    // GRN_TYPES per the Phase 8 RESEARCH Pitfall 6 reasoning).
+    assert.throws(() => parseGrn("grn::::saved_search:abc"), /not in valid set/);
 });
 
 // =====================================================================
