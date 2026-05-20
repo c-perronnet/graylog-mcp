@@ -4,13 +4,13 @@ milestone: v3.1.0
 milestone_name: AuthZ & Sharing
 status: executing
 stopped_at: ROADMAP.md created for v3.1.0 — 4 phases (8-11), all 18 requirements mapped, 100% coverage
-last_updated: "2026-05-20T15:28:50.347Z"
+last_updated: "2026-05-20T15:41:54.686Z"
 last_activity: 2026-05-20
 progress:
   total_phases: 4
   completed_phases: 2
   total_plans: 8
-  completed_plans: 6
+  completed_plans: 7
   percent: 50
 ---
 
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-05-19)
 ## Current Position
 
 Phase: 10 (entity-sharing-write-path) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 Status: Ready to execute
 Last activity: 2026-05-20
 
-Progress: [████████░░] 75%
+Progress: [█████████░] 88%
 
 ## Performance Metrics
 
@@ -56,6 +56,7 @@ Progress: [████████░░] 75%
 | Phase 09 P01 | 6min | 4 tasks | 11 files |
 | Phase 09 P02 | 3 | 1 tasks | 1 files |
 | Phase 10 P01 | 6min | 2 tasks | 2 files |
+| Phase 10 P02 | 10min | 2 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -74,6 +75,9 @@ Recent decisions affecting current work:
 - [Phase ?]: Phase 10 Plan 10-01: Wave 0 RED scaffold pattern — ship test file before handler so the failing tests are the executable specification Plan 10-02 must satisfy
 - [Phase ?]: Phase 10 Plan 10-01: ENTITY_TYPES promoted from file-private to exported in src/tools/authz/schemas.js — single source of truth for shareable types across read + write
 - [Phase ?]: Phase 10 Plan 10-01: ShareEntitySchema invariants encoded as three .refine clauses (entity-XOR, grantee-XOR, revoke<->capability) — matches Phase 9 GetEntitySharesSchema pattern
+- [Phase ?]: Phase 10 Plan 10-02: share_entity ships as composition-over-invention — handler is 290 lines, all safety primitives pre-existing; new code is merge + diff + last-own guard + 400-body parser + 403 classifier
+- [Phase ?]: Phase 10 Plan 10-02: extended resolveConnection to accept inline-object _testConnection — enables Test 16 writable:false short-circuit without registering a connection; backward compatible
+- [Phase ?]: Phase 10 Plan 10-02: PITFALL 1 ACCEPTANCE GATE GREEN — current=[A,B] add C → body=[A,B,C] (not [C]); read-merge-write is the load-bearing safety property of v3.1.0
 
 ### Pending Todos
 
@@ -97,7 +101,7 @@ Items carried forward from the v3.0.0 milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-20T15:28:40.677Z
+Last session: 2026-05-20T15:41:47.344Z
 Stopped at: ROADMAP.md created for v3.1.0 — 4 phases (8-11), all 18 requirements mapped, 100% coverage
 Resume file: None
 </content>
