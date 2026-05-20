@@ -785,6 +785,42 @@ test("share_entity REVIEW CR-02: granteeGrn type 'stream' is rejected client-sid
     assert.deepEqual(commitCalls, [], "no apply-path POST should fire");
 });
 
+// =====================================================================
+// Test 19 — REVIEW WR-02: resolveGranteeFromTitle rejects non-string ids
+// =====================================================================
+//
+// REVIEW.md WR-02: a future Graylog DTO drift (or a malformed fixture)
+// producing an available_grantees entry with `id: null` / `id: 42` would
+// otherwise become a non-string Map key downstream, ultimately yielding a
+// malformed selected_grantee_capabilities body. The handler now guards
+// with a typeof === "string" check and reason="grantee_resolution_invalid".
+
+test("share_entity REVIEW WR-02: granteeUsername resolves to non-string id is rejected (grantee_resolution_invalid)", async () => {
+    _setCaptureRequest(() => ({
+        ...PREPARE_FIXTURE,
+        active_shares: [],
+        available_grantees: [
+            // Simulated DTO drift: a numeric id field.
+            { id: 42, type: "user", title: "userBroken" },
+        ],
+    }));
+    const res = await handleShareEntity({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                entityType: "stream",
+                entityId: "s1",
+                granteeUsername: "userBroken",
+                capability: "view",
+                dryRun: true,
+            },
+        },
+    });
+    assert.equal(res.isError, true);
+    assert.equal(res.reason, "grantee_resolution_invalid");
+    assert.match(res.content[0].text, /non-string id/);
+});
+
 test("share_entity refuses dryRun:false on a writable:false connection with reason=connection_read_only", async () => {
     let appliedHit = false;
     _setCaptureRequest((req) => {

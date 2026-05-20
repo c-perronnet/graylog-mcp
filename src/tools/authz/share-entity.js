@@ -101,7 +101,23 @@ function resolveGranteeFromTitle(availableGrantees, username) {
             "ambiguous_grantee_username",
         );
     }
-    return matches[0].id;
+    // REVIEW WR-02: type-check the resolved id before returning. A fixture
+    // (or a future Graylog DTO drift) producing an available_grantees entry
+    // with `id: null` / `id: 42` would otherwise become a non-string Map key
+    // downstream, ultimately yielding a malformed
+    // selected_grantee_capabilities body. Symmetric to buildCurrentGrantMap's
+    // `typeof share.grantee === "string"` guard.
+    const resolved = matches[0].id;
+    if (typeof resolved !== "string" || resolved.length === 0) {
+        throw tagError(
+            new Error(
+                `username "${username}" resolved to a non-string id ` +
+                `(available_grantees entry shape drift? got ${typeof resolved})`,
+            ),
+            "grantee_resolution_invalid",
+        );
+    }
+    return resolved;
 }
 
 // Build a Map<granteeGrn, capability> from the active_shares array. Skips
