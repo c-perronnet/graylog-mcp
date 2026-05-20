@@ -21,6 +21,10 @@
 // The shareable + grantee types v3.1.0 actually uses:
 //   stream / dashboard / search  — shareable entity targets
 //   user                         — a grantee
+//   team                         — a (non-builtin) team grantee (e.g. the
+//                                  live `sidecar-system-user` team observed
+//                                  on the UNESCO Graylog 7.0.6 instance —
+//                                  Phase 10 smoke default grantee)
 //   builtin-team                 — the "everyone" grantee
 //   role                         — Phase 11 role management
 export const GRN_TYPES = new Set([
@@ -28,6 +32,7 @@ export const GRN_TYPES = new Set([
     "dashboard",
     "search",
     "user",
+    "team",
     "builtin-team",
     "role",
 ]);
@@ -132,6 +137,14 @@ export function isGrn(value) {
 // set while `entityType` only accepted the 3-type shareable subset.
 export const SHAREABLE_TYPES = new Set(["stream", "dashboard", "search"]);
 
+// The grantee subset of GRN_TYPES — the only types valid as a grant RECIPIENT.
+// Share-target types (stream, dashboard, search) are never a grantee, so a GRN
+// of those types must be rejected on the `granteeGrn` input path. This is the
+// symmetric guard to SHAREABLE_TYPES; without it, an agent could POST
+// `granteeGrn: "grn::::stream:foo"` and the server would either 400 or
+// silently corrupt the authz model.
+export const GRANTEE_TYPES = new Set(["user", "team", "builtin-team"]);
+
 /**
  * Normalize a validated entity-shares tool input into a canonical share-target
  * GRN. Used by both get_entity_shares and list_grantees so the share-target
@@ -172,4 +185,45 @@ export function resolveEntityGrn(args) {
         return args.entityGrn.toLowerCase();
     }
     return buildGrn(args.entityType, args.entityId);
+}
+
+/**
+ * Normalize a `granteeGrn` input into the canonical lowercase grantee GRN —
+ * the symmetric counterpart to `resolveEntityGrn`.
+ *
+ * The two defects this resolves (Phase 10 REVIEW CR-01 + CR-02):
+ *
+ *   1. CR-01 — the handler's contract (schemas.js: "granteeGrn is passed
+ *      through verbatim (lowercased)") was not enforced anywhere. A mixed-case
+ *      input like `"grn::::user:ABC"` mismatched the server-lowercased
+ *      `active_shares[].grantee` keys, producing either a false
+ *      `not_currently_granted` on revoke, or a silent duplicate-cased entry on
+ *      grant/change that the server collapsed in favour of the agent's last
+ *      write — the opposite of read-merge intent.
+ *
+ *   2. CR-02 — there was no GRANTEE_TYPES guard symmetric to SHAREABLE_TYPES,
+ *      so an agent passing `granteeGrn: "grn::::stream:foo"` was accepted and
+ *      POSTed. The defense-in-depth claim that "grantee-type-or-target-type
+ *      GRNs are rejected client-side" only held on the entity side.
+ *
+ * This helper centralises lowercasing AND type-validation in one place,
+ * mirroring `resolveEntityGrn`'s contract.
+ *
+ * @param {string} grn  a grantee GRN string
+ * @returns {string} the canonical lowercase grantee GRN
+ * @throws when the GRN is malformed (delegates to parseGrn)
+ * @throws when the GRN's type token is not in GRANTEE_TYPES
+ */
+export function resolveGranteeGrn(grn) {
+    const { type } = parseGrn(grn); // throws on malformed GRN
+    if (!GRANTEE_TYPES.has(type)) {
+        throw new Error(
+            `granteeGrn type "${type}" is not a grantee type ` +
+            `(expected ${[...GRANTEE_TYPES].join(", ")})`,
+        );
+    }
+    // parseGrn lowercases internally for validation; the canonical GRN we
+    // store/send must also be lowercase to round-trip against the
+    // server-lowercased `active_shares[].grantee` keys.
+    return grn.toLowerCase();
 }

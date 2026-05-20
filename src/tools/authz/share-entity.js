@@ -59,7 +59,7 @@
 import { defineMutatingHandler } from "../_shared/handler.js";
 import { ShareEntitySchema } from "./schemas.js";
 import { makeClient } from "../../graylog/client.js";
-import { resolveEntityGrn } from "./grn-helpers.js";
+import { resolveEntityGrn, resolveGranteeGrn } from "./grn-helpers.js";
 import { fetchEntitySharePreview } from "./prepare-share.js";
 import { computeShareGrantHash } from "../_shared/cascade-hash.js";
 
@@ -227,11 +227,27 @@ export const handleShareEntity = defineMutatingHandler({
         //    /prepare suffix + empty {} body.
         const preview = await fetchEntitySharePreview(client, entityGrn);
 
-        // 3. Resolve grantee. granteeGrn passes through (zod already enforced
-        //    XOR with granteeUsername). granteeUsername resolves against
-        //    available_grantees[].title; ambiguous or unknown titles throw.
-        const granteeGrn = args.granteeGrn
-            ?? resolveGranteeFromTitle(preview.available_grantees ?? [], args.granteeUsername);
+        // 3. Resolve grantee. zod already enforced XOR with granteeUsername.
+        //    For args.granteeGrn: resolveGranteeGrn parses, type-validates
+        //    against GRANTEE_TYPES (rejecting share-target-type GRNs client-
+        //    side — CR-02), and lowercases so the merge key matches the
+        //    server-lowercased active_shares[].grantee (CR-01). For
+        //    granteeUsername: resolveGranteeFromTitle returns
+        //    available_grantees[i].id which the server has already lowercased
+        //    — no extra normalization needed on that branch.
+        let granteeGrn;
+        if (args.granteeGrn) {
+            try {
+                granteeGrn = resolveGranteeGrn(args.granteeGrn);
+            } catch (err) {
+                throw tagError(err, "invalid_grantee_reference", 422);
+            }
+        } else {
+            granteeGrn = resolveGranteeFromTitle(
+                preview.available_grantees ?? [],
+                args.granteeUsername,
+            );
+        }
 
         // 4. Merge — Map<granteeGrn, capability>. revoke:true subtracts;
         //    grant/change sets. The merged set IS the body of the POST.

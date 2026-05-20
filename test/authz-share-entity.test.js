@@ -702,6 +702,89 @@ test("share_entity zod refuses entityGrn type 'user' as a share target (SHAREABL
 // read-only connection with reason `connection_read_only`. The _testConnection
 // magic arg accepts an inline {writable:false} fake.
 
+// =====================================================================
+// Test 17 — REVIEW CR-01: mixed-case granteeGrn is lowercased so it
+// merges with the server-lowercased active_shares grantee
+// =====================================================================
+//
+// REVIEW.md CR-01: previously the handler trusted args.granteeGrn verbatim
+// despite the schemas.js comment promising lowercasing. A mixed-case input
+// like "grn::::user:ABC" against active_shares=[{grantee:"grn::::user:abc"}]
+// produced a duplicate-cased entry in the merged map and POST body. After
+// the fix, the canonical key in the body is the lowercase form ONCE.
+
+test("share_entity REVIEW CR-01: mixed-case granteeGrn is lowercased and merges with active_shares (single key)", async () => {
+    _setCaptureRequest(() => ({
+        ...PREPARE_FIXTURE,
+        active_shares: [
+            { grant: "g1", grantee: "grn::::user:abc", capability: "view" },
+        ],
+        available_grantees: [
+            { id: "grn::::user:abc", type: "user", title: "userABC" },
+        ],
+    }));
+    const res = await handleShareEntity({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                entityType: "stream",
+                entityId: "s1",
+                // MIXED-CASE input — the server-side key is "grn::::user:abc".
+                granteeGrn: "grn::::user:ABC",
+                capability: "manage", // change from view → manage
+                dryRun: true,
+            },
+        },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    const body = payload.preview.body.selected_grantee_capabilities;
+    const keys = Object.keys(body).sort();
+    // Exactly ONE entry (not two case-variant entries) and the value reflects
+    // the change ("manage"), not the pre-existing capability ("view").
+    assert.deepEqual(keys, ["grn::::user:abc"]);
+    assert.equal(body["grn::::user:abc"], "manage");
+});
+
+// =====================================================================
+// Test 18 — REVIEW CR-02: granteeGrn with a non-grantee type
+// (stream/dashboard/search) is rejected client-side, no apply POST
+// =====================================================================
+//
+// REVIEW.md CR-02: previously a stream/dashboard/search GRN passed as
+// granteeGrn was POSTed verbatim (no GRANTEE_TYPES guard symmetric to
+// SHAREABLE_TYPES). After the fix, resolveGranteeGrn rejects it BEFORE
+// any apply POST, with reason="invalid_grantee_reference".
+
+test("share_entity REVIEW CR-02: granteeGrn type 'stream' is rejected client-side (no apply POST)", async () => {
+    const captured = [];
+    _setCaptureRequest((req) => {
+        captured.push({ ...req });
+        return PREPARE_FIXTURE;
+    });
+    const res = await handleShareEntity({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                entityType: "stream",
+                entityId: "s1",
+                // Share-target type masquerading as a grantee.
+                granteeGrn: "grn::::stream:foo",
+                capability: "view",
+                dryRun: true,
+            },
+        },
+    });
+    assert.equal(res.isError, true);
+    assert.equal(res.reason, "invalid_grantee_reference");
+    assert.match(res.content[0].text, /not a grantee type/);
+    // Even if the handler reads /prepare before resolving the grantee, no
+    // commit-endpoint (non-/prepare) POST may ever fire.
+    const commitCalls = captured.filter(
+        (c) => c.method === "POST" && !c.path.endsWith("/prepare"),
+    );
+    assert.deepEqual(commitCalls, [], "no apply-path POST should fire");
+});
+
 test("share_entity refuses dryRun:false on a writable:false connection with reason=connection_read_only", async () => {
     let appliedHit = false;
     _setCaptureRequest((req) => {
