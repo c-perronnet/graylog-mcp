@@ -49,7 +49,10 @@ export const ENTITY_TYPES = z.enum(["stream", "dashboard", "search"]);
 export const GetEntitySharesSchema = z
     .object({
         connectionName: z.string().optional(),
-        entityGrn: z.string().optional(),
+        // REVIEW WR-03 (symmetric with ShareEntitySchema): `.min(1)` rejects
+        // empty-string entityGrn at parse time so it never slips past the
+        // XOR refine via `Boolean("") !== Boolean(undefined && undefined)`.
+        entityGrn: z.string().min(1).optional(),
         entityType: ENTITY_TYPES.optional(),
         entityId: z.string().min(1).optional(),
     })
@@ -89,13 +92,20 @@ export const ListGranteesSchema = GetEntitySharesSchema;
 export const ShareEntitySchema = mutatingBase
     .extend({
         // Entity reference — exactly one of (entityGrn) XOR (entityType + entityId).
-        entityGrn: z.string().optional(),
+        // REVIEW WR-03: `.min(1)` pins both string fields so an empty-string
+        // input is a parse-time rejection rather than a value that slips past
+        // the XOR refine. Without it, `Boolean("") !== Boolean(undefined)` is
+        // false-false → an empty string could partially satisfy the XOR
+        // depending on the other field.
+        entityGrn: z.string().min(1).optional(),
         entityType: ENTITY_TYPES.optional(),
         entityId: z.string().min(1).optional(),
         // Grantee — exactly one of (granteeGrn) XOR (granteeUsername).
         // granteeUsername is resolved against available_grantees[].title at
-        // handler time; granteeGrn is passed through verbatim (lowercased).
-        granteeGrn: z.string().optional(),
+        // handler time; granteeGrn is lowercased + type-validated by
+        // resolveGranteeGrn (REVIEW CR-01 + CR-02). REVIEW WR-03: `.min(1)`
+        // here similarly rejects an empty-string granteeGrn at parse time.
+        granteeGrn: z.string().min(1).optional(),
         granteeUsername: z.string().min(1).optional(),
         // The capability to grant; absent when revoke:true.
         capability: Capability.optional(),

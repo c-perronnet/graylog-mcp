@@ -821,6 +821,67 @@ test("share_entity REVIEW WR-02: granteeUsername resolves to non-string id is re
     assert.match(res.content[0].text, /non-string id/);
 });
 
+// =====================================================================
+// Test 20 — REVIEW WR-03: empty-string granteeGrn rejected by zod
+// =====================================================================
+//
+// REVIEW.md WR-03: previously granteeGrn lacked .min(1), so an empty
+// string slipped past the XOR refine (Boolean("") !== Boolean("alice"))
+// and reached the handler as a degenerate Map key. After the fix, an
+// empty string is a zod parse-time failure (rejected before any HTTP).
+
+test("share_entity REVIEW WR-03: empty-string granteeGrn is rejected by zod (.min(1) guard)", async () => {
+    let captured = null;
+    _setCaptureRequest((req) => {
+        captured = req;
+        return PREPARE_FIXTURE;
+    });
+    const res = await handleShareEntity({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                entityType: "stream",
+                entityId: "s1",
+                granteeGrn: "", // empty string — must be parse-rejected
+                capability: "view",
+                dryRun: true,
+            },
+        },
+    });
+    assert.equal(res.isError, true);
+    // The zod error path names the offending field; the .min(1) message
+    // surfaces as "String must contain at least 1 character".
+    assert.match(res.content[0].text, /granteeGrn/);
+    // No HTTP call may fire — zod parse runs before any client work.
+    assert.equal(captured, null, "no HTTP request reached the seam");
+});
+
+// =====================================================================
+// Test 21 — REVIEW WR-03: empty-string entityGrn rejected by zod
+// =====================================================================
+
+test("share_entity REVIEW WR-03: empty-string entityGrn is rejected by zod (.min(1) guard)", async () => {
+    let captured = null;
+    _setCaptureRequest((req) => {
+        captured = req;
+        return PREPARE_FIXTURE;
+    });
+    const res = await handleShareEntity({
+        params: {
+            arguments: {
+                _testConnection: "fake",
+                entityGrn: "", // empty string — must be parse-rejected
+                granteeUsername: "userA",
+                capability: "view",
+                dryRun: true,
+            },
+        },
+    });
+    assert.equal(res.isError, true);
+    assert.match(res.content[0].text, /entityGrn/);
+    assert.equal(captured, null, "no HTTP request reached the seam");
+});
+
 test("share_entity refuses dryRun:false on a writable:false connection with reason=connection_read_only", async () => {
     let appliedHit = false;
     _setCaptureRequest((req) => {
