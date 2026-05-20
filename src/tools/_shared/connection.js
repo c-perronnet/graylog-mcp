@@ -38,7 +38,19 @@ export function resolveConnection(args) {
     //              object's fields are honoured verbatim; the synthetic `name`
     //              is a sentinel string so error messages remain stable.
     if (args._testConnection) {
-        if (typeof args._testConnection === "object" && args._testConnection !== null) {
+        // Tightened predicate (REVIEW WR-01): the plain-object check must
+        // exclude arrays, because `typeof [] === "object"` and `[] !== null`
+        // both hold. Spreading an array into the conn object yields numeric-
+        // string keys ("0", "1", ...) and produces a malformed conn that
+        // silently breaks downstream resolution. Defense-in-depth — not
+        // exploitable from a production agent (the seam is stripped before
+        // zod.parse) but the inline-object branch's contract is
+        // "{baseUrl, apiToken, writable?}", which arrays don't satisfy.
+        if (
+            typeof args._testConnection === "object"
+            && args._testConnection !== null
+            && !Array.isArray(args._testConnection)
+        ) {
             return {
                 name: "_testConnection",
                 conn: {

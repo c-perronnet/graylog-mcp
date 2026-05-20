@@ -41,6 +41,29 @@ test("_testConnection seam returns synthetic conn (project convention)", () => {
     assert.notEqual(r.conn.writable, false);
 });
 
+// REVIEW WR-01: the inline-object branch's `typeof === "object"` predicate
+// MUST exclude arrays. `typeof [] === "object"` and `[] !== null` both hold,
+// so a previous Array.isArray-less guard would accept an array, spread it
+// into the conn object (yielding numeric-string keys "0", "1", ...), and
+// produce a malformed conn. This test pins the Array.isArray guard so a
+// regression would fail loudly. Not exploitable from a production agent
+// (the seam is stripped before zod.parse) — defense-in-depth.
+test("_testConnection: array input does NOT match the inline-object branch (REVIEW WR-01)", () => {
+    const r = resolveConnection({ _testConnection: ["not", "a", "conn"] });
+    // The truthy-array falls through the object branch (Array.isArray guard)
+    // and lands in the string branch, which treats it as a name. The
+    // synthetic conn must still be well-formed (no numeric-string keys
+    // bleeding in from a spread).
+    assert.ok(r.conn, "conn must be present");
+    assert.equal(r.conn.baseUrl, "_test");
+    assert.equal(r.conn.apiToken, "_test");
+    assert.equal(r.conn.writable, true);
+    // The malformed-spread regression would create keys "0", "1", "2".
+    assert.equal(r.conn["0"], undefined);
+    assert.equal(r.conn["1"], undefined);
+    assert.equal(r.conn["2"], undefined);
+});
+
 // -------- Per-call connectionName (FOUND-09) --------
 
 test("connectionName resolves to the named connection in the registry", () => {
