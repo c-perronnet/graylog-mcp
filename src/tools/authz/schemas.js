@@ -1,11 +1,15 @@
-// authz domain zod schemas — Phase 8 Plan 08-01 (AUTHZ-02 foundation).
+// authz domain zod schemas — Phase 8 Plan 08-01 (AUTHZ-02 foundation),
+// Phase 9 Plan 09-01 (entity-shares READ), Phase 10 Plan 10-01 (entity-shares
+// WRITE input contract).
 //
-// Phase 8 ships NO mutating tool, so this module imports only `z`. The shared
-// `mutatingBase` / `listBase` schemas (../_shared/schemas.js) are NOT imported
-// here — Phase 9/10 entity-share tool schemas will extend `mutatingBase` when
-// they land. They are noted so a future reader knows the base already exists.
+// Phase 10 adds the first mutating schema in this module — ShareEntitySchema
+// — so `mutatingBase` is imported from ../_shared/schemas.js. The Phase 8/9
+// exports (Capability, GetEntitySharesSchema, ListGranteesSchema) are
+// unchanged; ENTITY_TYPES is promoted from file-private to exported so
+// ShareEntitySchema can reuse the same z.enum the read schemas already pin.
 
 import { z } from "zod";
+import { mutatingBase } from "../_shared/schemas.js";
 
 // AUTHZ-02 — Capability enum.
 //
@@ -26,7 +30,12 @@ export const Capability = z.enum(["view", "manage", "own"]);
 // The `entityType` enum is the SHAREABLE subset of GRN_TYPES — stream /
 // dashboard / search. Grantee types (user, builtin-team, role) are never
 // valid as a share TARGET, so they are intentionally excluded here.
-const ENTITY_TYPES = z.enum(["stream", "dashboard", "search"]);
+//
+// Phase 10 Plan 10-01 promotes this from file-private to exported so the
+// write-path schema (ShareEntitySchema) can reuse the same z.enum without
+// re-declaring. Per 10-PATTERNS.md §"schemas.js" recommendation — single
+// source of truth for the shareable-type set.
+export const ENTITY_TYPES = z.enum(["stream", "dashboard", "search"]);
 
 // GetEntitySharesSchema — input for get_entity_shares.
 //
@@ -55,3 +64,68 @@ export const GetEntitySharesSchema = z
 // ListGranteesSchema — list_grantees takes the identical input surface; it is
 // the same /prepare probe, only the response projection differs.
 export const ListGranteesSchema = GetEntitySharesSchema;
+
+// =====================================================================
+// Phase 10 Plan 10-01 — entity-shares WRITE schema
+// =====================================================================
+//
+// SHARE-01,03,04,05,06,07,08 + AUTHZ-01 (drift refusal). Input contract for
+// the share_entity tool — Plan 10-02 ships the handler. The schema extends
+// `mutatingBase` (dryRun:true default + connectionName + idempotencyKey) and
+// adds three .refine clauses that encode the cross-field invariants:
+//
+//   1. ENTITY XOR: entityGrn XOR (entityType + entityId).
+//   2. GRANTEE XOR: granteeGrn XOR granteeUsername.
+//   3. REVOKE <-> CAPABILITY: capability is required when revoke is false
+//      (default), and must be absent when revoke is true.
+//
+// The Capability enum (view/manage/own) and the ENTITY_TYPES enum (stream/
+// dashboard/search) are reused — NOT redefined — so a future enum change
+// flows through both the read and the write paths.
+//
+// `confirm` mirrors DeleteIndexSetSchema:268 — the apply-time echo of the
+// dry-run confirmationToken. The wrapper's requireConfirm gate refuses the
+// apply when args.confirm != req._confirmationToken (TOCTOU drift refusal).
+export const ShareEntitySchema = mutatingBase
+    .extend({
+        // Entity reference — exactly one of (entityGrn) XOR (entityType + entityId).
+        entityGrn: z.string().optional(),
+        entityType: ENTITY_TYPES.optional(),
+        entityId: z.string().min(1).optional(),
+        // Grantee — exactly one of (granteeGrn) XOR (granteeUsername).
+        // granteeUsername is resolved against available_grantees[].title at
+        // handler time; granteeGrn is passed through verbatim (lowercased).
+        granteeGrn: z.string().optional(),
+        granteeUsername: z.string().min(1).optional(),
+        // The capability to grant; absent when revoke:true.
+        capability: Capability.optional(),
+        // Revoke flag — when true, capability must be absent and the merge
+        // step subtracts the grantee from the current active_shares set.
+        revoke: z.boolean().optional().default(false),
+        // Echo-the-token field — same shape as DeleteIndexSetSchema:268.
+        // Required at apply time (dryRun:false) by the wrapper's
+        // requireConfirm gate, not by zod (so the dry-run preview path can
+        // run without a token).
+        confirm: z.string().optional(),
+    })
+    .refine(
+        (a) => Boolean(a.entityGrn) !== Boolean(a.entityType && a.entityId),
+        {
+            message:
+                "Provide either entityGrn, or both entityType and entityId (not both, not neither).",
+        },
+    )
+    .refine(
+        (a) => Boolean(a.granteeGrn) !== Boolean(a.granteeUsername),
+        {
+            message:
+                "Provide either granteeGrn or granteeUsername (not both, not neither).",
+        },
+    )
+    .refine(
+        (a) => (a.revoke === true ? a.capability === undefined : a.capability !== undefined),
+        {
+            message:
+                "capability is required when revoke is false (default), and must be absent when revoke is true.",
+        },
+    );
