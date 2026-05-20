@@ -111,5 +111,5 @@ Phases execute in numeric order: 8 → 9 → 10 → 11
 | 7. Final Hardening | v3.0.0 | 3/3 | Complete | 2026-05-16 |
 | 8. AuthZ Foundation | v3.1.0 | 3/3 | Complete   | 2026-05-19 |
 | 9. Entity Shares Read Path | v3.1.0 | 2/2 | Complete   | 2026-05-19 |
-| 10. Entity Sharing Write Path | v3.1.0 | 3/3 | Complete   | 2026-05-20 |
+| 10. Entity Sharing Write Path | v3.1.0 | 3/3 | Complete    | 2026-05-20 |
 | 11. Role Management | v3.1.0 | 0/TBD | Not started | - |
