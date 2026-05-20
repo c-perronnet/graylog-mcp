@@ -124,28 +124,49 @@ export function isGrn(value) {
     }
 }
 
+// The shareable subset of GRN_TYPES — the only types valid as a share TARGET.
+// Grantee types (user, builtin-team, role) are never a share target, so a GRN
+// of those types must be rejected on the `entityGrn` input path just as the
+// `entityType` zod enum (schemas.js ENTITY_TYPES) already rejects them. This
+// removes the asymmetry where `entityGrn` accepted the full 6-type GRN_TYPES
+// set while `entityType` only accepted the 3-type shareable subset.
+export const SHAREABLE_TYPES = new Set(["stream", "dashboard", "search"]);
+
 /**
  * Normalize a validated entity-shares tool input into a canonical share-target
- * GRN. Used by both get_entity_shares and list_grantees so the GRN
- * normalization lives in exactly one place.
+ * GRN. Used by both get_entity_shares and list_grantees so the share-target
+ * type constraint and the GRN normalization live in exactly one place.
  *
  * Accepts the zod-validated args object — exactly one of:
  *   - `entityGrn`: a full GRN string, OR
  *   - `entityType` + `entityId`: the pieces buildGrn assembles.
  *
- * For the `entityGrn` path: parses the GRN (rejecting malformed shapes — a
- * statement-form call rather than the previous comma-operator-inside-ternary,
- * which was easy to misread) and returns its canonical lowercase form. For
- * the `entityType`/`entityId` path the zod enum (schemas.js ENTITY_TYPES)
- * already pins the type to the shareable set; buildGrn assembles the GRN.
+ * For the `entityGrn` path: parses the GRN, captures the parsed `type` token,
+ * and asserts the type is a shareable entity — grantee-type GRNs
+ * (user / builtin-team / role) are rejected client-side so they never reach
+ * the network as a share target. For the `entityType`/`entityId` path the zod
+ * enum (schemas.js ENTITY_TYPES) already pins the type to the shareable set;
+ * buildGrn assembles the canonical GRN.
  *
  * @param {{entityGrn?: string, entityType?: string, entityId?: string}} args
  * @returns {string} the canonical lowercase share-target GRN
  * @throws when the GRN is malformed
+ * @throws when the `entityGrn` type is not a shareable entity type
  */
 export function resolveEntityGrn(args) {
     if (args.entityGrn) {
-        parseGrn(args.entityGrn); // throws on malformed GRN
+        // Capture parseGrn's result (it returns the parsed tokens) — the old
+        // comma-operator pattern called it purely for its throw side-effect
+        // and discarded the parsed type, then re-did toLowerCase that parseGrn
+        // had already performed internally. Capturing the type makes the
+        // shareable-type guard below possible.
+        const { type } = parseGrn(args.entityGrn); // throws on malformed GRN
+        if (!SHAREABLE_TYPES.has(type)) {
+            throw new Error(
+                `entityGrn type "${type}" is not a shareable entity ` +
+                `(expected stream, dashboard, or search)`,
+            );
+        }
         // parseGrn lowercases internally for validation; the canonical GRN we
         // send must also be lowercase to round-trip the wire contract.
         return args.entityGrn.toLowerCase();

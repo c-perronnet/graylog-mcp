@@ -220,6 +220,78 @@ test("get_entity_shares rejects supplying NEITHER entityGrn nor (entityType,enti
 // Test 7 — error propagation
 // =====================================================================
 
+// =====================================================================
+// Test 8 — entityGrn input path (positive): a valid share-target GRN flows
+// through correctly-encoded and lowercased into the request path.
+// =====================================================================
+
+test("get_entity_shares accepts a valid entityGrn for a share-target type and encodes+lowercases it", async () => {
+    let captured = null;
+    _setCaptureRequest((req) => {
+        captured = req;
+        return PREPARE_FIXTURE;
+    });
+    // Mixed case on purpose — the canonical wire form is lowercase, and
+    // resolveEntityGrn() must lowercase before encodeURIComponent.
+    await handleGetEntityShares({
+        params: {
+            arguments: { _testConnection: "fake", entityGrn: "grn::::stream:ABC123" },
+        },
+    });
+    assert.equal(captured.method, "POST");
+    assert.match(captured.path, /\/prepare$/);
+    const expectedGrn = encodeURIComponent("grn::::stream:abc123");
+    assert.ok(
+        captured.path.includes(expectedGrn),
+        `path ${captured.path} should contain lowercased+encoded ${expectedGrn}`,
+    );
+});
+
+// =====================================================================
+// Test 9 — entityGrn input path (negative): a grantee-type GRN is rejected
+// client-side with NO HTTP call, mirroring the ENTITY_TYPES enum guard on
+// the `entityType` path. Covers the asymmetry fixed by WR-01.
+// =====================================================================
+
+for (const granteeType of ["user", "builtin-team", "role"]) {
+    test(`get_entity_shares rejects a grantee-type entityGrn (${granteeType}) with no HTTP request made`, async () => {
+        let captured = null;
+        _setCaptureRequest((req) => {
+            captured = req;
+            return PREPARE_FIXTURE;
+        });
+        const res = await handleGetEntityShares({
+            params: {
+                arguments: {
+                    _testConnection: "fake",
+                    entityGrn: `grn::::${granteeType}:someone`,
+                },
+            },
+        });
+        assert.equal(res.isError, true);
+        assert.match(res.content[0].text, /not a shareable entity/);
+        assert.equal(captured, null, "no request reached the seam");
+    });
+}
+
+test("list_grantees rejects a grantee-type entityGrn with no HTTP request made", async () => {
+    // list_grantees shares the same resolveEntityGrn helper — verify the
+    // guard applies there too (WR-02: one helper, one place to enforce).
+    let captured = null;
+    _setCaptureRequest((req) => {
+        captured = req;
+        return PREPARE_FIXTURE;
+    });
+    const res = await handleListGrantees({
+        params: {
+            arguments: { _testConnection: "fake", entityGrn: "grn::::user:alice" },
+        },
+    });
+    assert.equal(res.isError, true);
+    assert.match(res.content[0].text, /not a shareable entity/);
+    assert.equal(captured, null, "no request reached the seam");
+});
+
 test("get_entity_shares propagates an HTTP error via wrapGraylogError", async () => {
     _setCaptureRequest(() => {
         throw new GraylogNotFoundError("not found", {
