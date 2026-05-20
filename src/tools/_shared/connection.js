@@ -27,9 +27,28 @@ import { errorResponse } from "./errors.js";
  */
 export function resolveConnection(args) {
     // Test seam — project convention (cluster-errors.js:22-24, template-mgmt.js:9).
-    // Returns a synthetic conn with writable: true so tests that don't specifically
-    // target the writable gate aren't blocked by it.
+    // Two accepted shapes:
+    //   - string:  the canonical form (treated as a connection name). Returns a
+    //              synthetic conn with writable: true so tests that don't
+    //              specifically target the writable gate aren't blocked by it.
+    //   - object:  Phase 10 extension. An inline conn object — `{ baseUrl,
+    //              apiToken, writable? }` — used by tests that need to exercise
+    //              the writable-flag short-circuit without registering a
+    //              connection (test/authz-share-entity.test.js Test 16). The
+    //              object's fields are honoured verbatim; the synthetic `name`
+    //              is a sentinel string so error messages remain stable.
     if (args._testConnection) {
+        if (typeof args._testConnection === "object" && args._testConnection !== null) {
+            return {
+                name: "_testConnection",
+                conn: {
+                    baseUrl: "_test",
+                    apiToken: "_test",
+                    writable: true, // defaults true; overridden by spread when caller sets it
+                    ...args._testConnection,
+                },
+            };
+        }
         return {
             name: args._testConnection,
             conn: { baseUrl: "_test", apiToken: "_test", writable: true },
