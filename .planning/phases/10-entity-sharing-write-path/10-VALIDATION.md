@@ -2,7 +2,7 @@
 phase: 10
 slug: entity-sharing-write-path
 status: draft
-nyquist_compliant: false
+nyquist_compliant: true
 wave_0_complete: false
 created: 2026-05-20
 ---
@@ -39,9 +39,15 @@ created: 2026-05-20
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| _TBD — backfilled after planning, before plan-checker_ | — | — | SHARE-01..08 + AUTHZ-01 | — | — | unit (fixture-replay) | `node --test test/authz-share-entity.test.js` | ❌ W0 | ⬜ pending |
+| 10-01-01 | 10-01 | 1 | SHARE-01..08, AUTHZ-01 | T-10-02-01 (silent grant revocation, **high**) | Wave 0 offline test scaffold incl. the MANDATORY Pitfall-1 acceptance gate (three-grantee read-merge-write) | unit | `node --test test/authz-share-entity.test.js` | ❌ W0 | ⬜ pending |
+| 10-01-02 | 10-01 | 1 | SHARE-01..08, AUTHZ-01 | see 10-01 `<threat_model>` | `ShareEntitySchema` (mutatingBase + entity XOR + grantee XOR + revoke↔capability refine + `Capability` / `ENTITY_TYPES` enums) — malformed input rejected client-side, no HTTP call | unit (tdd) | `node --test test/authz-share-entity.test.js` | ❌ W0 | ⬜ pending |
+| 10-02-01 | 10-02 | 2 | SHARE-01..08, AUTHZ-01 | see 10-02 `<threat_model>` | `share-entity.js` handler — `defineMutatingHandler` + read-merge-write via `fetchEntitySharePreview` + `computeShareGrantHash` token + last-`own` guard + 400-with-body parser + 403→`not_entity_owner` | unit (tdd) | `node --test test/authz-share-entity.test.js` | ❌ W0 | ⬜ pending |
+| 10-02-02 | 10-02 | 2 | SHARE-01..08, AUTHZ-01 | see 10-02 `<threat_model>` | `share_entity` registered in authz barrel + `tools.js` + `DOMAIN_OVERRIDES`; tool count 93 → 94; full suite stays green | integration | `npm test` | ✅ existing | ⬜ pending |
+| 10-03-01 | 10-03 | 3 | SHARE-01..08, AUTHZ-01 | see 10-03 `<threat_model>` | Opt-in `dryRun: true`-only live smoke probe; commit endpoint grep-absent; never `builtin-team:everyone` | smoke (live-gated) | `node test/authz-share-entity-live.smoke.js` | ❌ W0 | ⬜ pending |
+| 10-03-02 | 10-03 | 3 | SHARE-01..08, AUTHZ-01 | see 10-03 `<threat_model>` | Human-verify throwaway-entity full-apply UAT against live `test` instance (per 08-TEST-STRATEGY.md) | manual / human-verify | checkpoint:human-verify (N/A) | ❌ W0 | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
+*Backfilled 2026-05-20 after planning (3 plans, 6 tasks). Per-task threat detail lives in each PLAN.md `<threat_model>` block (17 STRIDE entries across 3 plans; T-10-02-01 silent grant revocation is high-severity).*
 
 ---
 
@@ -74,4 +80,4 @@ created: 2026-05-20
 - [ ] Feedback latency < 5s
 - [ ] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** approved 2026-05-20
