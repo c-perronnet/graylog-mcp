@@ -37,65 +37,88 @@ The journey is strictly dependency-ordered. A correct GRN and the *corrected* en
 ## Phase Details
 
 ### Phase 8: AuthZ Foundation — GRN Helper & Live API Recon
+
 **Goal**: The GRN abstraction exists, is unit-tested, and the live Graylog 7.0.6 authz surface is captured as fixtures so every later phase builds on verified endpoint shapes — not on the milestone brief's wrong `PUT` path or the two-minors-ahead 7.2 source clone.
 **Depends on**: Phase 7 (v3.0.0 — provides `defineMutatingHandler`, `cascade-hash.js`, `_register.js` barrel, per-domain `src/tools/<domain>/` pattern)
 **Requirements**: AUTHZ-02
 **Success Criteria** (what must be TRUE):
+
   1. `buildGrn(type, id)` produces a valid 6-token lowercased GRN and `parseGrn`/`isGrn` round-trip it; an unknown type (`saved_search`, `event_notification`, `team`) is rejected client-side with a message listing the valid type set
   2. The `authz` domain is wired in — `src/tools/authz/index.js` barrel exists, `src/tools/_register.js` imports it, and `src/tools/authz/schemas.js` exposes a `Capability` enum pinned to exactly `view`/`manage`/`own`
   3. A captured real 7.0.6 `prepare` response fixture exists, and the corrected endpoint `POST /api/authz/shares/entities/{entityGRN}` (apply) + `.../prepare` (dry-run) is verified against the live `test` instance — the brief's `PUT /api/authz/shares/{grn}` is confirmed wrong and recorded as such
   4. `computeShareGrantHash({ entityGrn, grants })` is added to `src/tools/_shared/cascade-hash.js` with its byte-identity pinned in `test/cascade-hash.test.js`
   5. The live-production test strategy is documented — `dryRun: true` default, throwaway-entity + dedicated test-user harness, never `builtin-team:everyone` — before any apply handler is written
+
 **Plans**: 3 plans
 Plans:
+
 - [x] 08-01-PLAN.md — GRN helper + Capability enum + empty authz barrel wired into `_register.js`, unit-tested (Wave 1)
 - [x] 08-02-PLAN.md — `computeShareGrantHash` standalone canonical-form hash added to `cascade-hash.js`, byte-identity pinned (Wave 1)
 - [x] 08-03-PLAN.md — live 7.0.6 `/prepare` recon probe + captured fixture + `08-TEST-STRATEGY.md` (Wave 2)
 
 ### Phase 9: Entity Shares Read Path
+
 **Goal**: An agent can read an entity's current grant set and discover who it can be shared with — a non-mutating, immediately live-testable capability that de-risks `prepare`-response parsing before that parsing becomes load-bearing in the write path.
 **Depends on**: Phase 8
 **Requirements**: SHARE-02, SHARE-09
 **Success Criteria** (what must be TRUE):
+
   1. `get_entity_shares` returns an entity's current `active_shares` (grantee + capability) by calling `POST .../entities/{grn}/prepare` with an empty body — and works for stream, dashboard, and search entity types
   2. `list_grantees` returns the resolvable users/teams for an entity, derived from the `available_grantees` table in the `prepare` response, so an agent can map a username to the user-GRN the API requires
   3. The read handler surfaces the full nested `EntityShareResponse` DTO (active_shares, available_grantees, available_capabilities) without flattening — it uses a plain async handler, not the list-projection factory
   4. Both tools are smoke-tested non-mutatingly against the live `test` instance and verified against the Phase 8 fixtures offline
+
 **Plans**: 2 plans
 Plans:
+
 - [x] 09-01-PLAN.md — Wave 0 offline tests + zod schemas + shared fetch helper + `get_entity_shares` & `list_grantees` handlers + barrel/`tools.js` wiring (Wave 1)
 - [x] 09-02-PLAN.md — live non-mutating `/prepare`-only smoke check against the production `test` connection (Wave 2)
 
 ### Phase 10: Entity Sharing Write Path
+
 **Goal**: An agent can grant, change, and revoke a user's access to a stream, dashboard, or saved search through one `share_entity` tool — and the tool can never silently revoke another user's access, never apply on stale state, and never apply without an explicit confirmation token.
 **Depends on**: Phase 9
 **Requirements**: SHARE-01, SHARE-03, SHARE-04, SHARE-05, SHARE-06, SHARE-07, SHARE-08, AUTHZ-01
 **Success Criteria** (what must be TRUE):
+
   1. `share_entity` grants a named user a `view`/`manage`/`own` capability on a stream — accepting a username and resolving it to the required user-GRN — and the same tool works for dashboards and saved searches with only the GRN type token changing
   2. Adding a grantee never revokes existing grantees: an acceptance-gate test proves that sharing to user C, when users A and B already hold grants, produces an apply body containing all three (read-merge-write, not blind write)
   3. An agent can revoke a user's access (re-POST the merged grant set minus that grantee), and the dry-run output explicitly diffs grants added, unchanged, and would-be-removed
   4. `share_entity` defaults to `dryRun: true`, returns a sha-256 confirmation token over the merged grant set, refuses apply with `grants_changed_since_preview` when the live grant set drifted, and refuses apply on confirmation-token mismatch
   5. Graylog's `validation_result` and `missing_permissions_on_dependencies` are surfaced as structured output (including the HTTP 400-with-body case), a non-owner attempt yields an ownership-specific error, and a request that would drop the last `own` grant is refused
+
 **Plans**: 3 plans
 Plans:
+
 - [x] 10-01-PLAN.md — Wave 0 offline test scaffold (16 tests incl. MANDATORY Pitfall-1 acceptance gate) + ShareEntitySchema with XOR/refine validators (Wave 1)
 - [x] 10-02-PLAN.md — share-entity.js handler (defineMutatingHandler composition: read-merge-write via fetchEntitySharePreview, computeShareGrantHash token, last-own guard, 400-with-body parser, 403 → not_entity_owner) + authz barrel/tools.js/DOMAIN_OVERRIDES wiring + tool count 93→94 (Wave 2)
 - [x] 10-03-PLAN.md — opt-in dryRun-only live smoke probe + human-verify checkpoint for throwaway-entity full-apply UAT (Wave 3)
 
 ### Phase 11: Role Management
+
 **Goal**: An agent can inspect, create, modify, delete, and assign Graylog roles — the coarse-grained global permission layer — as an independent track from entity sharing, with built-in roles protected from mutation.
 **Depends on**: Phase 8
 **Requirements**: ROLE-01, ROLE-02, ROLE-03, ROLE-04, ROLE-05, ROLE-06, ROLE-07
 **Success Criteria** (what must be TRUE):
+
   1. `list_roles` returns all roles with their permission sets, and an agent can read a single role's permissions
   2. An agent can create a custom role with a named permission set (`create_role`), update its permissions and description (`update_role`), and delete it (`delete_role`)
   3. An agent can assign a user to a role (`assign_role`) and unassign a user from a role (`unassign_role`), keyed by role name + username
   4. The built-in read-only roles (`Admin`, `Reader`) are refused for update/delete client-side with a clear error, before any request reaches Graylog
   5. Every mutating role tool defaults to `dryRun: true`, returns a sha-256 confirmation token, and refuses apply on drift between preview and apply
+
 **Plans**: 3 plans
 Plans:
+**Wave 1**
+
 - [ ] 11-01-PLAN.md — Wave 0 RED scaffold: test/authz-roles.test.js (~30 tests incl. MANDATORY PITFALL 1 update_role full-replace + delete_role cascade preview + assign_role body=={} + unassign_role last-admin guard) + 7 zod schemas + BUILT_IN_ROLES Set + 7 tools.js entries + 7 DOMAIN_OVERRIDES entries + tool-count bumps 94→101 + 5 placeholder fixtures + 7 byte-pin tests for computeRoleCascadeHash (Wave 1)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 11-02-PLAN.md — Handler composition: computeRoleCascadeHash thin wrapper + role-helpers.js (assertRoleIsMutable + tagError + diff + hashing + catalogue validation) + 7 role handlers (list/get/create/update/delete/assign/unassign-role.js via defineMutatingHandler) + barrel registration; replaces 4 PLACEHOLDER cascade-hash digests; turns Wave 0 RED → GREEN; tool count = 101 (Wave 2)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 11-03-PLAN.md — scripts/capture-roles-fixtures.js (one-shot read-only live capture of 5 fixtures) + test/authz-roles-live.smoke.js (opt-in dryRun-only live probe for the 7 tools) + human-verify checkpoint for throwaway-role full-lifecycle UAT (default per D-24: defer to v3.1.0 milestone close bundled with Phase 10's deferred share_entity UAT) (Wave 3)
 
 ## Progress
