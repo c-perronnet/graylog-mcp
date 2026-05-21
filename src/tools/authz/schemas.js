@@ -139,3 +139,130 @@ export const ShareEntitySchema = mutatingBase
                 "capability is required when revoke is false (default), and must be absent when revoke is true.",
         },
     );
+
+// =====================================================================
+// Phase 11 Plan 11-01 — role management input schemas + BUILT_IN_ROLES
+// =====================================================================
+//
+// ROLE-01..ROLE-07 + AUTHZ-01 (re-asserted). 5 mutating schemas extend
+// mutatingBase (dryRun:true default + connectionName + idempotencyKey +
+// explicit confirm field — mirroring ShareEntitySchema:115-119). 2 read
+// schemas (ListRolesSchema, GetRoleSchema) are plain z.object — they
+// don't mutate, so mutatingBase fields would be meaningless (Phase 9
+// GetEntitySharesSchema precedent).
+//
+// BUILT_IN_ROLES — captured from live 7.0.6 GET /api/roles
+// (test/fixtures/authz/roles/list-roles-7.0.6.json). 16 lowercased
+// entries — compared case-insensitively in assertRoleIsMutable
+// (D-18 / Pitfall 7). The server's RoleService.delete JavaDoc says
+// "Deletes the (case insensitively) named role" — a defensive lowercase
+// comparison avoids "admin"/"Admin" mismatches. Source: 11-RESEARCH.md
+// §"Built-in Roles" lines 321-343.
+//
+// Plan 11-02 will register the 7 handlers in src/tools/authz/index.js
+// and ship the role-helpers.js module that consumes BUILT_IN_ROLES via
+// assertRoleIsMutable(roleName). The Set is exported HERE (not in
+// role-helpers.js) so the Wave 0 test file can import the parameterized
+// refusal loop iterator before Plan 11-02 lands the helper module.
+export const BUILT_IN_ROLES = new Set([
+    "admin",
+    "reader",
+    "alerts manager",
+    "api browser reader",
+    "cluster configuration reader",
+    "dashboard creator",
+    "data node manager",
+    "event definition creator",
+    "event notification creator",
+    "mcp server access",
+    "pipelines manager",
+    "sidecar manager",
+    "sidecar reader",
+    "sidecar system (internal)",
+    "user inspector",
+    "views manager",
+]);
+
+// ListRolesSchema — input for list_roles (D-06, D-07).
+//
+// Plain z.object — not a mutating tool, so no dryRun/idempotencyKey. The
+// optional nameFilter is a case-insensitive substring match applied
+// client-side in Plan 11-02 (D-07: no per-role member counts, no N+1).
+export const ListRolesSchema = z.object({
+    connectionName: z.string().optional(),
+    nameFilter: z.string().optional(),
+});
+
+// GetRoleSchema — input for get_role (D-06, D-08).
+//
+// Plain z.object. roleName is required + min(1) so Plan 11-02's
+// encodeURIComponent never operates on an empty string. Plan 11-02
+// projects /members response to {username, full_name, email} only — the
+// schema does NOT carry a member-fields flag; projection is fixed.
+export const GetRoleSchema = z.object({
+    connectionName: z.string().optional(),
+    roleName: z.string().min(1),
+});
+
+// CreateRoleSchema — input for create_role (D-02, D-04, D-12).
+//
+// Permission strings are parsed at handler time as `{type}:{action}[:{id}]`
+// (D-02); only the `{type}:{action}` prefix is validated against the live
+// catalogue (D-01). permitUnknownPermissions:true opts out per D-04.
+// `permissions: z.array(z.string()).min(0)` defensively allows empty —
+// Graylog may reject it, surfacing via the apply 400-with-body parser.
+export const CreateRoleSchema = mutatingBase.extend({
+    name: z.string().min(1),
+    description: z.string().optional(),
+    permissions: z.array(z.string()).min(0),
+    permitUnknownPermissions: z.boolean().optional().default(false),
+    confirm: z.string().optional(),
+});
+
+// UpdateRoleSchema — input for update_role (D-15).
+//
+// `permissions` is the FULL target set (D-15 full-replace semantics; Plan
+// 11-02 does a pre-flight GET to compute the diff for the dry-run
+// preview, but the body shipped to /api/roles/{name} echoes the agent's
+// full set verbatim). PITFALL 1 ACCEPTANCE GATE in test/authz-roles.test.js
+// pins this contract.
+export const UpdateRoleSchema = mutatingBase.extend({
+    roleName: z.string().min(1),
+    description: z.string().optional(),
+    permissions: z.array(z.string()).min(0),
+    permitUnknownPermissions: z.boolean().optional().default(false),
+    confirm: z.string().optional(),
+});
+
+// DeleteRoleSchema — input for delete_role (D-16).
+//
+// Cascade preview computed at handler time from GET /api/roles/{name}/members
+// — schema does not carry cascade flags. Drift refusal on member-list
+// change is via the confirmation-token mechanism (D-14).
+export const DeleteRoleSchema = mutatingBase.extend({
+    roleName: z.string().min(1),
+    confirm: z.string().optional(),
+});
+
+// AssignRoleSchema — input for assign_role (D-09).
+//
+// Exactly one user per call (D-09 — no batch). Plan 11-02's apply ships
+// body={} (literal empty object, NEVER null — Pitfall 3 / AP1; null skips
+// Content-Type and Graylog 415s).
+export const AssignRoleSchema = mutatingBase.extend({
+    roleName: z.string().min(1),
+    username: z.string().min(1),
+    confirm: z.string().optional(),
+});
+
+// UnassignRoleSchema — input for unassign_role (D-11).
+//
+// Mirrors AssignRoleSchema. Plan 11-02's handler refuses with
+// not_currently_assigned (D-11) if the user is not currently a member,
+// and with would_leave_no_admin (D-17 / Pitfall 5) if unassigning the
+// last Admin would lock the instance out.
+export const UnassignRoleSchema = mutatingBase.extend({
+    roleName: z.string().min(1),
+    username: z.string().min(1),
+    confirm: z.string().optional(),
+});
