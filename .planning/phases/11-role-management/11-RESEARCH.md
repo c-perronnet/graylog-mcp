@@ -26,7 +26,7 @@ This is a textbook composition phase: every safety primitive (`defineMutatingHan
 
 ## User Constraints (from CONTEXT.md)
 
-> **No CONTEXT.md exists for Phase 11.** This research is therefore unconstrained by user-locked decisions beyond the milestone-level constraints in CLAUDE.md and PROJECT.md. The discuss-phase step should resolve the Open Questions below before planning starts.
+> **CONTEXT.md was created after this research.** All Open Questions below have since been RESOLVED via `11-CONTEXT.md` Decisions D-01..D-24 (see §"Open Questions (RESOLVED via 11-CONTEXT.md)" at the end of this file). At the time of research authoring, no CONTEXT.md existed and the research therefore informed the discuss-phase step.
 
 ### Project Constraints (from CLAUDE.md)
 
@@ -1067,52 +1067,66 @@ Total ≈ 30-40 tests. Follow the Phase 10 pattern: every test uses `_setCapture
 
 **Confidence assessment for the LOW/MEDIUM items:** A1, A3, A4, A6, A9, A10 are LOW because they're defensive choices with low impact if wrong. A2, A5, A7 are MEDIUM and should be raised in discuss-phase before plan-time locking.
 
-## Open Questions (for discuss-phase)
+## Open Questions (RESOLVED via 11-CONTEXT.md)
 
-These are the decisions a user should lock before planning starts. Each has a recommended default — the planner can adopt them as Claude's-discretion outcomes unless the user disagrees.
+All 7 questions were resolved during `/gsd:discuss-phase 11` (2026-05-21) and locked in `11-CONTEXT.md` Decisions D-01..D-24. Per-question resolution mapping:
 
-### Q1: Permission-string validation strategy
+| Question | Resolution | CONTEXT.md decisions |
+|----------|------------|----------------------|
+| Q1 — Permission-string validation | Catalogue-aware + `permitUnknownPermissions: false` opt-out; validate `{type}:{action}` prefix accepting trailing `:id`; `*` accepted with prominent dry-run warning; per-connection cache | D-01, D-02, D-03, D-04, D-05 |
+| Q2 — assign/unassign single vs batch | Single user per call (`username: string`); batch deferred to v2-requirements | D-09, D-10, D-11 |
+| Q3 — `list_roles` + `get_role` split | Two tools — `list_roles` (array, no member counts) + `get_role` (one role + projected members array) | D-06, D-07, D-08 |
+| Q4 — Member count in `list_roles` | Excluded (no N+1 round-trips at list time); members available via `get_role` | D-07 |
+| Q5 — `delete_role` cascade preview shape | Projected `{username, roles_before, roles_after}` in `cascades.users_dissociated` (matches Phase 10's `diff` projection, not full-DTO pass-through) | D-16 |
+| Q6 — `BUILT_IN_ROLES` static vs query | Hybrid — static fast-path + server `read_only` flag from pre-flight GET as authority (belt + braces) | D-18, D-19 |
+| Q7 — System-job wait | None — `RoleService.save`/`delete` are synchronous | D-23 |
+
+Original questions and recommendations preserved below for audit trail.
+
+---
+
+### Q1: Permission-string validation strategy (RESOLVED: see D-01..D-05)
 
 - **What we know:** `RolesResource.create`/`update` accept any string as a permission; no server-side validation. `GET /api/system/permissions` returns the catalogue of legitimate `{resource}:{action}` pairs.
 - **What's unclear:** Whether Phase 11's `create_role`/`update_role` should validate permissions against the catalogue (Q1-b) or pass through (Q1-a).
 - **Tradeoff:** Q1-b protects against silent typos but may false-reject legitimate enterprise-plugin permissions; Q1-a is permissive but lets bad role definitions persist forever.
 - **Recommendation:** **Q1-b with a `permitUnknownPermissions: false` opt-out flag.** Validates by default, accepts an explicit opt-out for the rare enterprise case.
 
-### Q2: `assign_role` / `unassign_role` — single user or batch?
+### Q2: `assign_role` / `unassign_role` — single user or batch? (RESOLVED: see D-09)
 
 - **What we know:** The success-criterion #3 says "assign a user" (singular). The Graylog `/api/authz/roles/{id}/assignees` PUT accepts a `Set<String>` of usernames (batch); the `/api/roles/{name}/members/{username}` PUT accepts one user per call.
 - **What's unclear:** Whether the tool should accept `username: string` (one) or `usernames: string[]` (batch).
 - **Tradeoff:** Batch is more efficient for large assignments but complicates the dry-run preview (per-user diffs) and the cascade-impact preview. Single is simpler and matches the legacy endpoint shape.
 - **Recommendation:** **Single user per call.** If the agent needs to assign 5 users, it calls 5 times. Matches the success-criterion wording. Defer "batch assign" to a v2-requirements item if needed.
 
-### Q3: One `list_roles` tool, or split into `list_roles` + `get_role`?
+### Q3: One `list_roles` tool, or split into `list_roles` + `get_role`? (RESOLVED: see D-06)
 
 - **What we know:** Success-criterion #1 says "list_roles returns all roles with their permission sets, AND an agent can read a single role's permissions." This could be one tool (with optional `roleName` filter projecting to a single role) or two tools.
 - **What's unclear:** Tool-surface-budget preference.
 - **Tradeoff:** Two tools is more discoverable (`get_role` is the natural name for "fetch one"). One tool is leaner. Phase 9 chose two tools (`get_entity_shares` + `list_grantees`).
 - **Recommendation:** **Two tools — `list_roles` + `get_role`.** Tool count: 95 (single tool) vs 96 (two tools). Trivial difference; discoverability wins. `get_role` is also a natural place to surface members in the response (e.g., `{role, members}`) which differentiates it from `list_roles`.
 
-### Q4: Should `list_roles` include the assignee count per role (one-extra-call-per-role)?
+### Q4: Should `list_roles` include the assignee count per role (one-extra-call-per-role)? (RESOLVED: see D-07)
 
 - **What we know:** `GET /api/roles` returns role metadata but no per-role member count. Each role's member count would require N additional `GET /api/roles/{name}/members` calls (or one paginated `GET /api/authz/roles` per-role drilldown).
 - **What's unclear:** Whether the assignee count is valuable enough to justify N+1 round-trips at list time.
 - **Tradeoff:** N+1 is bad; the agent rarely needs the count up-front; if they want it, they can call `get_role` per role.
 - **Recommendation:** **Do NOT include member count in `list_roles`.** Add it to `get_role` (with the `members` array).
 
-### Q5: `delete_role` cascade preview — full user records or just usernames?
+### Q5: `delete_role` cascade preview — full user records or just usernames? (RESOLVED: see D-16)
 
 - **What we know:** `GET /api/roles/{name}/members` returns full `UserSummary` per user (~25 fields including permissions, GRN permissions, preferences). The cascade-impact preview only needs `username` + `roles before/after`.
 - **What's unclear:** Whether to project (cleaner) or pass-through (consistent with Phase 10's full-DTO surfacing).
 - **Tradeoff:** Projection is cleaner UX; pass-through is information-rich but verbose for the agent.
 - **Recommendation:** **Project to `[{username, roles_before, roles_after}]`** in the `cascades.users_dissociated` field. Phase 10 also projected (it surfaces `diff: {added, changed, unchanged, removed}` rather than the full `EntityShareResponse` re-emission).
 
-### Q6: Static `BUILT_IN_ROLES` set vs query-on-every-call
+### Q6: Static `BUILT_IN_ROLES` set vs query-on-every-call (RESOLVED: see D-18, D-19)
 
 - **What we know:** Live instance has 16 built-ins; the source has 2; enterprise instances may have more.
 - **What's unclear:** Whether the client-side guard should be the static set (fast, 1-deploy out of date) or a per-call lookup (always current, 1 round-trip extra).
 - **Tradeoff:** Static-set + server-backstop is the recommendation in this research. Per-call lookup is slower but always-current. If the planner picks per-call: in `build()`, call `GET /api/roles/{name}` first, check `read_only`. If `true`, refuse client-side. Cost: every mutating call has the pre-flight GET anyway (for `update_role`/`delete_role`), so the "per-call lookup" is FREE for those tools — only `create_role` would need an extra GET (against `/api/roles/{newName}` expecting 404). Recommendation: **use the server's `read_only` flag from the pre-flight GET response as the AUTHORITATIVE refusal**; use the static `BUILT_IN_ROLES` set as a FAST-PATH so the GET happens only when the static check passes. Belt + braces.
 
-### Q7: Should role tools wait on system-job completion?
+### Q7: Should role tools wait on system-job completion? (RESOLVED: see D-23)
 
 - **What we know:** Per the source, `roleService.save` and `roleService.delete` are synchronous (return after MongoDB write). No async system-job is queued.
 - **What's unclear:** Nothing — this is a non-question. Mentioned here so the planner doesn't accidentally add `await_system_job` integration where it isn't needed.
