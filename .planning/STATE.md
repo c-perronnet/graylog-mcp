@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: v3.1.0
 milestone_name: AuthZ & Sharing
-status: ready_to_plan
-stopped_at: Phase 10 complete (3/3) — ready to discuss Phase 11
-last_updated: 2026-05-20T16:41:16.854Z
+status: planning
+stopped_at: Phase 11 context gathered
+last_updated: "2026-05-21T07:56:28.365Z"
 last_activity: 2026-05-20
 progress:
   total_phases: 4
@@ -106,7 +106,7 @@ Items carried forward from the v3.0.0 milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-20T16:17:23.366Z
-Stopped at: Phase 10 complete (3/3 plans); throwaway-entity full-apply UAT deferred to v3.1.0 milestone close
-Resume file: None
+Last session: 2026-05-21T07:56:28.333Z
+Stopped at: Phase 11 context gathered
+Resume file: .planning/phases/11-role-management/11-CONTEXT.md
 </content>
