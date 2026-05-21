@@ -549,12 +549,11 @@ test("computeShareGrantHash rejects malformed inputs", () => {
 // shape so Plan 11-02's implementation choice produces deterministic
 // digests across the four mutator families.
 //
-// The frozen-fixture hashes start as PLACEHOLDERs (all-zeros with a
-// distinct trailing nibble per test). Plan 11-02 replaces them with the
-// real computed values after shipping the function — same RED → fix-pin
-// → GREEN cycle computeNotificationCascadeHash and computeShareGrantHash
-// used. To derive a real hash one-time (after Plan 11-02 ships the
-// function):
+// The frozen-fixture hashes were pinned by Plan 11-02 after shipping the
+// standalone canonical-form implementation — same RED → fix-pin → GREEN
+// cycle computeNotificationCascadeHash and computeShareGrantHash used.
+// To recompute a real hash (e.g. to verify canonical-form drift in a
+// future refactor):
 //   node --input-type=module -e "import {computeRoleCascadeHash} from \
 //     './src/tools/_shared/cascade-hash.js'; \
 //     console.log(computeRoleCascadeHash({tool:'create_role',name:'myCustomRole', \
@@ -572,11 +571,17 @@ test("computeRoleCascadeHash returns the pinned hash for the create_role frozen 
         permissions: ["dashboards:read", "streams:read"],
         description: "my desc",
     });
-    // PLACEHOLDER — Plan 11-02 replaces with the real digest after
-    // implementing computeRoleCascadeHash.
+    // Pinned by Plan 11-02 after shipping the standalone canonical-form
+    // implementation. Recompute via:
+    //   node --input-type=module -e "import {computeRoleCascadeHash} from \
+    //     './src/tools/_shared/cascade-hash.js'; \
+    //     console.log(computeRoleCascadeHash({tool:'create_role', \
+    //       name:'myCustomRole', \
+    //       permissions:['dashboards:read','streams:read'], \
+    //       description:'my desc'}))"
     assert.equal(
         h,
-        "0000000000000000000000000000000000000000000000000000000000000000",
+        "4017cc6ffd80c804a91f8d1fa01179bd8e3483c31c8960ba4db54813705a7260",
     );
 });
 
@@ -588,10 +593,10 @@ test("computeRoleCascadeHash returns the pinned hash for the update_role frozen 
         description: "x",
         current_permissions_hash: "abcd1234",
     });
-    // PLACEHOLDER — Plan 11-02 replaces with the real digest.
+    // Pinned by Plan 11-02.
     assert.equal(
         h,
-        "0000000000000000000000000000000000000000000000000000000000000001",
+        "4d13f4c546ba29d4e2ffe6af6fd9d4af9d29cd4899ed3028188007987980055b",
     );
 });
 
@@ -601,10 +606,10 @@ test("computeRoleCascadeHash returns the pinned hash for the delete_role frozen 
         name: "myCustomRole",
         members_hash: "feed5678",
     });
-    // PLACEHOLDER — Plan 11-02 replaces with the real digest.
+    // Pinned by Plan 11-02.
     assert.equal(
         h,
-        "0000000000000000000000000000000000000000000000000000000000000002",
+        "f19220e4d1bf5628b4857a7d9416ef394afc011f31c4fb22036241004d2a3ed2",
     );
 });
 
@@ -615,10 +620,10 @@ test("computeRoleCascadeHash returns the pinned hash for the assign_role frozen 
         username: "alice",
         current_roles_hash: "hash1",
     });
-    // PLACEHOLDER — Plan 11-02 replaces with the real digest.
+    // Pinned by Plan 11-02.
     assert.equal(
         h,
-        "0000000000000000000000000000000000000000000000000000000000000003",
+        "7fbf59cf4883aa8c6a98d38fa6d95997c245a743689f9b80da8bed78fdf4a10c",
     );
 });
 

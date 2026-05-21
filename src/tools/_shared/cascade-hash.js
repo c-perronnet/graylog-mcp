@@ -337,3 +337,97 @@ export function computeShareGrantHash({ entityGrn, grants }) {
     const canonical = JSON.stringify({ entityGrn, grants: sorted });
     return createHash("sha256").update(canonical).digest("hex");
 }
+
+// =====================================================================
+// Phase 11 — computeRoleCascadeHash (role-tool confirmation token)
+// =====================================================================
+//
+// Standalone canonical-form sha-256 over the tool-specific input. Unlike
+// computeNotificationCascadeHash (which forwards into computeCascadeHash),
+// role tools each have a distinct field set that doesn't map cleanly onto
+// computeCascadeHash's {streamId, ruleIds, pipelineConnIds, eventDefIds}
+// keyed-bucket shape. The standalone canonical form is the same approach
+// computeShareGrantHash uses for the entity-share grant token.
+//
+// Cross-tool replay protection (D-13): the `tool` field is the bucket
+// discriminator. A token from create_role X cannot validate an apply on
+// update_role X — the canonical input differs at the first byte.
+//
+// Canonical form per tool (D-13):
+//   - create_role:   { tool, name, permissions(sorted), description }
+//   - update_role:   { tool, name, permissions(sorted), description, current_permissions_hash }
+//   - delete_role:   { tool, name, members_hash }
+//   - assign_role:   { tool, roleName, username, current_roles_hash }
+//   - unassign_role: { tool, roleName, username, current_roles_hash }
+//
+// Pinned by 5 frozen-fixture tests in test/cascade-hash.test.js.
+//
+// Plan 11-02 divergence note (vs CONTEXT D-13 wording): D-13 describes "a
+// thin forwarding wrapper around computeCascadeHash". The actual
+// implementation is STANDALONE because computeCascadeHash's keyed-bucket
+// shape ({streamId, ruleIds, pipelineConnIds, eventDefIds}) does not map
+// onto role inputs. The FUNCTIONAL contract D-13 cares about (cross-tool
+// replay protection, byte-pinned test fixtures, cross-name + cross-user
+// replay prevention) is preserved verbatim. The plan-checker accepted this
+// deviation; the byte-pin tests Plan 11-01 ships are the canonical lock.
+
+/**
+ * Compute the deterministic confirmation token for the role-management
+ * mutating tools (create_role / update_role / delete_role / assign_role /
+ * unassign_role).
+ *
+ * Standalone canonical-form sha-256. The `tool` field is the bucket
+ * discriminator that makes cross-tool replay impossible (D-13). Permission
+ * arrays are sorted canonically inside the function so the agent does not
+ * need to pre-sort.
+ *
+ * @param {object} input
+ * @param {string} input.tool                  one of create_role / update_role /
+ *                                              delete_role / assign_role /
+ *                                              unassign_role (non-empty)
+ * @param {string} [input.name]                role name (create / update / delete)
+ * @param {string} [input.roleName]            role name (assign / unassign)
+ * @param {string} [input.username]            user name (assign / unassign)
+ * @param {string} [input.description]         role description (create / update)
+ * @param {string[]} [input.permissions]       permission strings; sorted internally
+ * @param {string} [input.current_permissions_hash]  drift-refusal anchor (update)
+ * @param {string} [input.members_hash]        drift-refusal anchor (delete)
+ * @param {string} [input.current_roles_hash]  drift-refusal anchor (assign / unassign)
+ * @returns {string} 64-char lowercase hex sha-256 digest
+ * @throws  {Error}  when input is null / not an object / array
+ * @throws  {Error}  when input.tool is missing or empty
+ */
+export function computeRoleCascadeHash(input) {
+    if (!input || typeof input !== "object" || Array.isArray(input)) {
+        throw new Error(
+            "computeRoleCascadeHash: input must be a non-null object with a `tool` field",
+        );
+    }
+    if (typeof input.tool !== "string" || input.tool.length === 0) {
+        throw new Error(
+            "computeRoleCascadeHash: input.tool is required (non-empty string)",
+        );
+    }
+    // Build the canonical form in a stable key order. JSON.stringify uses
+    // insertion-order for object keys, so this defines the byte-level
+    // canonical form that test/cascade-hash.test.js pins.
+    const canonical = { tool: input.tool };
+    if (typeof input.name === "string") canonical.name = input.name;
+    if (typeof input.roleName === "string") canonical.roleName = input.roleName;
+    if (typeof input.username === "string") canonical.username = input.username;
+    if (typeof input.description === "string") canonical.description = input.description;
+    if (Array.isArray(input.permissions)) {
+        canonical.permissions = [...input.permissions].sort();
+    }
+    if (typeof input.current_permissions_hash === "string") {
+        canonical.current_permissions_hash = input.current_permissions_hash;
+    }
+    if (typeof input.members_hash === "string") {
+        canonical.members_hash = input.members_hash;
+    }
+    if (typeof input.current_roles_hash === "string") {
+        canonical.current_roles_hash = input.current_roles_hash;
+    }
+    const json = JSON.stringify(canonical);
+    return createHash("sha256").update(json).digest("hex");
+}
