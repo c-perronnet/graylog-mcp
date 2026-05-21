@@ -13,7 +13,7 @@ For runtime configuration see [CONFIGURATION.md](./CONFIGURATION.md).
 ## Local setup
 
 ```bash
-git clone https://github.com/jagadeesh52423/graylog-mcp.git
+git clone https://github.com/c-perronnet/graylog-mcp.git
 cd graylog-mcp
 npm install
 ```

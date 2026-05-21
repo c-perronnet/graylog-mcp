@@ -37,7 +37,7 @@ flow — `package.json` does not declare a `bin` entry, so the server is run
 either by path (`node src/index.js`) or via the `npm start` script.
 
 ```bash
-git clone https://github.com/jagadeesh52423/graylog-mcp.git
+git clone https://github.com/c-perronnet/graylog-mcp.git
 cd graylog-mcp
 npm install
 ```
