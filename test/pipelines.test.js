@@ -393,7 +393,7 @@ test("dispatch resolves list_pipelines/get_pipeline/delete_pipeline via the new 
     assert.ok(Array.isArray(payload.items));
 });
 
-test("assertAllToolsRegistered passes after Plan 10-02 end (count = 94; +authz write path)", async () => {
+test("assertAllToolsRegistered passes after Plan 11-02 end (count = 101; +role management)", async () => {
     const { dispatch, assertAllToolsRegistered } = await import("../src/dispatch.js");
     await import("../src/tools/_register.js");
     const { toolDefinitions } = await import("../src/tools.js");
@@ -426,7 +426,8 @@ test("assertAllToolsRegistered passes after Plan 10-02 end (count = 94; +authz w
     // Plan 07-02 Task 1 adds HARD-02 list_admin_tools → 91 (v3.0.0 milestone count).
     // Plan 09-01 adds the authz READ path: get_entity_shares + list_grantees → 93.
     // Plan 10-02 adds the authz WRITE path: share_entity → 94 (v3.1.0 headline tool).
-    assert.equal(toolDefinitions.length, 94, `Expected 94 tools after Plan 10-02 end (Phase 10 Plan 02 complete: share_entity shipped); got ${toolDefinitions.length}`);
+    // Plan 11-02 adds the role management surface: list_roles + get_role + create_role + update_role + delete_role + assign_role + unassign_role → 101 (v3.1.0 milestone count).
+    assert.equal(toolDefinitions.length, 101, `Expected 101 tools after Plan 11-02 end (Phase 11 Plan 02 complete: 7 role tools shipped); got ${toolDefinitions.length}`);
 });
 
 // =====================================================================
