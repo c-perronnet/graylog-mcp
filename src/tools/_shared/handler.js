@@ -146,6 +146,20 @@ export function defineMutatingHandler(spec) {
                             method: req.method,
                             path: req.path,
                             body: req.body,
+                            // Plan 11-02: opt-in `preview.cascades` for handlers
+                            // that ALSO want cascade previews co-located with
+                            // the HTTP call shape (the "this is what's about
+                            // to happen" view). Phase 11 role-management tests
+                            // (D-15 diff, D-16 users_dissociated, D-10 assign
+                            // current_roles + roles_after_apply, D-03 warnings)
+                            // assert `payload.preview.cascades.X` because
+                            // cascade previews are a load-bearing dry-run
+                            // safety feature. Opt-in via `req.previewCascades`
+                            // so Phases 1-10 tools (which pin the canonical
+                            // `preview: {method, path, body}` shape via
+                            // snapshot tests) are unaffected; the top-level
+                            // `cascades` spread below still fires for them.
+                            ...(req.previewCascades ? { cascades: req.previewCascades } : {}),
                         },
                         // FOUND-04 / Pitfall C6: tell the agent which fields the server fills.
                         postApplyEstimate: req.postApplyEstimate
