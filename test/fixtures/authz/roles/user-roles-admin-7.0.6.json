@@ -1,0 +1,26 @@
+{
+  "_provenance": {
+    "captured_by": "PLACEHOLDER — Plan 11-03 scripts/capture-roles-fixtures.js will overwrite",
+    "instance": "_seed",
+    "connection": "_seed",
+    "graylog_version": "_seed",
+    "endpoint": "GET /api/authz/roles/user/admin",
+    "captured_at": "2026-05-21T00:00:00.000Z",
+    "note": "Phase 11 Plan 11-01 scaffold seed. Plan 11-03 replaces with the live admin user role list."
+  },
+  "total": 1,
+  "page": 1,
+  "per_page": 50,
+  "count": 1,
+  "roles": [
+    {
+      "id": "_seed-admin-id",
+      "name": "Admin",
+      "description": "Built-in (seed)",
+      "permissions": ["*"],
+      "read_only": true
+    }
+  ],
+  "query": "",
+  "grand_total": 16
+}
