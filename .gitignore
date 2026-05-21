@@ -100,6 +100,7 @@ logs
 scripts/*
 !scripts/audit-tool-descriptions.js
 !scripts/capture-authz-prepare-fixture.js
+!scripts/capture-roles-fixtures.js
 
 # Read-only Graylog server reference clone (used by researchers for API shape)
 source-code/
