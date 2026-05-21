@@ -92,7 +92,11 @@ Plans:
   3. An agent can assign a user to a role (`assign_role`) and unassign a user from a role (`unassign_role`), keyed by role name + username
   4. The built-in read-only roles (`Admin`, `Reader`) are refused for update/delete client-side with a clear error, before any request reaches Graylog
   5. Every mutating role tool defaults to `dryRun: true`, returns a sha-256 confirmation token, and refuses apply on drift between preview and apply
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] 11-01-PLAN.md — Wave 0 RED scaffold: test/authz-roles.test.js (~30 tests incl. MANDATORY PITFALL 1 update_role full-replace + delete_role cascade preview + assign_role body=={} + unassign_role last-admin guard) + 7 zod schemas + BUILT_IN_ROLES Set + 7 tools.js entries + 7 DOMAIN_OVERRIDES entries + tool-count bumps 94→101 + 5 placeholder fixtures + 7 byte-pin tests for computeRoleCascadeHash (Wave 1)
+- [ ] 11-02-PLAN.md — Handler composition: computeRoleCascadeHash thin wrapper + role-helpers.js (assertRoleIsMutable + tagError + diff + hashing + catalogue validation) + 7 role handlers (list/get/create/update/delete/assign/unassign-role.js via defineMutatingHandler) + barrel registration; replaces 4 PLACEHOLDER cascade-hash digests; turns Wave 0 RED → GREEN; tool count = 101 (Wave 2)
+- [ ] 11-03-PLAN.md — scripts/capture-roles-fixtures.js (one-shot read-only live capture of 5 fixtures) + test/authz-roles-live.smoke.js (opt-in dryRun-only live probe for the 7 tools) + human-verify checkpoint for throwaway-role full-lifecycle UAT (default per D-24: defer to v3.1.0 milestone close bundled with Phase 10's deferred share_entity UAT) (Wave 3)
 
 ## Progress
 
@@ -112,4 +116,5 @@ Phases execute in numeric order: 8 → 9 → 10 → 11
 | 8. AuthZ Foundation | v3.1.0 | 3/3 | Complete   | 2026-05-19 |
 | 9. Entity Shares Read Path | v3.1.0 | 2/2 | Complete   | 2026-05-19 |
 | 10. Entity Sharing Write Path | v3.1.0 | 3/3 | Complete    | 2026-05-20 |
-| 11. Role Management | v3.1.0 | 0/TBD | Not started | - |
+| 11. Role Management | v3.1.0 | 0/3 | Planned | - |
+</content>
