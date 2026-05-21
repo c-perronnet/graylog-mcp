@@ -11,7 +11,7 @@ The existing v2.3 codebase covers read/analyze (search, aggregations, histograms
 
 ### Constraints
 
-- **Tech stack:** Node.js ≥18 ESM; existing dependencies (`@modelcontextprotocol/sdk`, `axios`, `zod`) — adopt `zod` for the long-deferred input validation rather than adding a new dep
+- **Tech stack:** Node.js ≥22.3.0 ESM (per `package.json` engines); existing dependencies (`@modelcontextprotocol/sdk`, `axios`, `zod`) — adopt `zod` for the long-deferred input validation rather than adding a new dep
 - **Graylog version:** 7.2.0-SNAPSHOT only — single target; no multi-version branching
 - **Auth model:** Existing connection registry + API token (HTTP Basic with token-as-username, `password: "token"`). No new auth concepts. Insufficient permissions surface as upstream 403.
 - **Safety:** Every mutating tool MUST default to `dryRun: true`. Applying without an explicit `dryRun: false` is a bug.
@@ -29,8 +29,8 @@ The existing v2.3 codebase covers read/analyze (search, aggregations, histograms
 - TypeScript - Development dependencies only (`@types/node`, `typescript` in devDependencies)
 - Not used in runtime; included for type checking and IDE support
 ## Runtime
-- Node.js 18.0.0+ (requirement in `package.json` engines)
-- Tested compatibility: Node 18, 20, 22+
+- Node.js 22.3.0+ (requirement in `package.json` engines)
+- Tested compatibility: Node 22.3+
 - npm (bundled with Node.js)
 - Lockfile: `package-lock.json` present (v3, lockfileVersion 3)
 ## Frameworks
@@ -53,15 +53,15 @@ The existing v2.3 codebase covers read/analyze (search, aggregations, histograms
 - `src/index.js` - Main entry point (shebang: `#!/usr/bin/env node`)
 - `npm start` - Run server in production mode
 - `npm dev` - Run with `--watch` flag for development
-- `npm test` - Run test harness via `test-server.js`
+- `npm test` - Run full test suite via `node --test` (1196/1196 as of v3.1.0)
 ## Platform Requirements
-- Node.js 18+
+- Node.js 22.3.0+
 - npm or compatible package manager
 - Text editor or IDE with ES Module support
-- Node.js 18+ runtime environment
-- Graylog instance 6.x (tested on 6.2)
+- Node.js 22.3.0+ runtime environment
+- Graylog instance 7.0.6 (target verified live)
 - Valid Graylog API token
-- Recommended: Container (Docker) with `node:18-alpine` or newer
+- Recommended: Container (Docker) with `node:22-alpine` or newer
 - Alternative: Direct Node.js installation on host
 - MCP client config integration (Claude, Cursor, Claude Desktop)
 ## File Structure

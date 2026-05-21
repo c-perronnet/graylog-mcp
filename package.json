@@ -28,12 +28,12 @@
     "license": "MIT",
     "repository": {
         "type": "git",
-        "url": "git+https://github.com/jagadeesh52423/graylog-mcp.git"
+        "url": "git+https://github.com/c-perronnet/graylog-mcp.git"
     },
     "bugs": {
-        "url": "https://github.com/jagadeesh52423/graylog-mcp/issues"
+        "url": "https://github.com/c-perronnet/graylog-mcp/issues"
     },
-    "homepage": "https://github.com/jagadeesh52423/graylog-mcp#readme",
+    "homepage": "https://github.com/c-perronnet/graylog-mcp#readme",
     "dependencies": {
         "@modelcontextprotocol/sdk": "^1.18.0",
         "axios": "^1.12.2",
