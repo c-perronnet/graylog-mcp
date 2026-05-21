@@ -1959,6 +1959,120 @@ export const toolDefinitions = [
         },
     },
     {
+        name: "list_roles",
+        description: "List all Graylog roles (name, description, permissions, read_only flag). Optional nameFilter does a case-insensitive substring match. Non-mutating. Pre-flight for update_role/delete_role/assign_role.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                connectionName: { type: "string" },
+                nameFilter: { type: "string", description: "Optional substring filter on role name (case-insensitive)." },
+            },
+        },
+    },
+    {
+        name: "get_role",
+        description: "Get a single role by name with its members ({username, full_name, email}). Non-mutating. Use to preview impact before update_role/delete_role/unassign_role.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                connectionName: { type: "string" },
+                roleName: { type: "string", description: "Role name as listed by list_roles (case-sensitive on GET, case-insensitive on delete)." },
+            },
+            required: ["roleName"],
+        },
+    },
+    {
+        name: "create_role",
+        description: "Create a custom role with a permission set. Defaults dryRun:true; echo confirmationToken to apply. Validates permissions against /api/system/permissions (set permitUnknownPermissions:true to opt out).",
+        inputSchema: {
+            type: "object",
+            properties: {
+                connectionName: { type: "string" },
+                dryRun: { type: "boolean", description: "Defaults true. Set false to apply." },
+                idempotencyKey: { type: "string" },
+                name: { type: "string", description: "Custom role name (refuses Admin/Reader/14 other built-ins)." },
+                description: { type: "string" },
+                permissions: {
+                    type: "array",
+                    items: { type: "string" },
+                    description: "List of {resource}:{action}[:scope] strings. Validated against /api/system/permissions unless permitUnknownPermissions:true.",
+                },
+                permitUnknownPermissions: { type: "boolean", description: "Defaults false. Set true to skip catalogue validation for enterprise-plugin permissions." },
+                confirm: { type: "string", description: "Echo the dry-run confirmationToken to apply." },
+            },
+            required: ["name", "permissions"],
+        },
+    },
+    {
+        name: "update_role",
+        description: "Update a custom role's permissions and description (full-replace; pre-flight GET merges current state). Defaults dryRun:true + drift refusal. Refuses built-in roles (Admin, Reader, +14) client-side.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                connectionName: { type: "string" },
+                dryRun: { type: "boolean", description: "Defaults true. Set false to apply." },
+                idempotencyKey: { type: "string" },
+                roleName: { type: "string" },
+                description: { type: "string" },
+                permissions: {
+                    type: "array",
+                    items: { type: "string" },
+                    description: "Full target permission set (replaces current; tool reads current state to compute diff).",
+                },
+                permitUnknownPermissions: { type: "boolean" },
+                confirm: { type: "string", description: "Echo the dry-run confirmationToken to apply." },
+            },
+            required: ["roleName", "permissions"],
+        },
+    },
+    {
+        name: "delete_role",
+        description: "Delete a custom role. Pre-flight GET .../members shows the cascade (users_dissociated). Defaults dryRun:true + drift refusal on member-list change. Refuses built-in roles client-side.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                connectionName: { type: "string" },
+                dryRun: { type: "boolean", description: "Defaults true. Set false to apply." },
+                idempotencyKey: { type: "string" },
+                roleName: { type: "string" },
+                confirm: { type: "string", description: "Echo the dry-run confirmationToken to apply." },
+            },
+            required: ["roleName"],
+        },
+    },
+    {
+        name: "assign_role",
+        description: "Assign a user to a role (keyed by roleName + username). Defaults dryRun:true; idempotent for already-member. Pre-flight surfaces current_roles and roles_after_apply. Built-in roles allowed as targets.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                connectionName: { type: "string" },
+                dryRun: { type: "boolean", description: "Defaults true. Set false to apply." },
+                idempotencyKey: { type: "string" },
+                roleName: { type: "string" },
+                username: { type: "string", description: "Graylog username (NOT user-GRN). Server-side 404 if user does not exist." },
+                confirm: { type: "string", description: "Echo the dry-run confirmationToken to apply." },
+            },
+            required: ["roleName", "username"],
+        },
+    },
+    {
+        name: "unassign_role",
+        description: "Unassign a user from a role. Defaults dryRun:true + drift refusal. Refuses on not_currently_assigned and on would_leave_no_admin (removing last Admin). Built-in roles allowed as targets.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                connectionName: { type: "string" },
+                dryRun: { type: "boolean", description: "Defaults true. Set false to apply." },
+                idempotencyKey: { type: "string" },
+                roleName: { type: "string" },
+                username: { type: "string" },
+                confirm: { type: "string", description: "Echo the dry-run confirmationToken to apply." },
+            },
+            required: ["roleName", "username"],
+        },
+    },
+    {
         name: "list_admin_tools",
         description: "List every MCP tool grouped by domain (inputs/streams/pipelines/etc.) with a one-line summary. Use this vs. dumping the full /tools list when you need to orient at session start.",
         inputSchema: {

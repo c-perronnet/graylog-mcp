@@ -1732,14 +1732,15 @@ test("add_widget_from_template places widget at row 1 when positions map is empt
 // Plan 07-02 adds HARD-02 list_admin_tools → 91 (v3.0.0 milestone count).
 // Plan 09-01 adds the authz READ path (get_entity_shares + list_grantees) → 93.
 // Plan 10-02 adds the authz WRITE path (share_entity) → 94.
+// Plan 11-02 adds the role management surface (list_roles/get_role/create_role/update_role/delete_role/assign_role/unassign_role) → 101.
 // The pipelines.test.js count assertion pins the cumulative count; this
 // test mirrors it.
 
-test("assertAllToolsRegistered passes after Plan 10-02 end (count = 94; +authz write path)", async () => {
+test("assertAllToolsRegistered passes after Plan 11-02 end (count = 101; +role management)", async () => {
     const { dispatch, assertAllToolsRegistered } = await import("../src/dispatch.js");
     await import("../src/tools/_register.js");
     const { toolDefinitions } = await import("../src/tools.js");
     assertAllToolsRegistered(toolDefinitions);
     assert.equal(typeof dispatch, "function");
-    assert.equal(toolDefinitions.length, 94, `Expected 94 tools after Plan 10-02 end (share_entity shipped); got ${toolDefinitions.length}`);
+    assert.equal(toolDefinitions.length, 101, `Expected 101 tools after Plan 11-02 end (7 role tools shipped); got ${toolDefinitions.length}`);
 });

@@ -26,6 +26,11 @@ import {
     computeRuleCascadeHash,
     computeNotificationCascadeHash,
     computeShareGrantHash,
+    // Phase 11 Plan 11-01 — RED scaffold. The export is added by Plan 11-02;
+    // this import fails with ERR_MODULE_NOT_FOUND at module-load until then,
+    // which is the expected Wave 0 state (mirrors Plan 10-01's handler-import
+    // tolerance in test/authz-share-entity.test.js).
+    computeRoleCascadeHash,
 } from "../src/tools/_shared/cascade-hash.js";
 
 // Phase 2 back-compat: the original c1-hash.js path is preserved as a thin
@@ -532,4 +537,140 @@ test("computeShareGrantHash rejects malformed inputs", () => {
         () => computeShareGrantHash({ entityGrn: "grn::::stream:s1", grants: "nope" }),
         /grants/,
     );
+});
+
+// =====================================================================
+// Phase 11 Plan 11-01 — computeRoleCascadeHash byte-identity pins
+// =====================================================================
+//
+// Plan 11-02 ships the function (forwarding or standalone — see
+// 11-PATTERNS.md §"Factory Contracts" §"computeCascadeHash" for the
+// decision point). The byte-pin tests below PIN the canonical output
+// shape so Plan 11-02's implementation choice produces deterministic
+// digests across the four mutator families.
+//
+// The frozen-fixture hashes start as PLACEHOLDERs (all-zeros with a
+// distinct trailing nibble per test). Plan 11-02 replaces them with the
+// real computed values after shipping the function — same RED → fix-pin
+// → GREEN cycle computeNotificationCascadeHash and computeShareGrantHash
+// used. To derive a real hash one-time (after Plan 11-02 ships the
+// function):
+//   node --input-type=module -e "import {computeRoleCascadeHash} from \
+//     './src/tools/_shared/cascade-hash.js'; \
+//     console.log(computeRoleCascadeHash({tool:'create_role',name:'myCustomRole', \
+//       permissions:['dashboards:read','streams:read'],description:'my desc'}))"
+//
+// CRITICAL: `tool` is the bucket discriminator — cross-tool replay
+// protection (D-13). A create_role X token cannot validate an
+// update_role X apply because the canonical input differs. Test 5e
+// pins this invariant across all four mutator families pairwise.
+
+test("computeRoleCascadeHash returns the pinned hash for the create_role frozen fixture", () => {
+    const h = computeRoleCascadeHash({
+        tool: "create_role",
+        name: "myCustomRole",
+        permissions: ["dashboards:read", "streams:read"],
+        description: "my desc",
+    });
+    // PLACEHOLDER — Plan 11-02 replaces with the real digest after
+    // implementing computeRoleCascadeHash.
+    assert.equal(
+        h,
+        "0000000000000000000000000000000000000000000000000000000000000000",
+    );
+});
+
+test("computeRoleCascadeHash returns the pinned hash for the update_role frozen fixture (includes current_permissions_hash)", () => {
+    const h = computeRoleCascadeHash({
+        tool: "update_role",
+        name: "myCustomRole",
+        permissions: ["streams:read"],
+        description: "x",
+        current_permissions_hash: "abcd1234",
+    });
+    // PLACEHOLDER — Plan 11-02 replaces with the real digest.
+    assert.equal(
+        h,
+        "0000000000000000000000000000000000000000000000000000000000000001",
+    );
+});
+
+test("computeRoleCascadeHash returns the pinned hash for the delete_role frozen fixture (includes members_hash)", () => {
+    const h = computeRoleCascadeHash({
+        tool: "delete_role",
+        name: "myCustomRole",
+        members_hash: "feed5678",
+    });
+    // PLACEHOLDER — Plan 11-02 replaces with the real digest.
+    assert.equal(
+        h,
+        "0000000000000000000000000000000000000000000000000000000000000002",
+    );
+});
+
+test("computeRoleCascadeHash returns the pinned hash for the assign_role frozen fixture (includes current_roles_hash; cross-replay-safe across roleName + username)", () => {
+    const h = computeRoleCascadeHash({
+        tool: "assign_role",
+        roleName: "Reader",
+        username: "alice",
+        current_roles_hash: "hash1",
+    });
+    // PLACEHOLDER — Plan 11-02 replaces with the real digest.
+    assert.equal(
+        h,
+        "0000000000000000000000000000000000000000000000000000000000000003",
+    );
+});
+
+test("computeRoleCascadeHash distinguishes tools (create_role X token ≠ update_role X token; assign_role token ≠ unassign_role token — D-13 cross-tool replay protection)", () => {
+    const create = computeRoleCascadeHash({
+        tool: "create_role",
+        name: "X",
+        permissions: [],
+        description: "",
+    });
+    const update = computeRoleCascadeHash({
+        tool: "update_role",
+        name: "X",
+        permissions: [],
+        description: "",
+        current_permissions_hash: "none",
+    });
+    const assign = computeRoleCascadeHash({
+        tool: "assign_role",
+        roleName: "X",
+        username: "u",
+        current_roles_hash: "none",
+    });
+    const unassign = computeRoleCascadeHash({
+        tool: "unassign_role",
+        roleName: "X",
+        username: "u",
+        current_roles_hash: "none",
+    });
+    assert.notEqual(create, update, "create_role token must not validate update_role apply");
+    assert.notEqual(assign, unassign, "assign_role token must not validate unassign_role apply");
+    assert.notEqual(create, assign, "create_role token must not validate assign_role apply");
+});
+
+test("computeRoleCascadeHash is permission-order-independent (sort canonically inside)", () => {
+    const h1 = computeRoleCascadeHash({
+        tool: "create_role",
+        name: "X",
+        permissions: ["a:b", "c:d"],
+        description: "",
+    });
+    const h2 = computeRoleCascadeHash({
+        tool: "create_role",
+        name: "X",
+        permissions: ["c:d", "a:b"],
+        description: "",
+    });
+    assert.equal(h1, h2);
+});
+
+test("computeRoleCascadeHash rejects malformed inputs", () => {
+    assert.throws(() => computeRoleCascadeHash(null), /tool/i);
+    assert.throws(() => computeRoleCascadeHash({}), /tool/i);
+    assert.throws(() => computeRoleCascadeHash({ tool: "" }), /tool/i);
 });

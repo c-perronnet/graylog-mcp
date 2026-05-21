@@ -61,11 +61,18 @@ const DOMAIN_OVERRIDES = {
     disconnect_pipelines_from_stream: "pipelines",
 
     // ----- authz (Phase 9 entity-shares read path + Phase 10 share_entity
-    //       write path; the names have no domain-named segment so segment
-    //       inference cannot classify them) -----
+    //       write path + Phase 11 role-management surface; the names have no
+    //       domain-named segment so segment inference cannot classify them) -----
     get_entity_shares: "authz",
     list_grantees: "authz",
     share_entity: "authz",
+    list_roles: "authz",
+    get_role: "authz",
+    create_role: "authz",
+    update_role: "authz",
+    delete_role: "authz",
+    assign_role: "authz",
+    unassign_role: "authz",
 };
 
 // Per-segment routing for tools that follow the `<verb>_<domain>_<noun>`
