@@ -148,6 +148,64 @@ This SUMMARY will be APPENDED with the operator's choice once received via the r
 2. `node scripts/capture-roles-fixtures.js` — operator runs once to overwrite the 5 placeholder fixtures with live data; expected exit 0
 3. `node test/authz-roles-live.smoke.js` — operator runs to verify the 7 role tools work end-to-end against live; expected exit 0
 
+## Task 3 Outcome — Throwaway-Role Full Lifecycle UAT (Option A)
+
+**Operator disposition:** **Option A — `uat-complete`** (executed live; full create→get→update→assign→unassign→delete lifecycle ran clean against the production UNESCO Graylog 7.0.6+711d207 `test` connection on 2026-05-21). Option B (defer to v3.1.0 milestone close) was the D-24 default but the operator chose to discharge the UAT NOW instead.
+
+**Date:** 2026-05-21
+**Operator:** Operator
+**Operator-driven via:** Reloaded the Graylog MCP after Plan 11-02 to expose the 7 new role tools, then drove the full lifecycle through `mcp__graylog__*` tools (per project memory `validate-mcp-via-tools` — no bash curl bypass).
+**Throwaway role:** `_phase11_uat_20260521`
+**Dedicated test user:** `<user-a>` (User A) — operator-designated; pre-existing roles `[Cluster Configuration Reader, Reader]` restored verbatim post-UAT.
+**Live connection:** `test` → `http://<graylog-host>` Graylog 7.0.6+711d207 (UNESCO production)
+
+**Lifecycle steps** (each step: `dryRun:true` preview → token-confirmed `dryRun:false` apply):
+
+| # | Step                              | Tool                       | Result  | Live evidence captured                                                                                                                                                                                                                                                                  |
+|---|-----------------------------------|----------------------------|---------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| 1 | Create throwaway role             | `create_role`              | applied | dryRun emitted `confirmationToken: 0e5e271a…`; apply returned `applied: true` with role body verbatim                                                                                                                                                                                   |
+| 2 | Read-back                         | `get_role`                 | live    | shape `{role, members: []}` verified per D-08                                                                                                                                                                                                                                            |
+| 3 | Full-replace update               | `update_role`              | applied | **D-15 PITFALL 1 verified live:** PUT body `{name, description (merged from pre-flight GET), permissions (FULL target — [streams:read:000…001]), read_only: false}`; cascade diff `{added: [streams:read:…], removed: [users:tokenlist], unchanged: []}`                              |
+| 4 | Verify update                     | `get_role`                 | live    | permissions swapped, description preserved                                                                                                                                                                                                                                                |
+| 5 | Assign to dedicated test user     | `assign_role` <user-a>        | applied | **Pitfall 3 verified live:** preview `body: {}` (literal empty object, NOT null); D-10 preview shape `{current_roles, roles_after_apply, already_member: false}`; D-09 single-user shape                                                                                                |
+| 6 | Verify membership                 | `get_role`                 | live    | members `[{username: "<user-a>", full_name: "User A", email: "<user-a>@example.com"}]` — D-08 projected shape verified                                                                                                                                                            |
+| 7 | Unassign                          | `unassign_role` <user-a>      | applied | DELETE method, body: null, current/after diff visible                                                                                                                                                                                                                                     |
+| 8 | Delete throwaway                  | `delete_role`              | applied | **D-16 cascade preview verified live:** `cascades.users_dissociated: []` (empty since unassigned in step 7); apply returned `applied: true`                                                                                                                                              |
+| 9 | Cleanup verification              | `list_roles` + `get_role`  | clean   | `list_roles(nameFilter: phase11)` → `count: 0`; `get_role(_phase11_uat_20260521)` → 404                                                                                                                                                                                                  |
+
+**Bonus safety gate verified live** (not in lifecycle but part of the safety stack):
+- **D-18 built-in role refusal:** `update_role(Admin, permissions: ["*"])` refused client-side with `reason: builtin_role_immutable` — **never issued an HTTP request to Graylog** (refused before the call). Error message names the rule and suggests `list_roles` for the mutable set. This is the load-bearing protection for SC #4.
+
+**Confirmation tokens generated (audit trail):**
+- create:   `0e5e271abf5890ebca1d557482d72ac9633d88676cb705df0b154714b8680f24`
+- update:   `71d3874bac8c88a2c9d9162f7f7415c3f071320da855c5cb4008b15b707faad4`
+- assign:   `05b62dcdd483b539f36a577bf3ec3b019b93ab2e3236b0a094940f520dbfb7b0`
+- unassign: `c242b311eb37f93d8e06d7596e002608c9b8ff9b1c4936c3fea968a9407dc145`
+- delete:   `27e2f17400bfa1e9190a1888a4fc0b28d6fdebb2ce0439a34a1b9c451581038d`
+
+**Coverage of CONTEXT.md decisions verified LIVE** (in addition to offline + dryRun coverage):
+- D-08 (get_role members projection) — verified steps 2, 6
+- D-09 (assign/unassign single-user shape) — verified step 5
+- D-10 (assign preview shape, `already_member` flag) — verified step 5
+- D-12 (dryRun:true default on all mutators) — verified steps 1, 3, 5, 7, 8 (each needed explicit `dryRun: false` to apply)
+- D-14 (sha-256 confirmation token + token-canonical-form) — verified steps 1, 3, 5, 7, 8 (each apply required `confirm: <token from dry-run>`)
+- D-15 (PITFALL 1 read-merge-write) — verified step 3 (description was MERGED from pre-flight GET, not lost)
+- D-16 (delete cascade preview, projected shape) — verified step 8
+- D-18 (built-in role client-side refusal, case-insensitive) — verified live (Admin refused with reason tag, no HTTP issued)
+- D-19 (server `read_only` flag as authority) — implicit (the 16 built-ins refusal is the manifestation)
+- D-23 (no system-job wait) — verified: every apply returned synchronously when HTTP returned (no async polling)
+
+**What was NOT verified LIVE** (covered by offline tests + dryRun smoke probe):
+- D-17 last-admin guard (`would_leave_no_admin`) — would have required removing the actual last Admin user, which is genuinely dangerous on production. Offline test 20 from Plan 11-01 covers it.
+- D-11 `not_currently_assigned` refusal — not exercised live; offline test covers it.
+- Drift refusal (D-14 token mismatch on apply) — would have required artificially mutating state between dryRun and apply; offline tests cover it.
+
+**Phase 11 verification gate per CONTEXT D-24 — all 4 items now satisfied:**
+1. ✓ Offline test suite green: `npm test` → 1196/1196 (Plan 11-02 completion)
+2. ✓ Fixture capture script ships: `scripts/capture-roles-fixtures.js` committed in Plan 11-03 Task 1
+3. ✓ dryRun-only live smoke probe ships: `test/authz-roles-live.smoke.js` committed in Plan 11-03 Task 2
+4. ✓ Throwaway-role full-lifecycle UAT — **EXECUTED LIVE (this Task 3 — Option A)** rather than deferred to milestone close. Per D-24 wording: "AND a Phase 11 throwaway-role full-lifecycle UAT … are bundled into a single HUMAN-UAT checkpoint at v3.1.0 milestone close. NOT a Phase 11 gate." → user chose to run NOW; bundling no longer needed for Phase 11; Phase 10's `share_entity` throwaway-entity UAT remains the only deferred Live-UAT carryover for v3.1.0 milestone close.
+
 ## Task Commits
 
 | Task | Commit    | Type | Description                                                                                  |
