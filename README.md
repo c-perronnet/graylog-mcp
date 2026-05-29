@@ -80,6 +80,20 @@ npm install
 3. From the client, ask the agent to `set_active_connection` and run a tool — e.g. `list_streams` to confirm reachability, then `search_messages_graylog` with a `query` and `timeRange`.
 4. For write workflows, every mutating call previews by default. Inspect the returned `confirm` token, then re-issue the same call with `dryRun: false` and `confirm: "<token>"` to apply.
 
+### Use with opencode
+
+After creating  `~/.graylog-mcp/config.json` with at least one connection (see [Configuration](#configuration)), open your `~/.config/opencode/opencode.json` and add, in the MCP section:
+
+```
+"mcp": {
+    "graylog": {
+      "type": "local",
+      "command": ["node", "/path/to/graylog-mcp/src/index.js"],
+      "enabled": true
+    }
+  }
+```
+
 ## Configuration
 
 `~/.graylog-mcp/config.json`:
